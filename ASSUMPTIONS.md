@@ -313,3 +313,16 @@ Append one line per decision as they're made during the loop.
   disabled "Coming Soon" stub — no backend endpoint exists. Flagged
   separately as a real compliance requirement needing scoped backend
   work, not a tonight decision.
+
+## C11 — Subscription pages
+
+- Routes: `/plans`, `/subscription` (status), `/subscription/paywall`.
+  All three ported as pure UI mocks, exact numbers from the fixed
+  pricing (Trial free/14 days/1 slot; Standard $15mo or $149yr/1 slot;
+  Enterprise $30mo or $299yr/3 slots; all unlimited scans/team
+  members) — no real billing calls anywhere. Tapping any plan/upgrade
+  action shows "Preview only — full subscription flow coming soon."
+  verbatim, matching the mobile mockup precedent exactly.
+- SubscriptionStatusContent has no hooks or handlers of its own (only
+  a Link), so it stays a Server Component — the one subscription page
+  that doesn't need 'use client'.

@@ -134,7 +134,7 @@ frontend-ui-v2
       (flagged in an earlier App Store audit of the mobile app as a
       real compliance requirement that needs scoped backend work, not
       a tonight decision).
-- [ ] C11: Subscription pages — Plans page (Trial free/14 days 1 slot,
+- [x] C11: Subscription pages — Plans page (Trial free/14 days 1 slot,
       Standard $15/mo or $149/yr 1 slot, Enterprise $30/mo or $299/yr
       3 slots, all unlimited scans/team members, monthly/yearly
       toggle), Subscription status page (mock current plan/billing
