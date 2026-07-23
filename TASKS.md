@@ -86,7 +86,7 @@ frontend-ui-v2
       mobile app's native `expo-apple-authentication` setup does not
       provide). Reference: Scantrix_v2 src/screens/auth/LoginScreen.tsx,
       CreateAccountScreen.tsx for field sets and copy.
-- [ ] C2: Auth gate — a layout-level check that redirects
+- [x] C2: Auth gate — a layout-level check that redirects
       unauthenticated users to /login and authenticated users away
       from /login, using the already-ported `getUser()` /
       `isAuthenticated` state. Keep this logic in a small Client
