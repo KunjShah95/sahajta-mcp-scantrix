@@ -28,3 +28,29 @@ Append one line per decision as they're made during the loop.
   1:1 visual port of mobile screens — mobile has no real tab bar, and
   desktop needs its own navigation shell. Colors, spacing, typography
   are ported exactly; layout/IA is not.
+
+## A4 — theme token port
+
+- Confirmed no tailwind.config.js exists in this scaffold (Tailwind v4,
+  CSS-only config) — used the `@theme` block in src/app/globals.css as
+  instructed.
+- Spacing tokens are named `--space-xs`…`--space-xxl` per the task's
+  literal naming, not `--spacing-*`. Tailwind v4 only auto-generates
+  utility classes (p-*, gap-*, etc.) for the `--spacing-*` namespace,
+  so these remain plain CSS custom properties used via
+  `var(--space-md)` / arbitrary values (`p-[var(--space-md)]`), not
+  auto-generated utilities. This matches the task's explicit example
+  naming over utility-generation convenience.
+- Typography tokens are named under Tailwind's real `--text-*`
+  namespace (`--text-h1`, `--text-body`, …) — not explicitly specified
+  by the task, but chosen (judgment call) so `text-h1` / `text-body-sm`
+  utilities are auto-generated, consistent with how `--radius-*` was
+  explicitly specified to work.
+- Dropped the default create-next-app dark-mode (`prefers-color-scheme:
+  dark`) background/foreground override that shipped in the scaffold's
+  globals.css. The mobile app's theme/colors.ts has no dark-mode
+  tokens at all — it's a light-only app — so the web port is light-only
+  for now too, matching source exactly rather than inventing a dark
+  theme. Tailwind's `dark:` variant utilities still work if a future
+  task needs them; nothing was removed from Tailwind itself, only the
+  scaffold's placeholder dark override.

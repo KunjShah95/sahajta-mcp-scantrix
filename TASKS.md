@@ -18,7 +18,7 @@ frontend-ui-v2
       (this has already been verified once manually; re-confirm it's
       still true at loop start). If either fails, fix before
       proceeding to any other task.
-- [ ] A4: Read src/theme/colors.ts, spacing.ts, typography.ts,
+- [x] A4: Read src/theme/colors.ts, spacing.ts, typography.ts,
       radius.ts from ~/Scantrix_v2 (frontend-ui-v2). Port them into
       this project as Tailwind v4 CSS custom properties inside
       src/app/globals.css, using an `@theme` block (this scaffold uses
