@@ -42,7 +42,7 @@ frontend-ui-v2
       mobile source during the earlier port). Confirm and record
       "N/A — no outbound send capability in ported logic" in
       ASSUMPTIONS.md rather than skipping this silently.
-- [ ] A7: Create `.env.local` (gitignored, never committed) populated
+- [x] A7: Create `.env.local` (gitignored, never committed) populated
       with the real values already known to work: the Firebase config
       already hardcoded in src/lib/firebase/config.ts, and
       NEXT_PUBLIC_API_URL / NEXT_PUBLIC_QUICKBOOKS_API_URL matching

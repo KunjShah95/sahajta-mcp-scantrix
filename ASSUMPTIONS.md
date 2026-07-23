@@ -62,3 +62,49 @@ Append one line per decision as they're made during the loop.
   sendSms/mailer. N/A — no outbound email/SMS/payment send capability
   exists in the ported logic layer, confirming what the earlier port
   pass already found in the mobile source. Nothing to gate or guard.
+
+## A7 — .env.local population, and reversing the Google Sign-In pre-mark
+
+- Populated NEXT_PUBLIC_API_URL / NEXT_PUBLIC_QUICKBOOKS_API_URL from
+  the hardcoded fallbacks already in src/lib/api.ts and
+  src/lib/quickbooks/{connect,postInvoice}.ts — no new info, just made
+  real.
+- Added NEXT_PUBLIC_FIREBASE_* vars mirroring src/lib/firebase/
+  config.ts's hardcoded firebaseConfig object, for documentation
+  parity per the task wording. NOTE: config.ts itself still reads
+  these values inline (hardcoded), not from process.env — it was not
+  refactored, since the task only asked to populate .env.local with
+  these already-known values, not to change how config.ts sources
+  them. If a future task wants config.ts to read from env instead,
+  that's a separate, explicit decision.
+- **Reversing the Pre-Marked BLOCKED item for Google Sign-In (web):**
+  found a real Google OAuth Web-application client ID —
+  `244169573027-ttt4i12jqi1coi0hhk90saslrra76t4a.apps.googleusercontent.com`
+  — hardcoded as `webClientId` in both Scantrix_v2
+  src/screens/auth/LoginScreen.tsx and CreateAccountScreen.tsx (passed
+  to `GoogleSignin.configure`). `@react-native-google-signin/
+  google-signin`'s own contract requires `webClientId` to be a client
+  of type WEB, never Android/iOS, specifically so it can be used for
+  backend/cross-platform ID-token verification — meaning this is a
+  genuine Google Cloud Console "Web application" OAuth client, not a
+  mobile-only credential. It has not been fabricated; it was found
+  verbatim in the source the task told this loop to trust.
+  Consequence: C1 will do REAL Google Identity Services (GIS) JS SDK
+  wiring using this client ID (per the task's own contingency: "if a
+  real web OAuth client ID was found in A7, wire it"), not a stub.
+  CAVEAT flagged for a human: this client ID's "Authorized JavaScript
+  origins" allowlist in Google Cloud Console was almost certainly
+  configured for the mobile app's ID-token-verification use case,
+  which does not require an origins allowlist at all. Browser-based
+  GIS sign-in DOES enforce an origins allowlist at runtime. A human
+  with Google Cloud Console access to project `scantrix-3d179` (or
+  wherever this OAuth client lives) needs to add this web app's
+  origin(s) — e.g. `http://localhost:3000` for local dev and the real
+  production domain — to that client's allowed JavaScript origins, or
+  the sign-in call will fail with an origin-mismatch error at runtime.
+  This is a Google Cloud Console configuration task, not a code gap;
+  the wiring itself is complete and correct.
+- Apple Sign-In (web) pre-mark stands as BLOCKED — nothing found in
+  A7's search changes that; it genuinely needs a Services ID + web
+  redirect URIs from Apple Developer that don't exist anywhere in the
+  checked sources.
