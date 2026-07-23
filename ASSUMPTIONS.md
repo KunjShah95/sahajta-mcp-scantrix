@@ -442,3 +442,15 @@ Append one line per decision as they're made during the loop.
   at the same route level with no conflict — Next.js resolves static
   segments before dynamic ones, standard App Router behavior, not
   something that needed a workaround.
+
+## C17 — Pending invoices queue list page
+
+- Route: `/invoices/pending` (matches the link already wired from C3's
+  Dashboard and C4's post/reject-success redirect). Ported
+  behaviorally as-is: title/invoice-number/amount summary, single
+  most-important issue pill (status-history reason, falling back to
+  missing-fields list), row click clears selected/created vendor then
+  sets selectedInvoice and routes to `/invoices/[id]/review` (C4).
+  dispatches getInvoices() on mount + a manual refresh button (web
+  equivalent of mobile's pull-to-refresh via useFocusEffect, which has
+  no direct web analog).

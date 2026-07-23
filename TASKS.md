@@ -171,7 +171,7 @@ frontend-ui-v2
       image) — port that directly rather than the native
       react-native-pdf version. Reference: Scantrix_v2
       src/screens/invoice/InvoicePreviewScreen.web.tsx.
-- [ ] C17: Pending invoices queue list page — the list of invoices
+- [x] C17: Pending invoices queue list page — the list of invoices
       awaiting review (vendor/amount/confidence/primary issue per
       row) that feeds into the single-invoice review page (C4). Wire
       to the already-ported `getInvoices` thunk. Reference: Scantrix_v2
