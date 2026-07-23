@@ -404,3 +404,28 @@ Append one line per decision as they're made during the loop.
   (C15, not built at this point in the loop — forward reference, same
   pattern used throughout this port when a later task's route is
   already known).
+
+## C15 — Invoice detail page
+
+- Route: `/invoices/[id]?type=auto|manual|failed`. Confirms the C12
+  route-nesting decision was sound: this page.tsx sits directly in
+  `src/app/invoices/[id]/` alongside the `review/` and `vendor/`
+  child folders with zero conflict — ordinary Next.js nested routing,
+  not the route-group scenario that was actually risky.
+- New src/lib/invoiceDetailTheme.ts (hex values ported verbatim from
+  InvoiceDetailsScreen's THEME_CONFIG) rather than extending
+  invoiceDisplay.ts's simpler INVOICE_STATUS_THEME — this screen has
+  materially more per-status surfaces (section header tint, divider
+  color, timeline accent) that the shared theme doesn't carry, so a
+  dedicated theme file was the more honest fit than stretching a
+  smaller shared shape to cover it.
+- Normalized field names against the real ExtractedData contract, same
+  correction as C4: `bankingDetails` not `vendorBankDetails`,
+  `description` (single string) not `itemDescriptions` (array), no
+  `taxType` field (dropped — matches C4's reasoning exactly, since
+  it's the same underlying data record).
+- GL account name is resolved read-only here (fetches
+  fetchQuickBooksAccounts, looks up by id) — no picker, matching
+  mobile exactly; this page never edits anything.
+- "View"/"View Original Invoice" link to `/invoices/preview?url=...`
+  (C16, forward reference, same as C4).

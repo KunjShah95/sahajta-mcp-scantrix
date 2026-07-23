@@ -160,7 +160,7 @@ frontend-ui-v2
       through to the invoice detail page (C15). Wire to the
       already-ported `getInvoices` thunk. Reference: Scantrix_v2
       src/screens/invoice/InvoiceListScreen.tsx.
-- [ ] C15: Invoice detail page — full read view of one already-
+- [x] C15: Invoice detail page — full read view of one already-
       processed invoice (extracted fields, GL account, status
       history/timeline), themed per status (auto/manual/failed).
       Reference: Scantrix_v2 src/screens/invoice/InvoiceDetailsScreen.tsx.
