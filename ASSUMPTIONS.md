@@ -476,3 +476,23 @@ Append one line per decision as they're made during the loop.
   Content-Type. Same root cause, same fix pattern, different call
   site — worth calling out again since it's a second instance of the
   identical inherited bug class, not a one-off.
+
+## C19 — Profile/Account settings hub page
+
+- Extends /profile (C10) in place, as planned there: profile summary
+  card linking to /profile/edit (C18), Settings section (Connect
+  Software -> /accounting-software, Team Members -> /team,
+  Subscription -> /subscription), Legal section (Terms & Conditions,
+  Privacy Policy), Support section (Contact Support), Account Actions
+  (Logout via the shared useLogout() hook from C12, Delete Account
+  from C10).
+- Two real simplifications from mobile, both judgment calls: (1)
+  "Contact Support" is a plain `mailto:` link instead of mobile's
+  custom app-picker sheet (Gmail/Outlook/Default Mail deep links) —
+  those deep links exist only to route around mobile OS mail-client
+  ambiguity; a browser's own `mailto:` handling already solves that on
+  desktop web, so the picker UI has no web equivalent worth building.
+  (2) Terms & Privacy open the S3-hosted PDFs directly in a new browser
+  tab instead of mobile's in-app WebView + Google-Docs-viewer wrapper
+  — browsers render PDFs natively, so that wrapper has no purpose here
+  either.

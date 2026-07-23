@@ -182,7 +182,7 @@ frontend-ui-v2
       this codebase (src/store/auth/authApi.ts) for image picking on
       web (file input, matching the C3 upload-trigger precedent).
       Reference: Scantrix_v2 src/screens/profile/EditProfileScreen.tsx.
-- [ ] C19: Profile/Account settings hub page — the actual settings
+- [x] C19: Profile/Account settings hub page — the actual settings
       menu screen: profile summary card, links to Edit Profile (C18),
       Connect Software (C9), Team Members (C7), Subscription (C11),
       a support-email link, Terms & Privacy links, logout, and hosts
