@@ -57,7 +57,7 @@ frontend-ui-v2
 
 ## Phase B — Self-Audit (Gap Mapping)
 
-- [ ] B1: Enumerate every screen under ~/Scantrix_v2's
+- [x] B1: Enumerate every screen under ~/Scantrix_v2's
       src/screens/**/*.tsx (frontend-ui-v2). For each, write one row
       in STATUS.md: screen name, mobile file path, one-line summary
       of what it does, and its status in THIS repo (MISSING for all
@@ -149,6 +149,46 @@ frontend-ui-v2
       information architecture, not a port of an existing pattern.
       Record this as a judgment call in ASSUMPTIONS.md. Link every
       page built in C1–C11 into this shell.
+
+- [ ] C13: Verify-OTP page — 6-digit OTP entry with resend countdown,
+      part of the registration flow started in C1, using the
+      already-ported `verifyRegisterOtp`/`resendRegisterOtp` thunks
+      and accepting a pending QB invite on success. Reference:
+      Scantrix_v2 src/screens/auth/VerifyOTPScreen.tsx.
+- [ ] C14: Invoice list pages — full list of invoices filtered by
+      posted status (auto/manual/failed), each themed per status, tap
+      through to the invoice detail page (C15). Wire to the
+      already-ported `getInvoices` thunk. Reference: Scantrix_v2
+      src/screens/invoice/InvoiceListScreen.tsx.
+- [ ] C15: Invoice detail page — full read view of one already-
+      processed invoice (extracted fields, GL account, status
+      history/timeline), themed per status (auto/manual/failed).
+      Reference: Scantrix_v2 src/screens/invoice/InvoiceDetailsScreen.tsx.
+- [ ] C16: Invoice file preview viewer — full view of the source
+      invoice file (PDF or image), used from both the invoice review
+      (C4) and invoice detail (C15) pages. Mobile already ships a
+      `.web.tsx` variant of this exact screen (iframe for PDF, img for
+      image) — port that directly rather than the native
+      react-native-pdf version. Reference: Scantrix_v2
+      src/screens/invoice/InvoicePreviewScreen.web.tsx.
+- [ ] C17: Pending invoices queue list page — the list of invoices
+      awaiting review (vendor/amount/confidence/primary issue per
+      row) that feeds into the single-invoice review page (C4). Wire
+      to the already-ported `getInvoices` thunk. Reference: Scantrix_v2
+      src/screens/pending/PendingInvoicesScreen.tsx.
+- [ ] C18: Edit Profile page — edit display name and profile photo,
+      using the already-ported Firebase Auth/Firestore update calls
+      and the `pickProfileImage`/`updateProfileIcon` stubs already in
+      this codebase (src/store/auth/authApi.ts) for image picking on
+      web (file input, matching the C3 upload-trigger precedent).
+      Reference: Scantrix_v2 src/screens/profile/EditProfileScreen.tsx.
+- [ ] C19: Profile/Account settings hub page — the actual settings
+      menu screen: profile summary card, links to Edit Profile (C18),
+      Connect Software (C9), Team Members (C7), Subscription (C11),
+      a support-email link, Terms & Privacy links, logout, and hosts
+      C10's Delete Account entry point (still a disabled/"Coming Soon"
+      stub — no backend endpoint exists, exactly matching the mobile
+      stub). Reference: Scantrix_v2 src/screens/profile/ProfileOptionsScreen.tsx.
 
 ## Phase D — Docs & Close-out
 
