@@ -205,3 +205,24 @@ Append one line per decision as they're made during the loop.
   (C16), a shared preview route also used from the invoice detail
   page (C15) — mirrors mobile's InvoicePreviewScreen being reachable
   from multiple screens via navigation params.
+
+## C5 — Vendor resolution page
+
+- Route: `/invoices/[id]/vendor`. Same direct-URL-load reasoning as
+  C4: dispatches `getInvoiceDetails(invoiceId)` on mount so
+  `state.invoice.selectedInvoice` (which this screen reads for the
+  extracted vendor name) is populated even on a fresh page load, not
+  only when navigated to from the review page. Mobile's version never
+  actually reads its own `route.params.invoiceId` either — it only
+  reads `selectedInvoice` from Redux — so this is a web-required
+  addition, not a behavior change.
+- The ported `Vendor` type (quickBooksSlice.ts: `_id`, `qbVendorId`,
+  `displayName`, `normalizedName`) has no `address`/`email`/`phone`
+  fields, unlike mobile's screen-local `Vendor` type which assumed
+  they existed. Vendor rows here show display name only — the real
+  ported contract, not the mobile screen's unverified assumption.
+- Suggested/All/Create tabs, radio-select + sticky "Use this vendor"
+  confirm footer, and the create-vendor form (name, currency, optional
+  GL account, optional tax code) all ported behaviorally as-is,
+  rendered as native selects/buttons instead of mobile's custom
+  dropdown sheets.

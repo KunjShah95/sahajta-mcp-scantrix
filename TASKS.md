@@ -105,7 +105,7 @@ frontend-ui-v2
       the already-ported `postInvoiceToQuickBooks` /
       `updateInvoiceExtractedData` thunks. Reference:
       InvoiceReviewScreen.tsx.
-- [ ] C5: Vendor resolution page — candidate vendor list from
+- [x] C5: Vendor resolution page — candidate vendor list from
       `fetchQuickBooksVendors`, resolve/create flow using
       `createQuickBooksVendor`. Reference: VendorResolutionScreen.tsx.
 - [ ] C6: QuickBooks connect page — "Connect QuickBooks" using the
