@@ -112,7 +112,7 @@ frontend-ui-v2
       already-ported `connectToQuickBooks` (redirects via
       window.location.href), status display via
       `getQuickBooksStatus`/`getMyQBConnections`.
-- [ ] C7: Team members page — invite (email + role picker:
+- [x] C7: Team members page — invite (email + role picker:
       admin/accountant/contributor), member list, remove-with-confirm,
       using the already-ported `inviteQBMember`/`fetchQBMembers`/
       `removeQBMember` thunks. Reference: TeamMembersScreen.tsx.

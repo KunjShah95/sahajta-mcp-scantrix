@@ -250,3 +250,15 @@ Append one line per decision as they're made during the loop.
   Re-checks connection status on window `focus` as the web equivalent
   of mobile's `AppState` foreground listener (e.g. after completing
   OAuth and returning to this tab).
+
+## C7 — Team members page
+
+- Route: `/team`. Ported behaviorally as-is: active-company card with
+  role badge, invite card (owner/admin only) vs. permission notice,
+  member list with role badges and role-gated remove buttons
+  (owner removes anyone, admin removes non-admins), and an invite
+  form (email + role picker) kept as a modal — a short, focused,
+  in-context action, unlike the longer forms elsewhere in this port
+  that became dedicated pages.
+- Remove-member and invite-failure alerts use `window.confirm`/
+  `window.alert` per the cross-cutting Alert.alert note.
