@@ -13,7 +13,7 @@ frontend-ui-v2
       that aren't in local `main` yet. Do NOT merge or push anything
       in this task. If fetch fails (permissions/network), mark
       BLOCKED(reason), it's harmless, continue.
-- [ ] A3: Gate baseline — run `npx tsc --noEmit && npx next build` on
+- [x] A3: Gate baseline — run `npx tsc --noEmit && npx next build` on
       the current tree before touching anything. Confirm both exit 0
       (this has already been verified once manually; re-confirm it's
       still true at loop start). If either fails, fix before
