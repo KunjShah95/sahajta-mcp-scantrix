@@ -195,7 +195,7 @@ frontend-ui-v2
 - [x] D1: README.md — what this repo is, how it maps to Scantrix_v2's
       mobile source, required env vars (reference .env.local.example),
       every BLOCKED/stubbed item and why.
-- [ ] D2: Write FINAL_REPORT.md per LOOP.md's stop condition.
+- [x] D2: Write FINAL_REPORT.md per LOOP.md's stop condition.
 
 ## Pre-Marked BLOCKED (credential- or stakeholder-gated)
 
