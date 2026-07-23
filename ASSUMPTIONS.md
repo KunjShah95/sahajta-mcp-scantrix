@@ -373,3 +373,14 @@ Append one line per decision as they're made during the loop.
   full profile page) — factored into one shared `useLogout()` hook
   (src/store/useLogout.ts) so the dispatch+redirect logic isn't
   duplicated.
+
+## C13 — Verify-OTP page
+
+- Route: `/register/verify-otp?email=...&inviteToken=...` (query params
+  set by RegisterForm's goToVerifyOtp — see C1's ASSUMPTIONS entry on
+  why no password is ever put in this URL). Ported behaviorally as-is:
+  6 auto-advancing digit boxes, 60s resend countdown, verify dispatches
+  verifyRegisterOtp then acceptQBInvite if an inviteToken is present,
+  redirecting to /dashboard on success (verifyRegisterOtp's own
+  thunk already saves tokens/user and marks isAuthenticated, so no
+  separate login step is needed here — matches mobile exactly).

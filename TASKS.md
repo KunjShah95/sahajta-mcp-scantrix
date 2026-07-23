@@ -150,7 +150,7 @@ frontend-ui-v2
       Record this as a judgment call in ASSUMPTIONS.md. Link every
       page built in C1–C11 into this shell.
 
-- [ ] C13: Verify-OTP page — 6-digit OTP entry with resend countdown,
+- [x] C13: Verify-OTP page — 6-digit OTP entry with resend countdown,
       part of the registration flow started in C1, using the
       already-ported `verifyRegisterOtp`/`resendRegisterOtp` thunks
       and accepting a pending QB invite on success. Reference:
