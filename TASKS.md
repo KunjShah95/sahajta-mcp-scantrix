@@ -176,7 +176,7 @@ frontend-ui-v2
       row) that feeds into the single-invoice review page (C4). Wire
       to the already-ported `getInvoices` thunk. Reference: Scantrix_v2
       src/screens/pending/PendingInvoicesScreen.tsx.
-- [ ] C18: Edit Profile page — edit display name and profile photo,
+- [x] C18: Edit Profile page — edit display name and profile photo,
       using the already-ported Firebase Auth/Firestore update calls
       and the `pickProfileImage`/`updateProfileIcon` stubs already in
       this codebase (src/store/auth/authApi.ts) for image picking on

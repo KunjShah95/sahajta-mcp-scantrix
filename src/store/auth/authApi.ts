@@ -430,7 +430,7 @@ export const pickProfileImage = async (): Promise<string | null> => {
 // ================================
 
 interface UpdateProfileIconPayload {
-  imageUri: string;
+  file: File;
   userId: string;
   accessToken: string;
 }
@@ -444,17 +444,16 @@ export const updateProfileIcon =
       thunkAPI
     ) => {
       try {
+        // NOTE(web-port fix): same class of bug as invoiceApi.ts's
+        // scanInvoice — the version inherited from the logic-layer port
+        // appended a React-Native-only {uri, name, type} object to
+        // FormData (browsers need a real File/Blob) and manually set a
+        // boundary-less multipart Content-Type header (the browser must
+        // generate that itself). Fixed to take a browser File directly.
         const formData =
           new FormData();
 
-        formData.append(
-          "icon",
-          {
-            uri: data.imageUri,
-            type: "image/jpeg",
-            name: "profile.jpg",
-          } as any
-        );
+        formData.append("icon", data.file, data.file.name);
 
         const response =
           await api.post(
@@ -463,8 +462,6 @@ export const updateProfileIcon =
             {
               headers: {
                 Authorization: `Bearer ${data.accessToken}`,
-                "Content-Type":
-                  "multipart/form-data",
               },
             }
           );

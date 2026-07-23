@@ -454,3 +454,25 @@ Append one line per decision as they're made during the loop.
   dispatches getInvoices() on mount + a manual refresh button (web
   equivalent of mobile's pull-to-refresh via useFocusEffect, which has
   no direct web analog).
+
+## C18 — Edit Profile page
+
+- Route: `/profile/edit`. Real Firebase Auth (`updateProfile`) +
+  Firestore (`setDoc` merge on `users/{uid}`) calls, matching mobile
+  exactly. Photo picking is a real `<input type="file" accept="image/*">`
+  (matching C3's upload-trigger precedent) rather than calling
+  `pickProfileImage()` — that function is an intentional stub in
+  authApi.ts whose own comment says exactly this: "Profile image
+  selection on web should be implemented in the UI layer with a
+  browser file input... this function is a placeholder until that UI
+  is built." It's left in place, now genuinely superseded rather than
+  dead-by-accident.
+- **Real bug fix, not a judgment call:** `updateProfileIcon`
+  (authApi.ts) had the same class of bug just fixed in C3's
+  `scanInvoice` — an RN-only `{uri, name, type}` FormData shape, plus a
+  manually-set `Content-Type: multipart/form-data` header with no
+  boundary (browsers must generate that themselves). Fixed to accept a
+  browser `File` directly and let the browser set its own
+  Content-Type. Same root cause, same fix pattern, different call
+  site — worth calling out again since it's a second instance of the
+  identical inherited bug class, not a one-off.
