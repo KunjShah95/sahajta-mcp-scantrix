@@ -108,7 +108,7 @@ frontend-ui-v2
 - [x] C5: Vendor resolution page — candidate vendor list from
       `fetchQuickBooksVendors`, resolve/create flow using
       `createQuickBooksVendor`. Reference: VendorResolutionScreen.tsx.
-- [ ] C6: QuickBooks connect page — "Connect QuickBooks" using the
+- [x] C6: QuickBooks connect page — "Connect QuickBooks" using the
       already-ported `connectToQuickBooks` (redirects via
       window.location.href), status display via
       `getQuickBooksStatus`/`getMyQBConnections`.

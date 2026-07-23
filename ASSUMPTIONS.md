@@ -226,3 +226,27 @@ Append one line per decision as they're made during the loop.
   GL account, optional tax code) all ported behaviorally as-is,
   rendered as native selects/buttons instead of mobile's custom
   dropdown sheets.
+
+## C6 — QuickBooks connect page
+
+- Mobile has no screen dedicated solely to this — the connect/status/
+  switch/disconnect UI (and its `QBAccountsModal` bottom sheet) all
+  live inside AccountingSoftwaresScreen.tsx, the same screen C9
+  targets. Judgment call: split it here into a standalone `/quickbooks`
+  page (this task, the full connections list + connect/switch/
+  disconnect) that C9's Accounting Softwares page will link to for
+  "manage connections", rather than re-implementing a bottom-sheet
+  modal inline — a dedicated page is the more natural web pattern than
+  a modal-as-primary-navigation, which is what mobile did only because
+  it has no persistent page-based navigation.
+- Per the task's own instruction, uses the simple `connectToQuickBooks()`
+  helper (src/lib/quickbooks/connect.ts, a plain
+  `window.location.href` redirect) instead of the mobile `connectQuickBooks`
+  thunk + `WebBrowser.openAuthSessionAsync` + polling dance. That mobile
+  complexity exists specifically to work around in-app-browser
+  lifecycle quirks (the browser sheet not auto-dismissing, needing a
+  poll-then-force-close workaround) — none of which apply to a full
+  page navigation on web, so it's not ported forward.
+  Re-checks connection status on window `focus` as the web equivalent
+  of mobile's `AppState` foreground listener (e.g. after completing
+  OAuth and returning to this tab).
