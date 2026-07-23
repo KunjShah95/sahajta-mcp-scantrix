@@ -128,3 +128,38 @@ Append one line per decision as they're made during the loop.
   adding a dependency for it. If a themed dialog is wanted later,
   swap these call sites for a small in-house dialog component; every
   call site is a plain, easy-to-find `window.alert`/`window.confirm`.
+
+## C3 — Dashboard page
+
+- **Real bug fix, not a judgment call:** the logic-layer port's
+  `scanInvoice` thunk (src/store/invoice/invoiceApi.ts) built its
+  FormData with a React-Native-only `{uri, name, type}` object shape
+  (from RN's FormData polyfill). A real browser's FormData.append
+  requires an actual File/Blob — the RN shape would have silently
+  uploaded garbage (`[object Object]`, coerced via toString()) the
+  first time any web screen tried to scan an invoice. Fixed to accept
+  a browser `File` directly and append it properly. This is a
+  necessary correction surfaced by actually wiring a working upload
+  UI, not a redesign.
+- QuickBooks company switcher: mobile puts this dropdown inside
+  DashboardScreen's own header (mobile has no persistent global nav,
+  so every screen owns its own header). This port's dashboard page
+  intentionally does NOT reimplement that dropdown — C12's global app
+  shell is a genuinely new, persistent piece of navigation chrome
+  (already flagged as a judgment call in the "Seeded before loop
+  start" section above), and a company switcher belongs there once it
+  exists, not duplicated per-page. Until C12 lands, there is no
+  in-app UI to switch QuickBooks companies; `qbConnectionId` still
+  defaults correctly via `getMyQBConnections` on first load.
+  [[C12]]
+- Consolidated per-status theming (auto/manual/pending/processing/
+  failed → label + colors) and invoice title/amount/failure-reason
+  formatting into src/lib/invoiceDisplay.ts. Mobile re-implemented
+  this THEME_CONFIG object separately in DashboardScreen,
+  InvoiceListScreen, and InvoiceDetailsScreen (with mismatched exact
+  hex values between them) — one shared source here instead, reused
+  again by C14/C15/C17.
+- Dashboard's "recent invoices" cards are not click-through, matching
+  mobile exactly: DashboardScreen's `InvoiceCard` wraps in a
+  `TouchableOpacity` with no `onPress` handler bound — already
+  non-interactive on mobile, not a web-port omission.

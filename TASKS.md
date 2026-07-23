@@ -91,7 +91,7 @@ frontend-ui-v2
       from /login, using the already-ported `getUser()` /
       `isAuthenticated` state. Keep this logic in a small Client
       Component wrapper, not the root layout itself.
-- [ ] C3: Dashboard page (/dashboard or /) — greeting header, pending
+- [x] C3: Dashboard page (/dashboard or /) — greeting header, pending
       review count, auto-posted/manually-posted/failed counts, recent
       invoices list, and an upload trigger. Adaptation: mobile's
       camera/gallery/PDF action sheet becomes a file input

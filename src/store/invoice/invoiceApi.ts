@@ -7,9 +7,7 @@ import api from "../../lib/api";
 // ======================================
 
 interface ScanInvoicePayload {
-  uri: string;
-  name: string;
-  mimeType: string;
+  file: File;
   qbId: string;
 }
 
@@ -40,12 +38,14 @@ export const scanInvoice = createAsyncThunk(
   "invoice/scanInvoice",
   async (data: ScanInvoicePayload, thunkAPI) => {
     try {
+      // NOTE(web-port fix): the version of this thunk inherited from the
+      // logic-layer port appended a React-Native-style {uri, name, type}
+      // object to FormData, which only works with RN's FormData polyfill.
+      // In a real browser, FormData.append requires an actual File/Blob —
+      // anything else gets silently coerced via toString() and the upload
+      // parses as garbage server-side. Fixed to take a browser File directly.
       const formData = new FormData();
-      formData.append("files", {
-        uri: data.uri,
-        name: data.name || "invoice.pdf",
-        type: data.mimeType || "application/pdf",
-      } as any);
+      formData.append("files", data.file, data.file.name);
 
       const response = await api.post("/invoices", formData, {
         headers: {
