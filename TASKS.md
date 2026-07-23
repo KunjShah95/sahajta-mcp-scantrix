@@ -155,7 +155,7 @@ frontend-ui-v2
       already-ported `verifyRegisterOtp`/`resendRegisterOtp` thunks
       and accepting a pending QB invite on success. Reference:
       Scantrix_v2 src/screens/auth/VerifyOTPScreen.tsx.
-- [ ] C14: Invoice list pages — full list of invoices filtered by
+- [x] C14: Invoice list pages — full list of invoices filtered by
       posted status (auto/manual/failed), each themed per status, tap
       through to the invoice detail page (C15). Wire to the
       already-ported `getInvoices` thunk. Reference: Scantrix_v2

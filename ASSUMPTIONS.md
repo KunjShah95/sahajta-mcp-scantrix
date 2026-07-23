@@ -384,3 +384,23 @@ Append one line per decision as they're made during the loop.
   redirecting to /dashboard on success (verifyRegisterOtp's own
   thunk already saves tokens/user and marks isAuthenticated, so no
   separate login step is needed here — matches mobile exactly).
+
+## C14 — Invoice list pages
+
+- Route: `/invoices?type=auto|manual|failed` (query-param design, one
+  page component instead of three routes — matches how mobile's own
+  InvoiceListScreen is a single component keyed by a `type` param).
+  Dispatches `getInvoices()` on mount for direct-URL-load robustness
+  (same reasoning as C4/C5), rather than assuming Dashboard already
+  populated the store.
+- Extended src/lib/invoiceDisplay.ts (built in C3) with `accentHex`/
+  `accentTextClass` per status instead of creating InvoiceListScreen's
+  own separate THEME_CONFIG copy — one more consolidation of the
+  per-screen theme drift mobile had. Minor rounding accepted: mobile's
+  `tagBg`/`badgeBg` are two very slightly different tints of the same
+  color per status; this port uses one shared badge tint for both the
+  status tag and the confidence pill.
+- Row click sets `selectedInvoice` then navigates to `/invoices/[id]`
+  (C15, not built at this point in the loop — forward reference, same
+  pattern used throughout this port when a later task's route is
+  already known).
