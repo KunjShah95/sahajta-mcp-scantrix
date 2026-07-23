@@ -274,3 +274,29 @@ Append one line per decision as they're made during the loop.
   route list since it needs to be reachable regardless of auth state
   (its own logic handles the redirect-when-unauthenticated case,
   rather than AuthGate's blanket gate).
+
+## C9 — Profile / Accounting Softwares page
+
+- Route: `/accounting-software`. QuickBooks card shows live status from
+  state.quickBooks and links to /quickbooks (C6) for the full connect/
+  switch/disconnect UI, rather than re-embedding that flow's bottom-
+  sheet inline here (same reasoning as C6's split). Tally and Zoho
+  Books cards are disabled "Coming Soon", exact match to mobile.
+- **Flagging a real discrepancy, but following the seeded decision
+  anyway:** Scantrix_v2's AccountingSoftwaresScreen.tsx actually calls
+  a real backend pair for Google Drive — `GET /google-drive/connect`
+  (returns an authUrl) and `GET /google-drive/status` — not just a
+  client-side mock. That contradicts this repo's pre-seeded
+  ASSUMPTIONS.md and TASKS.md wording ("no backend endpoint exists for
+  this — do NOT build one"), both written before this loop started.
+  Per the Zero-Questions Rule and the explicit "not a decision the
+  loop should second-guess" instruction, this pass still keeps Google
+  Drive a client-side-only mockup (a `driveConnected` localStorage
+  flag toggled by the card, matching mobile's own local cache key
+  name, but with no network call at all) — deliberately not wiring the
+  real endpoint even though it appears to exist, since going beyond
+  the explicitly pre-scoped boundary for a third OAuth integration
+  wasn't asked for. Flagging this clearly for a human: if Google Drive
+  connect should be real, the backend contract is already known
+  (`/google-drive/connect?redirectUri=`, `/google-drive/status`) and
+  wiring it is a small, well-scoped follow-up — not attempted here.

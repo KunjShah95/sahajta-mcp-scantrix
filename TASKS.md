@@ -119,7 +119,7 @@ frontend-ui-v2
 - [x] C8: Invite-accept page (/invite/accept) reading a `token` query
       param, using the already-ported `acceptQBInvite` thunk.
       Reference: InviteAcceptScreen.tsx.
-- [ ] C9: Profile / Accounting Softwares page — QuickBooks card
+- [x] C9: Profile / Accounting Softwares page — QuickBooks card
       (real), Tally and Zoho Books cards in disabled "Coming Soon"
       state (exact match to mobile), Google Drive card: a real OAuth
       connect button if credentials allow, storing connected state
