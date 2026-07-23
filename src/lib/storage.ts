@@ -1,0 +1,212 @@
+// Ported from Scantrix_v2 src/utils/storage.ts (branch frontend-ui-v2).
+// AsyncStorage -> localStorage. Every browser storage call is guarded
+// individually since Next.js App Router can execute this module server-side.
+
+const getItem = (key: string): string | null => {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(key);
+};
+
+const setItem = (key: string, value: string): void => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, value);
+};
+
+const removeItem = (key: string): void => {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(key);
+};
+
+
+// ==============================
+// SAVE ACCESS TOKEN
+// ==============================
+
+export const saveAccessToken = async (
+  token: string
+) => {
+  try {
+    setItem(
+      "accessToken",
+      token
+    );
+  } catch (error) {
+    console.log(
+      "Error saving access token:",
+      error
+    );
+  }
+};
+
+
+// ==============================
+// SAVE REFRESH TOKEN
+// ==============================
+
+export const saveRefreshToken = async (
+  token: string
+) => {
+  try {
+    setItem(
+      "refreshToken",
+      token
+    );
+  } catch (error) {
+    console.log(
+      "Error saving refresh token:",
+      error
+    );
+  }
+};
+
+
+// ==============================
+// SAVE USER
+// ==============================
+
+export const saveUser = async (
+  user: any
+) => {
+  try {
+    setItem(
+      "user",
+      JSON.stringify(user)
+    );
+  } catch (error) {
+    console.log(
+      "Error saving user:",
+      error
+    );
+  }
+};
+
+
+// ==============================
+// GET ACCESS TOKEN
+// ==============================
+
+export const getAccessToken = async () => {
+  try {
+    return getItem(
+      "accessToken"
+    );
+  } catch (error) {
+    console.log(
+      "Error getting access token:",
+      error
+    );
+
+    return null;
+  }
+};
+
+
+// ==============================
+// GET REFRESH TOKEN
+// ==============================
+
+export const getRefreshToken = async () => {
+  try {
+    return getItem(
+      "refreshToken"
+    );
+  } catch (error) {
+    console.log(
+      "Error getting refresh token:",
+      error
+    );
+
+    return null;
+  }
+};
+
+
+// ==============================
+// GET USER
+// ==============================
+
+export const getUser = async () => {
+  try {
+    const user = getItem(
+      "user"
+    );
+
+    return user ? JSON.parse(user) : null;
+  } catch (error) {
+    console.log(
+      "Error getting user:",
+      error
+    );
+
+    return null;
+  }
+};
+
+
+// ==============================
+// CLEAR STORAGE
+// ==============================
+
+export const clearStorage = async () => {
+  try {
+    ["accessToken", "refreshToken", "user"].forEach(removeItem);
+  } catch (error) {
+    console.log(
+      "Error clearing storage:",
+      error
+    );
+  }
+};
+
+
+// ==============================
+// PENDING INVITE TOKEN
+// (CASE A: invite link tapped while logged out — saved here,
+// then consumed right after the user logs in)
+// ==============================
+
+const PENDING_INVITE_KEY = "pendingInviteToken";
+
+export const savePendingInviteToken = async (
+  token: string
+) => {
+  try {
+    setItem(
+      PENDING_INVITE_KEY,
+      token
+    );
+  } catch (error) {
+    console.log(
+      "Error saving pending invite token:",
+      error
+    );
+  }
+};
+
+export const getPendingInviteToken = async () => {
+  try {
+    return getItem(
+      PENDING_INVITE_KEY
+    );
+  } catch (error) {
+    console.log(
+      "Error getting pending invite token:",
+      error
+    );
+
+    return null;
+  }
+};
+
+export const clearPendingInviteToken = async () => {
+  try {
+    removeItem(
+      PENDING_INVITE_KEY
+    );
+  } catch (error) {
+    console.log(
+      "Error clearing pending invite token:",
+      error
+    );
+  }
+};
