@@ -31,7 +31,7 @@ frontend-ui-v2
       hex values — the mobile app itself was inconsistent about this
       (DashboardScreen used the tokens, newer screens hardcoded hex);
       do not repeat that inconsistency here.
-- [ ] A5: Build a small reusable UI primitives set in
+- [x] A5: Build a small reusable UI primitives set in
       src/components/ui/: Button, Card, Input, Badge, at minimum —
       each using the tokens from A4, not one-off Tailwind classes per
       screen. Server Components by default; mark `'use client'` only
