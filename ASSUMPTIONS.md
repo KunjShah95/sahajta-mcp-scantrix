@@ -300,3 +300,16 @@ Append one line per decision as they're made during the loop.
   connect should be real, the backend contract is already known
   (`/google-drive/connect?redirectUri=`, `/google-drive/status`) and
   wiring it is a small, well-scoped follow-up — not attempted here.
+
+## C10 — Delete Account entry point
+
+- Route: `/profile` (created here; C19 extends this same file with the
+  rest of ProfileOptionsScreen's hub content — profile summary card,
+  Settings/Legal/Support sections, Logout — rather than this task
+  building a throwaway page C19 later replaces). Per TASKS.md's
+  explicit instruction and the Pre-Marked BLOCKED list: real
+  confirmation dialog (`window.confirm`, matching mobile's
+  Alert.alert text verbatim), but the delete action itself is a
+  disabled "Coming Soon" stub — no backend endpoint exists. Flagged
+  separately as a real compliance requirement needing scoped backend
+  work, not a tonight decision.

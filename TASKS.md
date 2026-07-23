@@ -126,7 +126,7 @@ frontend-ui-v2
       client-side only (no backend endpoint exists for this — do NOT
       build one, this was already scoped as a mockup on mobile and
       stays a mockup here). Reference: AccountingSoftwaresScreen.tsx.
-- [ ] C10: Delete Account entry point in profile settings — build the
+- [x] C10: Delete Account entry point in profile settings — build the
       UI (button, confirmation dialog shell) but keep it a clear
       "Coming Soon" / disabled state, matching the mobile stub
       exactly. Do NOT implement real account deletion — no backend
