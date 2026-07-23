@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { restoreUser } from "@/store/auth/authSlice";
 import { getUser } from "@/lib/storage";
+import { AppShell } from "@/components/shell/AppShell";
 
 // Routes reachable regardless of auth state. /invite/accept and
 // /register/verify-otp both have their own internal auth-aware logic
@@ -14,8 +15,22 @@ const PUBLIC_ROUTES = ["/login", "/register", "/register/verify-otp", "/invite/a
 
 const AUTH_ONLY_REDIRECT_ROUTES = ["/login", "/register"];
 
+// Full-screen/transitional routes that never show the persistent app shell
+// (C12), even once authenticated — same list as PUBLIC_ROUTES (all
+// transient auth screens) plus /paywall, which is deliberately a full-bleed
+// block screen matching mobile's modal-like presentation.
+const NO_SHELL_ROUTES = [...PUBLIC_ROUTES, "/paywall"];
+
+function matchesRoute(pathname: string, routes: string[]): boolean {
+  return routes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
+
 function isPublicRoute(pathname: string): boolean {
-  return PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  return matchesRoute(pathname, PUBLIC_ROUTES);
+}
+
+function isNoShellRoute(pathname: string): boolean {
+  return matchesRoute(pathname, NO_SHELL_ROUTES);
 }
 
 function FullScreenLoader() {
@@ -61,7 +76,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     if (restoring) return;
     if (!isAuthenticated && !isPublicRoute(pathname)) {
       router.replace("/login");
-    } else if (isAuthenticated && AUTH_ONLY_REDIRECT_ROUTES.includes(pathname)) {
+    } else if (isAuthenticated && (AUTH_ONLY_REDIRECT_ROUTES.includes(pathname) || pathname === "/")) {
       router.replace("/dashboard");
     }
   }, [restoring, isAuthenticated, pathname, router]);
@@ -71,7 +86,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
   // Avoid flashing protected/auth-only content for the tick before the
   // redirect effect above actually navigates away.
   if (!isAuthenticated && !isPublicRoute(pathname)) return <FullScreenLoader />;
-  if (isAuthenticated && AUTH_ONLY_REDIRECT_ROUTES.includes(pathname)) return <FullScreenLoader />;
+  if (isAuthenticated && (AUTH_ONLY_REDIRECT_ROUTES.includes(pathname) || pathname === "/")) {
+    return <FullScreenLoader />;
+  }
+
+  if (isAuthenticated && !isNoShellRoute(pathname)) {
+    return <AppShell>{children}</AppShell>;
+  }
 
   return <>{children}</>;
 }

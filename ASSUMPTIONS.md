@@ -326,3 +326,50 @@ Append one line per decision as they're made during the loop.
 - SubscriptionStatusContent has no hooks or handlers of its own (only
   a Link), so it stays a Server Component — the one subscription page
   that doesn't need 'use client'.
+
+## C12 — Global app shell
+
+- Genuinely new information architecture, as already flagged before
+  the loop started: MainTabNavigator is a single-screen stack despite
+  its name, so mobile has no real persistent nav to port. Built a left
+  sidebar (AppShell) instead of a top nav — more conventional for a
+  desktop B2B app like this — linking every page from C1–C11: Dashboard,
+  Invoices (forward reference to C14, not built yet at this point in
+  the loop but the route is reserved), QuickBooks, Team, Accounting
+  Software, Subscription, and an Account/Logout footer. Plans (C11) and
+  the invoice review/vendor pages (C4/C5) stay reachable by one hop
+  from their parent pages, matching how mobile drills into them too —
+  they're not top-level nav items on mobile either.
+- Implemented shell-wrapping as a runtime decision inside AuthGate
+  (checks `isAuthenticated` + a `NO_SHELL_ROUTES` pathname list) rather
+  than a Next.js route group. A route group would have required
+  physically relocating every existing page under an `(app)/` folder,
+  and — critically — `/invoices/[id]/review` and `/invoices/[id]/vendor`
+  already exist as a *sibling* tree to where `/invoices` (C14) and
+  `/invoices/[id]` (C15) need to live; Next's own route-groups docs
+  warn that two different physical folders must never resolve
+  overlapping URL paths, and mixing a grouped "invoices" folder with
+  an ungrouped one for the same prefix was a real conflict risk, not
+  just a style preference. Deciding shell visibility at runtime sidesteps
+  that entirely and needed no file moves.
+- Consequence of the above: invoice review/vendor pages **do** get the
+  persistent shell now (unlike mobile's full-screen push), a
+  simplification judgment call. `/paywall` (C11) and every auth screen
+  (login/register/verify-otp/invite-accept) stay shell-free full-bleed
+  screens, matching mobile's own modal-like/full-screen presentation
+  for those.
+- The QuickBooks company switcher deferred from C3 (see that entry)
+  now lives here, in the sidebar — fetches connections on mount and
+  switches the active one, exactly the piece of UI mobile only ever
+  showed inside DashboardScreen's own header.
+- "/" now redirects: unauthenticated → /login (already covered by the
+  generic protected-route rule), authenticated → /dashboard (new
+  special case added to AuthGate). The scaffold's original
+  create-next-app placeholder content is gone from page.tsx — it was
+  never reachable through AuthGate anyway once restoring/redirect
+  logic runs, so replaced with a one-line placeholder rather than kept
+  as dead template content.
+- Logout is now available from two places (sidebar footer, and C19's
+  full profile page) — factored into one shared `useLogout()` hook
+  (src/store/useLogout.ts) so the dispatch+redirect logic isn't
+  duplicated.

@@ -156,7 +156,7 @@ export function PlansContent() {
         ))}
 
         <Link
-          href="/subscription/paywall"
+          href="/paywall"
           className="mt-[var(--space-xs)] flex items-center justify-center gap-[var(--space-xs)] py-[var(--space-sm)] text-caption font-semibold text-text-secondary"
         >
           👁 Preview blocked screen (demo)

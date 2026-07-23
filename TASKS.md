@@ -142,7 +142,7 @@ frontend-ui-v2
       calls, tapping any plan/upgrade action shows "Preview only —
       full subscription flow coming soon" exactly matching the mobile
       mockup precedent. Use the exact numbers above, nothing else.
-- [ ] C12: Global app shell — top nav or sidebar navigation
+- [x] C12: Global app shell — top nav or sidebar navigation
       appropriate for a desktop layout. The mobile app has no real
       tab bar (confirmed during investigation — MainTabNavigator is a
       single-screen stack despite its name), so this is genuinely new
