@@ -70,7 +70,7 @@ frontend-ui-v2
 
 ## Phase C — Feature Tasks
 
-- [ ] C1: Auth pages — /login and /register (or /create-account,
+- [x] C1: Auth pages — /login and /register (or /create-account,
       match mobile's routing intent). Email/password fields wired to
       the already-ported `loginUser`/`registerUser` thunks. Google
       Sign-In button: if a real web OAuth client ID was found in A7,

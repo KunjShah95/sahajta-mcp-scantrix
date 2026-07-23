@@ -108,3 +108,23 @@ Append one line per decision as they're made during the loop.
   A7's search changes that; it genuinely needs a Services ID + web
   redirect URIs from Apple Developer that don't exist anywhere in the
   checked sources.
+
+## Cross-cutting — React Native `Alert.alert` → browser dialogs
+
+- Applies to every screen ported from here on (Login, Register,
+  ProfileOptions, TeamMembers, etc.). Mobile screens consistently use
+  React Native's `Alert.alert(...)` for two different jobs: (1)
+  terminal API-failure notices, and (2) destructive-action
+  confirmations (logout, delete account, remove team member). Field-
+  level validation, by contrast, is always inline error text under
+  the input, never an Alert — that split is preserved exactly.
+  For (1) and (2), this port uses the browser's native `window.alert`
+  / `window.confirm` rather than pulling in a toast/dialog library:
+  it needs no new dependency, and it's the closest behavioral match
+  to a blocking native alert (execution pauses until dismissed, same
+  as `Alert.alert`). It looks like a plain browser dialog rather than
+  a themed in-app one — a real, judgment-call visual regression from
+  the mobile app's styled alert boxes, accepted here rather than
+  adding a dependency for it. If a themed dialog is wanted later,
+  swap these call sites for a small in-house dialog component; every
+  call site is a plain, easy-to-find `window.alert`/`window.confirm`.
