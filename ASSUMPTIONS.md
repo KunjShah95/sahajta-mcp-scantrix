@@ -429,3 +429,16 @@ Append one line per decision as they're made during the loop.
   mobile exactly; this page never edits anything.
 - "View"/"View Original Invoice" link to `/invoices/preview?url=...`
   (C16, forward reference, same as C4).
+
+## C16 — Invoice file preview viewer
+
+- Route: `/invoices/preview?url=...&mimeType=...`, used from both C4
+  (review) and C15 (detail). Ported directly from Scantrix_v2's own
+  `InvoicePreviewScreen.web.tsx` — the mobile repo already ships a
+  web-specific variant of this exact screen (iframe for PDF, `<img>`
+  for image), so this is a straight port, not a fresh adaptation from
+  the native `react-native-pdf` version.
+- `/invoices/preview` (static) and `/invoices/[id]` (dynamic) coexist
+  at the same route level with no conflict — Next.js resolves static
+  segments before dynamic ones, standard App Router behavior, not
+  something that needed a workaround.

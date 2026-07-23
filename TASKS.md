@@ -164,7 +164,7 @@ frontend-ui-v2
       processed invoice (extracted fields, GL account, status
       history/timeline), themed per status (auto/manual/failed).
       Reference: Scantrix_v2 src/screens/invoice/InvoiceDetailsScreen.tsx.
-- [ ] C16: Invoice file preview viewer — full view of the source
+- [x] C16: Invoice file preview viewer — full view of the source
       invoice file (PDF or image), used from both the invoice review
       (C4) and invoice detail (C15) pages. Mobile already ships a
       `.web.tsx` variant of this exact screen (iframe for PDF, img for
