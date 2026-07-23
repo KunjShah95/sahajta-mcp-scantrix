@@ -9,7 +9,7 @@ frontend-ui-v2
 - [x] A1: Confirm `git status` is clean at start. Create and check out
       branch `web-app-build` from `main` (current tip 7fe0015). All
       subsequent work happens on this branch, never on `main`.
-- [ ] A2: `git fetch origin` — confirm no new commits exist on origin
+- [x] A2: `git fetch origin` — confirm no new commits exist on origin
       that aren't in local `main` yet. Do NOT merge or push anything
       in this task. If fetch fails (permissions/network), mark
       BLOCKED(reason), it's harmless, continue.
