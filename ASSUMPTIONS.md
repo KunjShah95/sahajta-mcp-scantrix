@@ -163,3 +163,45 @@ Append one line per decision as they're made during the loop.
   mobile exactly: DashboardScreen's `InvoiceCard` wraps in a
   `TouchableOpacity` with no `onPress` handler bound — already
   non-interactive on mobile, not a web-port omission.
+
+## C4 — Invoice review page
+
+- Route: `/invoices/[id]/review`. Since a web page can be reloaded or
+  linked to directly (unlike a mobile in-memory navigation stack), the
+  page always dispatches `getInvoiceDetails(invoiceId)` on mount to
+  hydrate `state.invoice.selectedInvoice` from the URL id, rather than
+  assuming a prior screen already populated it (which is all mobile's
+  version does — it just reads `state.invoice.selectedInvoice`
+  as-is).
+- Normalized incoming invoice data against the *actual* ported
+  contract (invoiceSlice.ts's `ExtractedData` /
+  invoiceApi.ts's `PostInvoiceExtractedData`), not mobile's
+  `RawInvoiceData` type, which has drifted from it: dropped a
+  "Tax Type" text field (mobile displays one, but the ported
+  submit contract has no field for it — it would never persist
+  anywhere) and mapped "Item Descriptions" to the real
+  `description` string field instead of a nonexistent
+  `itemDescriptions` array. Every other field maps directly to a real
+  submit field.
+- Found and fixed dead code while porting the vendorId-resolution
+  fallback chain: mobile's `submitToQuickBooks` falls back to
+  `createdVendor?.vendorDbId || createdVendor?._id`, but
+  `CreatedVendor` (vendorSlice.ts) has neither field — and both the
+  "select existing vendor" and "create new vendor" paths on the
+  vendor-resolution screen (C5) always dispatch `setSelectedVendor`
+  with a real `_id` regardless, so that fallback was already
+  unreachable on mobile. Dropped it here rather than porting dead
+  code forward.
+- Confirmation dialogs (reject, post-to-QuickBooks, vendor-not-
+  registered) use `window.confirm` per the cross-cutting Alert.alert
+  note above.
+- After a successful post or reject, mobile navigates to "MainTabs" —
+  its only real screen, since it has no deeper navigation. This port
+  returns to `/invoices/pending` (the queue the user came from)
+  instead, since that page now genuinely exists (C17) and is the more
+  useful destination — judgment call, not a mobile behavior being
+  dropped.
+- "View Invoice" links to `/invoices/preview?url=...&mimeType=...`
+  (C16), a shared preview route also used from the invoice detail
+  page (C15) — mirrors mobile's InvoicePreviewScreen being reachable
+  from multiple screens via navigation params.

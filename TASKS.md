@@ -100,7 +100,7 @@ frontend-ui-v2
       judgment call in ASSUMPTIONS.md, it's a real UX decision being
       made without stakeholder input. Wire to the already-ported
       `getInvoices` thunk. Reference: DashboardScreen.tsx.
-- [ ] C4: Invoice review page — display extracted fields
+- [x] C4: Invoice review page — display extracted fields
       (vendor, amounts, dates, line items), allow editing, post via
       the already-ported `postInvoiceToQuickBooks` /
       `updateInvoiceExtractedData` thunks. Reference:
