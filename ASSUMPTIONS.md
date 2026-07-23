@@ -54,3 +54,11 @@ Append one line per decision as they're made during the loop.
   theme. Tailwind's `dark:` variant utilities still work if a future
   task needs them; nothing was removed from Tailwind itself, only the
   scaffold's placeholder dark override.
+
+## A6 — outbound send capability guard
+
+- Grepped src/lib/ and src/store/ (the ported logic layer) for
+  nodemailer/sendgrid/twilio/smtp/ses/sns/stripe/charge/sendEmail/
+  sendSms/mailer. N/A — no outbound email/SMS/payment send capability
+  exists in the ported logic layer, confirming what the earlier port
+  pass already found in the mobile source. Nothing to gate or guard.

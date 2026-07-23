@@ -36,7 +36,7 @@ frontend-ui-v2
       each using the tokens from A4, not one-off Tailwind classes per
       screen. Server Components by default; mark `'use client'` only
       on the ones that need it (e.g. Button if it takes an onClick).
-- [ ] A6: Dry-run guard check — grep the ported logic layer
+- [x] A6: Dry-run guard check — grep the ported logic layer
       (src/lib/, src/store/) for any outbound email/SMS/payment send
       capability. None is expected to exist (none was found in the
       mobile source during the earlier port). Confirm and record
