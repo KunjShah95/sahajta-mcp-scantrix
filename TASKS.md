@@ -116,7 +116,7 @@ frontend-ui-v2
       admin/accountant/contributor), member list, remove-with-confirm,
       using the already-ported `inviteQBMember`/`fetchQBMembers`/
       `removeQBMember` thunks. Reference: TeamMembersScreen.tsx.
-- [ ] C8: Invite-accept page (/invite/accept) reading a `token` query
+- [x] C8: Invite-accept page (/invite/accept) reading a `token` query
       param, using the already-ported `acceptQBInvite` thunk.
       Reference: InviteAcceptScreen.tsx.
 - [ ] C9: Profile / Accounting Softwares page — QuickBooks card

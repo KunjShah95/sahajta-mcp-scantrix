@@ -262,3 +262,15 @@ Append one line per decision as they're made during the loop.
   that became dedicated pages.
 - Remove-member and invite-failure alerts use `window.confirm`/
   `window.alert` per the cross-cutting Alert.alert note.
+
+## C8 — Invite-accept page
+
+- Route: `/invite/accept?token=...` (matches TASKS.md's explicit path).
+  Ported behaviorally as-is: no token -> /login; unauthenticated ->
+  save the pending token then redirect to /login?fromInvite=true
+  (consumed by LoginForm's post-login pending-invite-accept flow from
+  C1); authenticated -> dispatch acceptQBInvite directly, showing
+  checking/success/error states. This page is in AuthGate's public
+  route list since it needs to be reachable regardless of auth state
+  (its own logic handles the redirect-when-unauthenticated case,
+  rather than AuthGate's blanket gate).
