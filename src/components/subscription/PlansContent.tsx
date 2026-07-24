@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Check, ChevronRight, Eye } from "lucide-react";
 import { useState } from "react";
 
 // Mock data, ported verbatim from Scantrix_v2 src/screens/subscription/
@@ -88,7 +89,7 @@ export function PlansContent() {
           Current plan: <strong className="font-bold text-trust-navy">{CURRENT_PLAN_NAME}</strong>
         </span>
         <span className="flex items-center gap-[var(--space-xs)] text-caption font-bold text-primary">
-          View status &rsaquo;
+          View status <ChevronRight size={14} strokeWidth={2.25} />
         </span>
       </Link>
 
@@ -137,7 +138,7 @@ export function PlansContent() {
             <div className="mb-[var(--space-md)] flex flex-col gap-[var(--space-xs)]">
               {plan.features.map((feature) => (
                 <div key={feature} className="flex items-center gap-[var(--space-sm)]">
-                  <span className="text-success">✓</span>
+                  <Check size={16} strokeWidth={2.5} className="shrink-0 text-success" />
                   <span className="text-body-sm text-text-primary">{feature}</span>
                 </div>
               ))}
@@ -159,7 +160,8 @@ export function PlansContent() {
           href="/paywall"
           className="mt-[var(--space-xs)] flex items-center justify-center gap-[var(--space-xs)] py-[var(--space-sm)] text-caption font-semibold text-text-secondary"
         >
-          👁 Preview blocked screen (demo)
+          <Eye size={14} strokeWidth={2} />
+          Preview blocked screen (demo)
         </Link>
       </div>
     </div>

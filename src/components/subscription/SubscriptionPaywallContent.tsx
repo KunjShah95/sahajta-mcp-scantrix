@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { Lock, X } from "lucide-react";
 
 // Mock 402-style block preview, ported verbatim from Scantrix_v2
 // src/screens/subscription/SubscriptionPaywallScreen.tsx — no real gating.
@@ -23,14 +24,17 @@ export function SubscriptionPaywallContent() {
         <button
           type="button"
           onClick={() => router.back()}
+          aria-label="Close"
           className="flex h-9 w-9 items-center justify-center rounded-full bg-background-soft text-text-primary"
         >
-          ✕
+          <X size={18} strokeWidth={2.25} />
         </button>
       </div>
 
       <div className="flex flex-1 flex-col items-center justify-center px-[var(--space-xl)] text-center">
-        <span className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-4xl">🔒</span>
+        <span className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
+          <Lock size={34} strokeWidth={1.75} className="text-primary" />
+        </span>
 
         <span className="mt-[var(--space-md)] rounded-pill bg-error/10 px-[var(--space-sm)] py-1 text-[10px] font-bold tracking-wide text-error">
           {MOCK_BLOCK.reasonCode}

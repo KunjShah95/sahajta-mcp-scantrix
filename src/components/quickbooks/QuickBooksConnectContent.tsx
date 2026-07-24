@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowRight } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Card } from "@/components/ui/Card";
@@ -142,7 +143,8 @@ export function QuickBooksConnectContent() {
             onClick={() => connectToQuickBooks()}
             className="mt-[var(--space-sm)] flex h-12 items-center justify-center gap-[var(--space-xs)] rounded-md bg-primary font-bold text-white"
           >
-            {connections.length > 0 ? "Add Another Account" : "Connect QuickBooks"} &rarr;
+            {connections.length > 0 ? "Add Another Account" : "Connect QuickBooks"}
+            <ArrowRight size={16} strokeWidth={2.25} />
           </button>
         </div>
       )}

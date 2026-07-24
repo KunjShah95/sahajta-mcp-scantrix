@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { Calculator } from "lucide-react";
 import { ReactNode, useEffect, useState } from "react";
 
+import { BrandIcon } from "@/components/icons/BrandIcon";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { getMyQBConnections } from "@/store/quickBooks/quickBooksApi";
 
@@ -33,7 +35,7 @@ function SoftwareCard({
         disabled ? "opacity-60" : "hover:bg-background-alt"
       }`}
     >
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-background-alt text-2xl">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-background-alt">
         {icon}
       </span>
       <div className="min-w-0 flex-1">
@@ -99,7 +101,7 @@ export function AccountingSoftwaresContent() {
       </p>
       <div className="flex flex-col gap-[var(--space-sm)]">
         <SoftwareCard
-          icon="🟢"
+          icon={<BrandIcon name="quickbooks" size={28} />}
           name="QuickBooks"
           description="Sync vendors and post invoices automatically."
           status={qbStatusLabel}
@@ -107,7 +109,7 @@ export function AccountingSoftwaresContent() {
           href="/quickbooks"
         />
         <SoftwareCard
-          icon="📁"
+          icon={<BrandIcon name="google-drive" size={28} />}
           name="Google Drive"
           description={driveConnected ? "Read-only access granted." : "Connect to grant read-only access to your Drive files."}
           status={driveConnected ? "Connected" : "Not connected"}
@@ -121,7 +123,7 @@ export function AccountingSoftwaresContent() {
       </p>
       <div className="flex flex-col gap-[var(--space-sm)]">
         <SoftwareCard
-          icon="📊"
+          icon={<Calculator size={26} strokeWidth={1.75} className="text-text-secondary" />}
           name="Tally"
           description="Connect Tally to manage accounting entries and GST reports."
           status="Coming Soon"
@@ -129,7 +131,7 @@ export function AccountingSoftwaresContent() {
           disabled
         />
         <SoftwareCard
-          icon="📘"
+          icon={<BrandIcon name="zoho" size={28} />}
           name="Zoho Books"
           description="Automate invoice posting and reconciliation with Zoho Books."
           status="Coming Soon"

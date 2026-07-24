@@ -26,3 +26,14 @@ research/reasoning behind each decision.
   confirmed correct as-is; new `--shadow-sm/md/lg/xl` elevation tokens
   identified as a real gap, to be added in D2.1; icon direction
   (SVG icon set, no emoji) confirmed, deeper research deferred to D1.1.
+- D1.1: Installed `lucide-react` (generic icons, researched over
+  Phosphor via web search) and `simple-icons` (CC0, licensed brand
+  marks). New `src/components/icons/BrandIcon.tsx` wraps
+  QuickBooks/Google Drive/Zoho marks; Tally has no licensed source so
+  gets a generic Calculator icon instead of a fabricated logo.
+  Replaced ~45 emoji/glyph-as-icon instances (raw emoji, HTML entity
+  arrows/chevrons, geometric-shape Unicode) across 19 UI files with
+  Lucide icons. Dropped the country-picker's flag-emoji field (native
+  `<select><option>` can't render SVG) in favor of plain
+  `{name} ({code})` text. Gate green, color-token diff clean, no
+  src/store or *Api.ts changes.

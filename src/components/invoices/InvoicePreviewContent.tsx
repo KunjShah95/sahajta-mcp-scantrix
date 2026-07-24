@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { X } from "lucide-react";
 import { useState } from "react";
 
 // Ported directly from Scantrix_v2's own
@@ -23,9 +24,10 @@ export function InvoicePreviewContent() {
         <button
           type="button"
           onClick={() => router.back()}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-2xl font-semibold text-white"
+          aria-label="Close preview"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-white"
         >
-          ✕
+          <X size={20} strokeWidth={2.25} />
         </button>
         <h1 className="text-body font-bold text-white">Invoice Preview</h1>
         <span className="w-10" />

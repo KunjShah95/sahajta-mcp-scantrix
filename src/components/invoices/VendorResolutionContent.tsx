@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { ChevronLeft } from "lucide-react";
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -187,8 +188,8 @@ export function VendorResolutionContent({ invoiceId }: { invoiceId: string }) {
   return (
     <div className="min-h-screen bg-background-alt pb-28">
       <div className="flex h-14 items-center justify-between bg-primary px-[var(--space-md)]">
-        <button type="button" onClick={() => router.back()} className="text-2xl font-semibold text-white">
-          ‹
+        <button type="button" onClick={() => router.back()} aria-label="Back" className="text-white">
+          <ChevronLeft size={26} strokeWidth={2.25} />
         </button>
         <h1 className="text-body font-bold text-white">Resolve Vendor</h1>
         <span className="w-6" />

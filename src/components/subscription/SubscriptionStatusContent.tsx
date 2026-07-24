@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
 // Mock data, ported verbatim from Scantrix_v2 src/screens/subscription/
 // SubscriptionStatusScreen.tsx — static, self-contained, no API.
@@ -50,7 +51,7 @@ export function SubscriptionStatusContent() {
         href="/plans"
         className="mt-[var(--space-lg)] flex items-center justify-center gap-[var(--space-xs)] rounded-lg bg-primary py-[var(--space-sm)] font-bold text-white"
       >
-        Change Plan &rarr;
+        Change Plan <ArrowRight size={16} strokeWidth={2.25} />
       </Link>
     </div>
   );

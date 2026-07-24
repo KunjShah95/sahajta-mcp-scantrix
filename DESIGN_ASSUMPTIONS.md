@@ -152,3 +152,76 @@ icons" as a checked anti-pattern and recommend SVG icon sets
 (Heroicons, Lucide, Simple Icons for brand marks) — corroborates the
 D1.1 task statement and will be the starting point for that task's own
 deeper icon-domain research.
+
+## D1.1 — Icon and brand-logo system
+
+**Research:** `--domain icons` query for "finance SaaS professional
+dashboard navigation action status" returned Phosphor Icons as the
+local database's top match. Corroborated with a live web search
+("lucide-react vs phosphor-icons React 19 tree shaking license
+comparison 2026") before committing to either, since the local
+database can go stale and this is a concrete install decision, not
+just a style-reference lookup. Findings: both MIT-licensed and fully
+tree-shakeable; Lucide has ~16x Phosphor's npm downloads/week, is the
+default icon set for shadcn/ui (the de facto React ecosystem standard
+per the search results), and has the more geometrically strict/dense
+look that fits this MASTER.md's "Trust & Authority" style better than
+Phosphor's rounder, friendlier multi-weight aesthetic. **Decision:
+`lucide-react`**, overriding the local database's Phosphor suggestion
+— exactly the kind of case DESIGN_LOOP.md's research step exists for
+(don't default to the first result; verify before implementing).
+
+**Brand marks — research:** web search + WebFetch on
+github.com/simple-icons/simple-icons confirmed a CC0-1.0 license
+(public-domain SVG artwork, standard brand-trademark disclaimer
+applies same as any "Sign in with Google"-style button showing a
+real logo) — built specifically for representing third-party
+brands/integrations, satisfying DESIGN_LOOP.md's licensing
+constraint. Verified by inspecting the actual npm tarball
+(`npm pack simple-icons@16.27.0`, not just trusting search-result
+prose) that `icons/quickbooks.svg`, `icons/googledrive.svg`, and
+`icons/zoho.svg` genuinely exist in the package. **Tally has no entry**
+— checked the same way (`tar -tzf ... | grep -i tally`, zero matches).
+Per the licensing constraint's explicit prohibition on scraping or
+hand-approximating a trademarked logo, Tally's card
+(`AccountingSoftwaresContent.tsx`) uses a generic Lucide `Calculator`
+icon instead of a fabricated brand mark — a real gap with no
+legitimately-licensed source found, documented rather than worked
+around with a fake logo.
+
+**Implementation:** `src/components/icons/BrandIcon.tsx` wraps
+`simple-icons`'s named exports (`siQuickbooks`, `siGoogledrive`,
+`siZoho`) as a small React component; each renders in that brand's own
+official color (e.g. QuickBooks' green), which is standard practice
+for representing a third party's own logo and is not a repurposing of
+this app's locked `--color-*` tokens — the D0.2 diff check only
+compares `globals.css` values, which this never touches.
+
+**Scope — every emoji/glyph-as-icon instance across the app, not just
+D1.1's named examples:** grepped the full `src/` tree for emoji
+ranges, arrow/geometric-shape Unicode blocks, and HTML entity
+arrows/chevrons (`&rarr;`, `&rsaquo;`, etc.) used as icons — found and
+replaced ~45 instances across 19 UI component files (nav, empty
+states, status badges, close/back buttons, row chevrons, settings
+icons) with `lucide-react` icons or the new `BrandIcon`. Confirmed via
+repeated greps after each batch that the `src/lib/quickbooks/
+postInvoice.ts`, `src/lib/firebase/config.ts`, and `src/store/
+quickBooks/quickBooksSlice.ts` emoji hits from the initial scan are
+all inside code comments/`console.log` debug strings — not UI, and
+inside `src/store`/logic-layer files this pass must not touch — so
+correctly left alone.
+
+**Country-code flag emoji — a real constraint found, not a stylistic
+choice:** `src/lib/countryCodes.ts` held a `flag` field (flag emoji
+per country) rendered inside `RegisterForm.tsx`'s native `<select>`/
+`<option>` phone country-code picker. A native `<option>` can only
+render plain text — no `<img>`/SVG/component — so this can't be fixed
+by swapping in an icon component without also rebuilding the whole
+dropdown as a custom listbox, a materially larger change than an icon
+swap. Decision: drop the flag glyph and show `{name} ({code})` as
+plain text instead (e.g. "Afghanistan (+93)") — satisfies the
+no-emoji guardrail, keeps the native `<select>`'s built-in keyboard/
+screen-reader behavior intact, and is the smallest complete fix for
+this specific technical constraint. The now-unused `flag` field was
+removed from the `CountryCode` interface and all 127 data rows rather
+than left as dead data.

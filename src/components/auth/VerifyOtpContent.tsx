@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { ChevronLeft, Mail } from "lucide-react";
 import { ChangeEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -107,12 +108,12 @@ export function VerifyOtpContent() {
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-background-soft px-[var(--space-lg)] pt-[var(--space-lg)]">
-      <button type="button" onClick={() => router.back()} className="self-start text-2xl font-semibold text-trust-navy">
-        ‹
+      <button type="button" onClick={() => router.back()} aria-label="Back" className="self-start text-trust-navy">
+        <ChevronLeft size={26} strokeWidth={2.25} />
       </button>
 
-      <span className="mb-[var(--space-lg)] mt-[var(--space-md)] flex h-18 w-18 items-center justify-center rounded-full bg-trust-navy/10 text-3xl">
-        📧
+      <span className="mb-[var(--space-lg)] mt-[var(--space-md)] flex h-18 w-18 items-center justify-center rounded-full bg-trust-navy/10">
+        <Mail size={30} strokeWidth={1.75} className="text-trust-navy" />
       </span>
 
       <h1 className="text-h2 font-bold text-trust-navy">Check your email</h1>

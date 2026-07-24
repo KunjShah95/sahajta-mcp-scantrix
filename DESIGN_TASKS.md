@@ -33,7 +33,7 @@ means running real searches, not defaulting to the first idea — before
 implementing. Document the research findings and the resulting
 decision in DESIGN_ASSUMPTIONS.md before writing code.
 
-- [ ] D1.1: **Icons and brand logos.** Every icon and every third-party
+- [x] D1.1: **Icons and brand logos.** Every icon and every third-party
       software logo (QuickBooks, Google Drive, Tally, Zoho, and any
       generic UI icon — nav, actions, status, empty states) currently
       renders as a macOS system emoji. Research a real icon system:

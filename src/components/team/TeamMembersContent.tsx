@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ChevronRight, UserX, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Card } from "@/components/ui/Card";
@@ -221,7 +222,7 @@ export function TeamMembersContent() {
               <p className="font-bold text-text-primary">Invite a team member</p>
               <p className="text-caption text-text-secondary">Send an email invite with a role for this company.</p>
             </div>
-            <span className="text-primary">&rsaquo;</span>
+            <ChevronRight size={18} strokeWidth={2} className="shrink-0 text-primary" />
           </Card>
         </button>
       ) : (
@@ -264,7 +265,7 @@ export function TeamMembersContent() {
                     className="flex h-8 w-8 items-center justify-center rounded-md bg-error/10 text-error disabled:opacity-60"
                     aria-label={`Remove ${member.email}`}
                   >
-                    {isRemoving ? "…" : "✕"}
+                    {isRemoving ? "…" : <UserX size={16} strokeWidth={2} />}
                   </button>
                 )}
               </Card>
@@ -281,8 +282,13 @@ export function TeamMembersContent() {
           >
             <div className="mb-[var(--space-md)] flex items-center justify-between">
               <h2 className="text-h3 font-bold text-text-primary">Invite Team Member</h2>
-              <button type="button" onClick={() => !sending && setSheetVisible(false)} className="text-text-secondary">
-                ✕
+              <button
+                type="button"
+                onClick={() => !sending && setSheetVisible(false)}
+                aria-label="Close"
+                className="text-text-secondary"
+              >
+                <X size={20} strokeWidth={2.25} />
               </button>
             </div>
 

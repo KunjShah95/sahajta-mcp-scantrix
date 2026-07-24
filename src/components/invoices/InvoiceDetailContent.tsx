@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { AlertTriangle, ChevronLeft } from "lucide-react";
 import { useEffect, useMemo } from "react";
 
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -128,8 +129,8 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
   return (
     <div className="min-h-screen" style={{ backgroundColor: theme.screenBg }}>
       <div className="flex h-[58px] items-center justify-between px-[var(--space-md)]" style={{ backgroundColor: theme.headerBg }}>
-        <button type="button" onClick={() => router.back()} className="text-2xl font-semibold text-white">
-          ‹
+        <button type="button" onClick={() => router.back()} aria-label="Back" className="text-white">
+          <ChevronLeft size={26} strokeWidth={2.25} />
         </button>
         <h1 className="text-body font-extrabold text-white">Invoice Details</h1>
         {previewHref ? (
@@ -179,7 +180,7 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
 
           {type === "failed" && latestStatus?.reason && (
             <div className="mt-[var(--space-sm)] flex items-start gap-[var(--space-xs)] rounded-md bg-white/70 p-[var(--space-sm)]">
-              <span className="text-error">⚠</span>
+              <AlertTriangle size={16} strokeWidth={2} className="mt-0.5 shrink-0 text-error" />
               <p className="text-body-sm font-medium text-error">{latestStatus.reason}</p>
             </div>
           )}

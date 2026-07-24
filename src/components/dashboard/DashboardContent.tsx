@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowRight, Clock, Upload } from "lucide-react";
 import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { Card } from "@/components/ui/Card";
@@ -168,6 +169,7 @@ export function DashboardContent() {
         <h1 className="text-h3 font-bold text-trust-navy">{greetingFor(name)}</h1>
 
         <label className="inline-flex cursor-pointer items-center gap-[var(--space-xs)] rounded-md bg-primary px-[var(--space-md)] py-[var(--space-sm)] text-body-sm font-semibold text-white hover:opacity-90">
+          <Upload size={16} strokeWidth={2.25} />
           {uploading ? "Uploading…" : "Upload invoice"}
           <input
             ref={fileInputRef}
@@ -192,7 +194,7 @@ export function DashboardContent() {
               Connect QuickBooks to sync vendors and post invoices.
             </p>
           </div>
-          <span className="text-primary">&rarr;</span>
+          <ArrowRight size={20} strokeWidth={2} className="shrink-0 text-primary" />
         </button>
       )}
 
@@ -201,7 +203,9 @@ export function DashboardContent() {
         className="flex items-center justify-between rounded-lg border border-[#CBEDE7] bg-background-soft p-[var(--space-md)]"
       >
         <div className="flex items-center gap-[var(--space-sm)]">
-          <span className="flex h-12 w-12 items-center justify-center rounded-md bg-primary text-white">⏳</span>
+          <span className="flex h-12 w-12 items-center justify-center rounded-md bg-primary text-white">
+            <Clock size={22} strokeWidth={2} />
+          </span>
           <div>
             <p className="font-bold text-trust-navy">Pending Review</p>
             <p className="mt-[var(--space-xs)] text-body-sm font-medium text-text-secondary">{pendingText}</p>
@@ -211,7 +215,7 @@ export function DashboardContent() {
           <span className="flex h-7 min-w-7 items-center justify-center rounded-pill bg-primary px-[var(--space-xs)] text-body-sm font-bold text-white">
             {pendingInvoices.length}
           </span>
-          <span className="text-primary">&rarr;</span>
+          <ArrowRight size={18} strokeWidth={2} className="shrink-0 text-primary" />
         </div>
       </Link>
 

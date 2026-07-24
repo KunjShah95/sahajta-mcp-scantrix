@@ -2,8 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  ChevronDown,
+  CreditCard,
+  FileText,
+  LayoutDashboard,
+  LogOut,
+  Puzzle,
+  Users,
+} from "lucide-react";
 import { ReactNode, useEffect, useState } from "react";
 
+import { BrandIcon } from "@/components/icons/BrandIcon";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { useLogout } from "@/store/useLogout";
 import { getMyQBConnections, getQuickBooksStatus } from "@/store/quickBooks/quickBooksApi";
@@ -17,13 +27,13 @@ interface QBConnection {
 }
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/invoices", label: "Invoices" },
-  { href: "/quickbooks", label: "QuickBooks" },
-  { href: "/team", label: "Team" },
-  { href: "/accounting-software", label: "Accounting Software" },
-  { href: "/subscription", label: "Subscription" },
-];
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/invoices", label: "Invoices", icon: FileText },
+  { href: "/quickbooks", label: "QuickBooks", icon: null },
+  { href: "/team", label: "Team", icon: Users },
+  { href: "/accounting-software", label: "Accounting Software", icon: Puzzle },
+  { href: "/subscription", label: "Subscription", icon: CreditCard },
+] as const;
 
 // Genuinely new information architecture, not a port of an existing mobile
 // pattern — MainTabNavigator is a single-screen stack despite its name, so
@@ -75,7 +85,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="flex w-full items-center justify-between rounded-md border border-border bg-background-soft px-[var(--space-sm)] py-[var(--space-xs)] text-left text-body-sm"
             >
               <span className="truncate font-semibold text-text-primary">{activeConnection?.name ?? "Select company"}</span>
-              <span className="text-text-secondary">▾</span>
+              <ChevronDown size={16} className="shrink-0 text-text-secondary" />
             </button>
             {switcherOpen && (
               <div className="absolute left-0 right-0 top-full z-10 mt-[var(--space-xs)] rounded-md border border-border bg-white shadow-sm">
@@ -99,15 +109,21 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className="flex flex-1 flex-col gap-[var(--space-xs)] px-[var(--space-sm)]">
           {NAV_ITEMS.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`rounded-md px-[var(--space-md)] py-[var(--space-sm)] text-body-sm font-semibold ${
+                className={`flex items-center gap-[var(--space-sm)] rounded-md px-[var(--space-md)] py-[var(--space-sm)] text-body-sm font-semibold ${
                   active ? "bg-primary/10 text-primary" : "text-text-secondary hover:bg-background-alt"
                 }`}
               >
-                {item.label}
+                {Icon ? (
+                  <Icon size={18} strokeWidth={2} className="shrink-0" />
+                ) : (
+                  <BrandIcon name="quickbooks" size={18} className="shrink-0" />
+                )}
+                <span className="truncate">{item.label}</span>
               </Link>
             );
           })}
@@ -125,8 +141,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button
             type="button"
             onClick={logout}
-            className="w-full rounded-md px-[var(--space-sm)] py-[var(--space-xs)] text-left text-body-sm font-semibold text-error hover:bg-error/10"
+            className="flex w-full items-center gap-[var(--space-sm)] rounded-md px-[var(--space-sm)] py-[var(--space-xs)] text-left text-body-sm font-semibold text-error hover:bg-error/10"
           >
+            <LogOut size={16} strokeWidth={2} className="shrink-0" />
             Logout
           </button>
         </div>

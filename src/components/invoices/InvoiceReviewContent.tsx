@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -339,8 +340,8 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
         className="flex h-[58px] items-center justify-between px-[var(--space-md)]"
         style={{ backgroundColor: theme.headerBg }}
       >
-        <button type="button" onClick={() => router.back()} className="text-2xl font-semibold text-white">
-          ‹
+        <button type="button" onClick={() => router.back()} aria-label="Back" className="text-white">
+          <ChevronLeft size={26} strokeWidth={2.25} />
         </button>
         <h1 className="text-body font-extrabold tracking-wide text-white">Invoice Review</h1>
         {previewUrl ? (
@@ -386,8 +387,9 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
               {vendorResolutionRequired &&
                 (vendorIsResolved ? (
                   <div className="mt-[var(--space-sm)] flex items-center justify-between rounded-md border border-[#B6E8D3] bg-[#EAF7F1] px-[var(--space-sm)] py-[var(--space-xs)]">
-                    <span className="text-body-sm font-semibold text-[#15805D]">
-                      ✓ Vendor resolved: {selectedVendor?.displayName || createdVendor?.name}
+                    <span className="flex items-center gap-[var(--space-xs)] text-body-sm font-semibold text-[#15805D]">
+                      <CheckCircle2 size={16} strokeWidth={2} className="shrink-0" />
+                      Vendor resolved: {selectedVendor?.displayName || createdVendor?.name}
                     </span>
                     <Link href={`/invoices/${invoiceId}/vendor`} className="text-body-sm font-bold text-primary">
                       Change
@@ -400,7 +402,7 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
                     style={{ color: theme.primaryText }}
                   >
                     <span>+ Resolve Vendor</span>
-                    <span>&rsaquo;</span>
+                    <ChevronRight size={18} strokeWidth={2} />
                   </Link>
                 ))}
             </div>

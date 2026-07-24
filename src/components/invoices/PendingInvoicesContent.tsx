@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { ArrowRight, CheckCircle2, Info, RefreshCw } from "lucide-react";
 import { useEffect } from "react";
 
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -74,7 +75,7 @@ export function PendingInvoicesContent() {
           className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white"
           aria-label="Refresh"
         >
-          ↻
+          <RefreshCw size={18} strokeWidth={2} />
         </button>
       </div>
 
@@ -83,8 +84,8 @@ export function PendingInvoicesContent() {
           <p className="py-[var(--space-xl)] text-center text-body-sm text-text-secondary">Loading invoices…</p>
         ) : pendingInvoices.length === 0 ? (
           <div className="mt-[var(--space-xl)] flex flex-col items-center px-[var(--space-lg)] text-center">
-            <span className="mb-[var(--space-md)] flex h-18 w-18 items-center justify-center rounded-full bg-primary/10 text-3xl">
-              ✓
+            <span className="mb-[var(--space-md)] flex h-18 w-18 items-center justify-center rounded-full bg-primary/10">
+              <CheckCircle2 size={32} strokeWidth={1.75} className="text-primary" />
             </span>
             <p className="text-h3 font-extrabold text-text-primary">All caught up</p>
             <p className="mt-[var(--space-sm)] text-body-sm text-text-secondary">
@@ -93,9 +94,10 @@ export function PendingInvoicesContent() {
             <button
               type="button"
               onClick={() => dispatch(getInvoices())}
-              className="mt-[var(--space-lg)] rounded-md border-2 border-primary px-[var(--space-lg)] py-[var(--space-sm)] font-bold text-primary"
+              className="mt-[var(--space-lg)] flex items-center gap-[var(--space-xs)] rounded-md border-2 border-primary px-[var(--space-lg)] py-[var(--space-sm)] font-bold text-primary"
             >
-              ↻ Refresh
+              <RefreshCw size={16} strokeWidth={2.25} />
+              Refresh
             </button>
           </div>
         ) : (
@@ -125,14 +127,16 @@ export function PendingInvoicesContent() {
                     </div>
                     {issue && (
                       <div className="mt-[var(--space-sm)] flex items-start gap-[var(--space-xs)] rounded-md border border-[#FDE68A] bg-[#FFFBEB] px-[var(--space-sm)] py-[var(--space-xs)]">
-                        <span className="text-[#B45309]">ⓘ</span>
+                        <Info size={14} strokeWidth={2.25} className="mt-0.5 shrink-0 text-[#B45309]" />
                         <span className="text-caption font-semibold text-[#92400E]">{issue}</span>
                       </div>
                     )}
                   </div>
                   <div className="flex items-center justify-between border-t border-[#F3F3F3] bg-[#FAFAFA] px-[var(--space-md)] py-[var(--space-sm)]">
                     <span className="text-body-sm font-bold text-primary">Review Invoice</span>
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary">&rarr;</span>
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <ArrowRight size={16} strokeWidth={2.25} />
+                    </span>
                   </div>
                 </button>
               );

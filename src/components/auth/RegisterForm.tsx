@@ -210,7 +210,7 @@ export function RegisterForm() {
                 >
                   {COUNTRY_CODES.map((c) => (
                     <option key={`${c.name}-${c.code}`} value={c.code}>
-                      {c.flag} {c.code}
+                      {c.name} ({c.code})
                     </option>
                   ))}
                 </select>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { CheckCircle2, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -74,8 +75,8 @@ export function InviteAcceptContent() {
 
         {status === "success" && (
           <>
-            <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/10 text-3xl text-success">
-              ✓
+            <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
+              <CheckCircle2 size={32} strokeWidth={1.75} className="text-success" />
             </span>
             <p className="mt-[var(--space-md)] text-h3 font-bold text-text-primary">Invite accepted</p>
             <p className="mt-[var(--space-xs)] text-body-sm text-text-secondary">Taking you to your dashboard…</p>
@@ -84,8 +85,8 @@ export function InviteAcceptContent() {
 
         {status === "error" && (
           <>
-            <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-error/10 text-3xl text-error">
-              ✕
+            <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-error/10">
+              <XCircle size={32} strokeWidth={1.75} className="text-error" />
             </span>
             <p className="mt-[var(--space-md)] text-h3 font-bold text-text-primary">Couldn&apos;t accept invite</p>
             <p className="mt-[var(--space-xs)] text-body-sm text-text-secondary">{errorMessage}</p>

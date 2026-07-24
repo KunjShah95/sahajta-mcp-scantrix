@@ -1,7 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import {
+  ChevronRight,
+  FileText,
+  Gem,
+  Link2,
+  LogOut,
+  Mail,
+  Shield,
+  Trash2,
+  Users,
+} from "lucide-react";
+import { ReactNode, useState } from "react";
 
 import { useAppSelector } from "@/store/hooks";
 import { useLogout } from "@/store/useLogout";
@@ -19,14 +30,14 @@ function normalizePhotoURL(value: unknown): string {
   return trimmed;
 }
 
-function SettingsRow({ href, icon, iconBg, label }: { href: string; icon: string; iconBg: string; label: string }) {
+function SettingsRow({ href, icon, iconBg, label }: { href: string; icon: ReactNode; iconBg: string; label: string }) {
   return (
     <Link href={href} className="flex items-center gap-[var(--space-sm)] px-[var(--space-md)] py-[var(--space-md)] hover:bg-background-alt">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-lg" style={{ backgroundColor: iconBg }}>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md" style={{ backgroundColor: iconBg }}>
         {icon}
       </span>
       <span className="flex-1 font-semibold text-text-primary">{label}</span>
-      <span className="text-text-secondary">&rsaquo;</span>
+      <ChevronRight size={18} strokeWidth={2} className="shrink-0 text-text-secondary" />
     </Link>
   );
 }
@@ -91,16 +102,31 @@ export function ProfileContent() {
           <p className="truncate text-h3 font-bold text-text-primary">{name}</p>
           <p className="truncate text-body-sm text-text-secondary">{email}</p>
         </div>
-        <span className="text-text-secondary">&rsaquo;</span>
+        <ChevronRight size={18} strokeWidth={2} className="shrink-0 text-text-secondary" />
       </Link>
 
       <p className="mb-[var(--space-sm)] mt-[var(--space-lg)] text-caption font-bold uppercase tracking-wide text-text-secondary">
         Settings
       </p>
       <div className="divide-y divide-border overflow-hidden rounded-lg bg-white shadow-sm">
-        <SettingsRow href="/accounting-software" icon="🔗" iconBg="#EEF4FF" label="Connect to softwares" />
-        <SettingsRow href="/team" icon="👥" iconBg="#E0F2FE" label="Team Members" />
-        <SettingsRow href="/subscription" icon="💎" iconBg="#FEF3C7" label="Subscription" />
+        <SettingsRow
+          href="/accounting-software"
+          icon={<Link2 size={18} strokeWidth={2} className="text-primary" />}
+          iconBg="#EEF4FF"
+          label="Connect to softwares"
+        />
+        <SettingsRow
+          href="/team"
+          icon={<Users size={18} strokeWidth={2} className="text-trust-navy" />}
+          iconBg="#E0F2FE"
+          label="Team Members"
+        />
+        <SettingsRow
+          href="/subscription"
+          icon={<Gem size={18} strokeWidth={2} className="text-warning" />}
+          iconBg="#FEF3C7"
+          label="Subscription"
+        />
       </div>
 
       <p className="mb-[var(--space-sm)] mt-[var(--space-lg)] text-caption font-bold uppercase tracking-wide text-text-secondary">
@@ -113,9 +139,11 @@ export function ProfileContent() {
           rel="noopener noreferrer"
           className="flex items-center gap-[var(--space-sm)] px-[var(--space-md)] py-[var(--space-md)] hover:bg-background-alt"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-success/10 text-lg">📄</span>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-success/10">
+            <FileText size={18} strokeWidth={2} className="text-success" />
+          </span>
           <span className="flex-1 font-semibold text-text-primary">Terms &amp; Conditions</span>
-          <span className="text-text-secondary">&rsaquo;</span>
+          <ChevronRight size={18} strokeWidth={2} className="shrink-0 text-text-secondary" />
         </a>
         <a
           href={PRIVACY_URL}
@@ -123,9 +151,11 @@ export function ProfileContent() {
           rel="noopener noreferrer"
           className="flex items-center gap-[var(--space-sm)] px-[var(--space-md)] py-[var(--space-md)] hover:bg-background-alt"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#F5F3FF] text-lg">🔒</span>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#F5F3FF]">
+            <Shield size={18} strokeWidth={2} className="text-trust-navy" />
+          </span>
           <span className="flex-1 font-semibold text-text-primary">Privacy Policy</span>
-          <span className="text-text-secondary">&rsaquo;</span>
+          <ChevronRight size={18} strokeWidth={2} className="shrink-0 text-text-secondary" />
         </a>
       </div>
 
@@ -137,9 +167,11 @@ export function ProfileContent() {
           href={`mailto:${SUPPORT_EMAIL}`}
           className="flex items-center gap-[var(--space-sm)] px-[var(--space-md)] py-[var(--space-md)] hover:bg-background-alt"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-lg">✉️</span>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10">
+            <Mail size={18} strokeWidth={2} className="text-primary" />
+          </span>
           <span className="flex-1 font-semibold text-text-primary">Contact Support</span>
-          <span className="text-text-secondary">&rsaquo;</span>
+          <ChevronRight size={18} strokeWidth={2} className="shrink-0 text-text-secondary" />
         </a>
       </div>
 
@@ -153,7 +185,9 @@ export function ProfileContent() {
           disabled={isLoggingOut}
           className="flex w-full items-center gap-[var(--space-sm)] p-[var(--space-md)] text-left disabled:opacity-60"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-warning/10 text-lg">↪</span>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-warning/10">
+            <LogOut size={18} strokeWidth={2} className="text-warning" />
+          </span>
           <span className="font-semibold text-text-primary">{isLoggingOut ? "Logging out…" : "Logout"}</span>
         </button>
         <button
@@ -162,7 +196,9 @@ export function ProfileContent() {
           disabled={isDeleting}
           className="flex w-full items-center gap-[var(--space-sm)] p-[var(--space-md)] text-left disabled:opacity-60"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-error/10 text-error">🗑</span>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-error/10 text-error">
+            <Trash2 size={18} strokeWidth={2} />
+          </span>
           <span className="font-semibold text-error">{isDeleting ? "Deleting…" : "Delete Account"}</span>
         </button>
       </div>

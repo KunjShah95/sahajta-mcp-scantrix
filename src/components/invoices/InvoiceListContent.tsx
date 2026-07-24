@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { ChevronRight, FileX2 } from "lucide-react";
 import { useEffect, useMemo } from "react";
 
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -80,8 +81,8 @@ export function InvoiceListContent() {
           <p className="py-[var(--space-xl)] text-center text-body-sm text-text-secondary">Loading invoices…</p>
         ) : invoices.length === 0 ? (
           <div className="flex flex-col items-center py-[var(--space-xl)] text-center">
-            <span className="mb-[var(--space-md)] flex h-24 w-24 items-center justify-center rounded-full text-4xl" style={{ backgroundColor: `${theme.accentHex}22` }}>
-              📄
+            <span className="mb-[var(--space-md)] flex h-24 w-24 items-center justify-center rounded-full" style={{ backgroundColor: `${theme.accentHex}22` }}>
+              <FileX2 size={40} strokeWidth={1.5} style={{ color: theme.accentHex }} />
             </span>
             <p className="text-h3 font-extrabold" style={{ color: theme.accentHex }}>
               No invoices found
@@ -134,7 +135,7 @@ export function InvoiceListContent() {
                         )}
                       </div>
                     </div>
-                    <span className="text-text-secondary">&rsaquo;</span>
+                    <ChevronRight size={18} strokeWidth={2} className="shrink-0 text-text-secondary" />
                   </button>
                 );
               })}
