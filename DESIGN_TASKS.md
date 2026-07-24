@@ -5,7 +5,7 @@
 - [x] D0.1: Confirm `git status` clean on `web-app-build`. Create and
       checkout branch `web-app-design-polish` from it. All work happens
       here.
-- [ ] D0.2: Gate baseline: `npx tsc --noEmit && npx next build` both
+- [x] D0.2: Gate baseline: `npx tsc --noEmit && npx next build` both
       exit 0 before any change. Snapshot the current
       `--color-*` values from `src/app/globals.css` into
       DESIGN_ASSUMPTIONS.md verbatim — this is the reference every
