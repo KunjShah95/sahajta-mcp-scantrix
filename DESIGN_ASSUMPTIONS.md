@@ -50,3 +50,36 @@ check compares against):
 --color-white: #ffffff;
 --color-black: #000000;
 ```
+
+## D0.3 — Research tooling available this session
+
+- **ui-ux-pro-max skill: FOUND.** Located at
+  `/Users/pranamyajain_/.agents/skills/ui-ux-pro-max/` (not under this
+  repo's `.claude/skills/`, and `CLAUDE_PLUGIN_ROOT` is unset in this
+  shell). `scripts/search.py` confirmed runnable directly via its
+  absolute path with `python3` (sanity-checked with a throwaway `ux`
+  domain query). Every research invocation this loop makes uses the
+  literal absolute path
+  `/Users/pranamyajain_/.agents/skills/ui-ux-pro-max/scripts/search.py`
+  in place of `${CLAUDE_PLUGIN_ROOT}/.claude/skills/ui-ux-pro-max/...`
+  since that env var isn't populated here — same script, same
+  database, just invoked without the unset variable.
+- **Web search: AVAILABLE** (WebSearch tool). Used as documented for
+  anything outside the skill's local database (icon library licensing,
+  brand-mark sourcing, current sidebar-collapse conventions).
+- **WebFetch: AVAILABLE**, for reading specific pages WebSearch
+  surfaces (e.g. an icon library's license page).
+- **Browser/screenshot MCP tool: NOT AVAILABLE.** Checked the full
+  deferred-tool list for this session (playwright/puppeteer/chrome-
+  devtools/screenshot-style tools) — nothing found. The only related
+  tool present, `DesignSync`, reads/writes claude.ai/design *projects*,
+  not a locally-running dev server, so it cannot render or screenshot
+  this app. Per DESIGN_LOOP.md's instruction for this exact case: this
+  is noted here and will be repeated as an explicit line in
+  DESIGN_FINAL_REPORT.md — **visual self-review of the running app was
+  not possible tonight; a human's first task tomorrow is to run `npm
+  run dev` and eyeball every route.** D3.1's self-audit and every
+  Phase 4 fix are therefore judged by reading rendered JSX/CSS
+  (component structure, Tailwind classes, computed spacing/color paths)
+  against the researched design-system rules, not by looking at
+  pixels.

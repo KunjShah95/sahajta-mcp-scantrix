@@ -10,12 +10,12 @@
       `--color-*` values from `src/app/globals.css` into
       DESIGN_ASSUMPTIONS.md verbatim — this is the reference every
       later color-diff check compares against.
-- [ ] D0.3: Locate the ui-ux-pro-max skill per DESIGN_LOOP.md's
+- [x] D0.3: Locate the ui-ux-pro-max skill per DESIGN_LOOP.md's
       "Research tools" section. Report whether found. Check what
       web search and any browser/screenshot MCP tools are actually
       available in this session — report exactly what's usable
       before proceeding.
-- [ ] D0.4: Read AGENTS.md, FINAL_REPORT.md, STATUS.md for context on
+- [x] D0.4: Read AGENTS.md, FINAL_REPORT.md, STATUS.md for context on
       what already exists — do not re-derive the app's structure from
       scratch, it's already documented.
 - [ ] D0.5: Run the design-system search (per DESIGN_LOOP.md) for this
