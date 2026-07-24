@@ -43,7 +43,7 @@ decision in DESIGN_ASSUMPTIONS.md before writing code.
       DESIGN_LOOP.md's licensing constraint). Decide, document why,
       then apply consistently across every route inventoried in
       STATUS.md — this is a global pass, not one page.
-- [ ] D1.2: **Collapsible sidebar.** The sidebar
+- [x] D1.2: **Collapsible sidebar.** The sidebar
       (`src/components/shell/AppShell.tsx`) is always fully expanded
       with no way to collapse it. Research how professional tools
       commonly solve this — icon-only collapsed state vs. full width,

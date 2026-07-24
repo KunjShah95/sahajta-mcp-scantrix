@@ -37,3 +37,11 @@ research/reasoning behind each decision.
   `<select><option>` can't render SVG) in favor of plain
   `{name} ({code})` text. Gate green, color-token diff clean, no
   src/store or *Api.ts changes.
+- D1.2: `AppShell.tsx` sidebar now collapses to a 64px icon-only rail
+  (researched pattern: icon rail + tooltips + persisted preference,
+  toggle via `PanelLeftClose`/`PanelLeftOpen`). Preference persisted
+  via two new synchronous functions in `src/lib/storage.ts`, reusing
+  its existing guarded `getItem`/`setItem` — read in a `useEffect`
+  post-mount to avoid a hydration mismatch against the server's
+  always-expanded markup. CSS width transition, 200ms. Gate green,
+  color-token diff clean.

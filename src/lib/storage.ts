@@ -210,3 +210,21 @@ export const clearPendingInviteToken = async () => {
     );
   }
 };
+
+
+// ==============================
+// SIDEBAR COLLAPSED (UI preference, not session data — kept synchronous
+// since AppShell reads it once on mount to set local component state,
+// unlike the async token/user helpers above which mirror AsyncStorage's
+// Promise-based API from the mobile port)
+// ==============================
+
+const SIDEBAR_COLLAPSED_KEY = "sidebarCollapsed";
+
+export const getSidebarCollapsed = (): boolean => {
+  return getItem(SIDEBAR_COLLAPSED_KEY) === "true";
+};
+
+export const setSidebarCollapsed = (collapsed: boolean): void => {
+  setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "true" : "false");
+};

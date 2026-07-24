@@ -8,12 +8,15 @@ import {
   FileText,
   LayoutDashboard,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   Puzzle,
   Users,
 } from "lucide-react";
 import { ReactNode, useEffect, useState } from "react";
 
 import { BrandIcon } from "@/components/icons/BrandIcon";
+import { getSidebarCollapsed, setSidebarCollapsed } from "@/lib/storage";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { useLogout } from "@/store/useLogout";
 import { getMyQBConnections, getQuickBooksStatus } from "@/store/quickBooks/quickBooksApi";
@@ -49,6 +52,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const [connections, setConnections] = useState<QBConnection[]>([]);
   const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -59,6 +63,24 @@ export function AppShell({ children }: { children: ReactNode }) {
       }
     })();
   }, [accessToken, dispatch]);
+
+  // Read the persisted preference after mount rather than in useState's
+  // initializer — the initial client render must match the server's
+  // (always-expanded) markup exactly, or React throws a hydration
+  // mismatch. This follows the same typeof-window-guarded pattern as
+  // every other localStorage call in this codebase (src/lib/storage.ts)
+  // rather than reading window directly here.
+  useEffect(() => {
+    setCollapsed(getSidebarCollapsed());
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      setSidebarCollapsed(next);
+      return next;
+    });
+  };
 
   const activeConnection = connections.find((c) => c._id === qbConnectionId) || connections[0];
 
@@ -72,12 +94,25 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-background-alt">
-      <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-white">
-        <div className="flex h-16 items-center px-[var(--space-lg)]">
-          <span className="text-h3 font-bold text-trust-navy">Scantrix</span>
+      <aside
+        className={`flex shrink-0 flex-col border-r border-border bg-white transition-[width] duration-200 ease-in-out ${
+          collapsed ? "w-16" : "w-64"
+        }`}
+      >
+        <div className={`flex h-16 items-center ${collapsed ? "justify-center px-[var(--space-sm)]" : "justify-between px-[var(--space-lg)]"}`}>
+          {!collapsed && <span className="truncate text-h3 font-bold text-trust-navy">Scantrix</span>}
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-secondary hover:bg-background-alt"
+          >
+            {collapsed ? <PanelLeftOpen size={18} strokeWidth={2} /> : <PanelLeftClose size={18} strokeWidth={2} />}
+          </button>
         </div>
 
-        {connections.length > 0 && (
+        {connections.length > 0 && !collapsed && (
           <div className="relative mx-[var(--space-md)] mb-[var(--space-sm)]">
             <button
               type="button"
@@ -106,7 +141,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         )}
 
-        <nav className="flex flex-1 flex-col gap-[var(--space-xs)] px-[var(--space-sm)]">
+        <nav className={`flex flex-1 flex-col gap-[var(--space-xs)] ${collapsed ? "px-[var(--space-xs)]" : "px-[var(--space-sm)]"}`}>
           {NAV_ITEMS.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
@@ -114,37 +149,51 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-[var(--space-sm)] rounded-md px-[var(--space-md)] py-[var(--space-sm)] text-body-sm font-semibold ${
-                  active ? "bg-primary/10 text-primary" : "text-text-secondary hover:bg-background-alt"
-                }`}
+                title={collapsed ? item.label : undefined}
+                aria-label={item.label}
+                className={`flex items-center gap-[var(--space-sm)] rounded-md py-[var(--space-sm)] text-body-sm font-semibold ${
+                  collapsed ? "justify-center px-0" : "px-[var(--space-md)]"
+                } ${active ? "bg-primary/10 text-primary" : "text-text-secondary hover:bg-background-alt"}`}
               >
                 {Icon ? (
                   <Icon size={18} strokeWidth={2} className="shrink-0" />
                 ) : (
                   <BrandIcon name="quickbooks" size={18} className="shrink-0" />
                 )}
-                <span className="truncate">{item.label}</span>
+                {!collapsed && <span className="truncate">{item.label}</span>}
               </Link>
             );
           })}
         </nav>
 
-        <div className="border-t border-border p-[var(--space-md)]">
+        <div className={`border-t border-border ${collapsed ? "p-[var(--space-xs)]" : "p-[var(--space-md)]"}`}>
           <Link
             href="/profile"
-            className={`mb-[var(--space-xs)] block truncate rounded-md px-[var(--space-sm)] py-[var(--space-xs)] text-body-sm font-semibold ${
-              pathname === "/profile" ? "bg-primary/10 text-primary" : "text-text-primary hover:bg-background-alt"
-            }`}
+            title={collapsed ? name : undefined}
+            aria-label={name}
+            className={`mb-[var(--space-xs)] flex items-center gap-[var(--space-sm)] truncate rounded-md py-[var(--space-xs)] text-body-sm font-semibold ${
+              collapsed ? "justify-center px-0" : "px-[var(--space-sm)]"
+            } ${pathname === "/profile" ? "bg-primary/10 text-primary" : "text-text-primary hover:bg-background-alt"}`}
           >
-            {name}
+            {collapsed ? (
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-caption font-bold text-primary">
+                {name.charAt(0).toUpperCase()}
+              </span>
+            ) : (
+              name
+            )}
           </Link>
           <button
             type="button"
             onClick={logout}
-            className="flex w-full items-center gap-[var(--space-sm)] rounded-md px-[var(--space-sm)] py-[var(--space-xs)] text-left text-body-sm font-semibold text-error hover:bg-error/10"
+            title={collapsed ? "Logout" : undefined}
+            aria-label="Logout"
+            className={`flex w-full items-center gap-[var(--space-sm)] rounded-md py-[var(--space-xs)] text-left text-body-sm font-semibold text-error hover:bg-error/10 ${
+              collapsed ? "justify-center px-0" : "px-[var(--space-sm)]"
+            }`}
           >
             <LogOut size={16} strokeWidth={2} className="shrink-0" />
-            Logout
+            {!collapsed && "Logout"}
           </button>
         </div>
       </aside>

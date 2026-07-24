@@ -225,3 +225,56 @@ screen-reader behavior intact, and is the smallest complete fix for
 this specific technical constraint. The now-unused `flag` field was
 removed from the `CountryCode` interface and all 127 data rows rather
 than left as dead data.
+
+## D1.2 — Collapsible sidebar
+
+**Research:** `--domain ux` query for "collapsible sidebar navigation
+icon-only rail" returned no directly on-topic rows (closest matches
+were generic nav guidelines: sticky nav padding, breadcrumbs, back-
+button history — noted as a genuine 0-relevant-result case rather than
+stretched into a citation). Followed DESIGN_LOOP.md's fallback: real
+web search for "collapsible sidebar dashboard SaaS icon-only rail UX
+pattern 2026 toggle placement." Findings adopted: (1) icon-only
+collapsed rail (not fully hidden) is the standard pattern, sized to
+fit a 24px icon with ~20px padding each side (→ 64px, Tailwind `w-16`,
+same math the search results gave); (2) the preference persists in
+localStorage; (3) collapsed icon-only items get tooltips (native
+`title` + `aria-label` here — a full custom tooltip component would be
+new UI-primitive scope beyond this task's own header/nav toggle work);
+(4) the toggle control itself commonly uses a dedicated open/close
+icon pair and sits in the header row — `lucide-react` ships exactly
+this as `PanelLeftClose`/`PanelLeftOpen`, confirmed present before
+using them.
+
+**Transition timing:** no direct "sidebar width" motion entry in the
+local gsap/motion domain; used the closest analogous guidance already
+surfaced in D0.5 (150–300ms standard-tier transitions) — implemented
+as a plain CSS `transition-[width] duration-200 ease-in-out` on the
+`<aside>`, not a GSAP tween, since this is a simple one-property width
+change already well-served by CSS and the app has no GSAP dependency
+installed; pulling one in for a single width transition would be a
+new dependency for no real benefit.
+
+**Persistence:** implemented via two new small synchronous functions
+in `src/lib/storage.ts` (`getSidebarCollapsed`/`setSidebarCollapsed`),
+reusing that file's existing private `getItem`/`setItem` helpers —
+already individually guarded with `typeof window !== "undefined"`, so
+no new SSR-unsafe call was introduced. Deliberately synchronous (the
+file's auth/session helpers are async, mirroring mobile's AsyncStorage
+API) since a UI toggle's own local state doesn't need Promise
+plumbing. `AppShell.tsx` reads the stored value inside a `useEffect`
+(post-mount), not inside `useState`'s initializer — reading
+`localStorage` during the initializer would run on the very first
+client render and mismatch the server-rendered (always-expanded)
+markup, which is exactly the class of hydration bug AGENTS.md already
+flags this codebase as having hit once before. The trade-off is a
+one-frame flash from expanded→collapsed on load for a returning user
+with the collapsed preference saved — standard, accepted behavior for
+localStorage-persisted UI prefs across the industry, and never a
+prerender crash.
+
+**Scope of the collapsed state:** company switcher dropdown and text
+labels hide (need width to render); nav icons, the profile-link
+initial-avatar, and the logout icon stay and gain `title`/`aria-label`
+tooltips. Collapsing is purely a `src/components/shell/AppShell.tsx` +
+`src/lib/storage.ts` change — no `src/store/` or `*Api.ts` edits.
