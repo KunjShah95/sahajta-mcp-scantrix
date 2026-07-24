@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { Lock, X } from "lucide-react";
 
+import { showToast } from "@/lib/dialogManager";
+
 // Mock 402-style block preview, ported verbatim from Scantrix_v2
 // src/screens/subscription/SubscriptionPaywallScreen.tsx — no real gating.
 const MOCK_BLOCK = {
@@ -15,7 +17,7 @@ export function SubscriptionPaywallContent() {
   const router = useRouter();
 
   const handleUpgrade = () => {
-    window.alert("Preview only — full subscription flow coming soon.");
+    showToast("Preview only — full subscription flow coming soon.", "info");
   };
 
   return (

@@ -7,6 +7,7 @@ import { ChangeEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { resendRegisterOtp, verifyRegisterOtp } from "@/store/auth/authApi";
 import { acceptQBInvite } from "@/store/quickBooks/quickBooksApi";
+import { showToast } from "@/lib/dialogManager";
 
 const OTP_LENGTH = 6;
 const RESEND_COUNTDOWN = 60;
@@ -73,16 +74,17 @@ export function VerifyOtpContent() {
         const acceptResult = await dispatch(acceptQBInvite({ inviteToken }));
         if (!acceptQBInvite.fulfilled.match(acceptResult)) {
           const payload = acceptResult.payload as { message?: string } | undefined;
-          window.alert(
+          showToast(
             payload?.message ||
               "Your account is ready, but we couldn't link your invite. You can ask for a new invite from your dashboard.",
+            "error",
           );
         }
       }
       router.replace("/dashboard");
     } else {
       const payload = result.payload;
-      window.alert(typeof payload === "string" ? payload : "Invalid OTP. Please try again.");
+      showToast(typeof payload === "string" ? payload : "Invalid OTP. Please try again.", "error");
     }
   };
 
@@ -96,10 +98,10 @@ export function VerifyOtpContent() {
         inputRefs.current[0]?.focus();
         setCountdown(RESEND_COUNTDOWN);
         setCanResend(false);
-        window.alert("A new verification code has been sent to your email.");
+        showToast("A new verification code has been sent to your email.", "success");
       } else {
         const payload = result.payload;
-        window.alert(typeof payload === "string" ? payload : "Could not resend OTP.");
+        showToast(typeof payload === "string" ? payload : "Could not resend OTP.", "error");
       }
     } finally {
       setResendLoading(false);

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { ChevronRight, UserX, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { confirmDialog, showToast } from "@/lib/dialogManager";
+
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -118,9 +120,13 @@ export function TeamMembersContent() {
 
   const handleRemoveMember = async (member: QBMember) => {
     if (!activeConnection) return;
-    if (!window.confirm(`${member.email} will lose access to ${activeConnection.name} immediately. Remove them?`)) {
-      return;
-    }
+    const confirmed = await confirmDialog({
+      title: "Remove team member?",
+      message: `${member.email} will lose access to ${activeConnection.name} immediately. Remove them?`,
+      confirmLabel: "Remove",
+      tone: "destructive",
+    });
+    if (!confirmed) return;
     setRemovingId(member._id);
     try {
       const result = await dispatch(removeQBMember({ qbId: activeConnection._id, memberId: member._id }));
@@ -128,7 +134,7 @@ export function TeamMembersContent() {
         setMembers((prev) => prev.filter((m) => m._id !== member._id));
       } else {
         const payload = result.payload as { message?: string } | undefined;
-        window.alert(payload?.message || "Please try again.");
+        showToast(payload?.message || "Please try again.", "error");
       }
     } finally {
       setRemovingId(null);
@@ -159,12 +165,13 @@ export function TeamMembersContent() {
         const roleLabel = ROLE_META[inviteRole]?.label || inviteRole;
         setSheetVisible(false);
         fetchMembers(activeConnection._id);
-        window.alert(
+        showToast(
           `${trimmedEmail} has been invited as ${roleLabel} on ${activeConnection.name}. They'll receive an email with instructions to join.`,
+          "success",
         );
       } else {
         const payload = result.payload as { message?: string } | undefined;
-        window.alert(payload?.message || "Could not send invite. Please try again.");
+        showToast(payload?.message || "Could not send invite. Please try again.", "error");
       }
     } finally {
       setSending(false);

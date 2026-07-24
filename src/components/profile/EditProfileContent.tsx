@@ -6,6 +6,7 @@ import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { ChangeEvent, useMemo, useRef, useState } from "react";
 
 import { auth, db } from "@/lib/firebase/config";
+import { showToast } from "@/lib/dialogManager";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { updateProfileIcon } from "@/store/auth/authApi";
 
@@ -43,7 +44,7 @@ export function EditProfileContent() {
 
     const userId = apiUser?._id;
     if (!userId || !accessToken) {
-      window.alert("User ID or access token not found");
+      showToast("User ID or access token not found", "error");
       return;
     }
 
@@ -52,13 +53,13 @@ export function EditProfileContent() {
       const result = await dispatch(updateProfileIcon({ file, userId, accessToken }));
       if (!updateProfileIcon.fulfilled.match(result)) {
         const payload = result.payload;
-        window.alert(typeof payload === "string" ? payload : "Could not upload profile photo.");
+        showToast(typeof payload === "string" ? payload : "Could not upload profile photo.", "error");
         return;
       }
       const payload = result.payload as { data?: { icon?: string; user?: { icon?: string } }; icon?: string };
       const uploadedImage = payload?.data?.icon || payload?.icon || payload?.data?.user?.icon;
       if (!uploadedImage) {
-        window.alert("Image URL not returned from API");
+        showToast("Image URL not returned from API", "error");
         return;
       }
       const finalImage = normalizePhotoURL(uploadedImage);
@@ -67,7 +68,7 @@ export function EditProfileContent() {
       if (auth.currentUser) {
         await updateProfile(auth.currentUser, { photoURL: finalImage });
       }
-      window.alert("Profile photo updated successfully.");
+      showToast("Profile photo updated successfully.", "success");
     } finally {
       setIsUploadingPhoto(false);
     }
@@ -92,10 +93,10 @@ export function EditProfileContent() {
           { merge: true },
         );
       }
-      window.alert("Your profile has been updated.");
+      showToast("Your profile has been updated.", "success");
       router.back();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Something went wrong while updating your profile.");
+      showToast(error instanceof Error ? error.message : "Something went wrong while updating your profile.", "error");
     } finally {
       setIsSaving(false);
     }

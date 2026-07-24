@@ -6,6 +6,7 @@ import { PersistGate } from "redux-persist/integration/react";
 import { Persistor, persistStore } from "redux-persist";
 
 import { store } from "@/store";
+import { DialogHost } from "@/components/ui/DialogHost";
 
 // persistStore(store) starts redux-persist's storage read/rehydrate cycle.
 // It must not run at module scope (src/store/index.ts stays SSR-safe on its
@@ -22,6 +23,7 @@ export function Providers({ children }: PropsWithChildren) {
     <Provider store={store}>
       <PersistGate loading={null} persistor={persistorRef.current}>
         {children}
+        <DialogHost />
       </PersistGate>
     </Provider>
   );

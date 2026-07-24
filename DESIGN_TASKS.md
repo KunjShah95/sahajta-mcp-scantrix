@@ -54,7 +54,7 @@ decision in DESIGN_ASSUMPTIONS.md before writing code.
       pattern (`src/lib/storage.ts`) so it survives a refresh without
       breaking prerendering the way an earlier unguarded
       localStorage call already did once in this codebase.
-- [ ] D1.3: **Destructive-action and error dialogs.** Every logout,
+- [x] D1.3: **Destructive-action and error dialogs.** Every logout,
       delete-account, remove-team-member confirmation, and every hard
       API-failure notice currently renders as a bare browser
       `window.alert`/`window.confirm` — a known, previously-flagged

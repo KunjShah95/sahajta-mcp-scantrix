@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { loginUser } from "@/store/auth/authApi";
 import { acceptQBInvite } from "@/store/quickBooks/quickBooksApi";
 import { getPendingInviteToken, clearPendingInviteToken } from "@/lib/storage";
+import { showToast } from "@/lib/dialogManager";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 
 import { GoogleSignInButton } from "./GoogleSignInButton";
@@ -61,9 +62,10 @@ export function LoginForm() {
       await clearPendingInviteToken();
       if (!acceptQBInvite.fulfilled.match(result)) {
         const payload = result.payload as { message?: string } | undefined;
-        window.alert(
+        showToast(
           payload?.message ||
             "We couldn't accept your invite automatically. Please ask for a new invite link.",
+          "error",
         );
       }
     }

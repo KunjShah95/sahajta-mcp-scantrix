@@ -14,6 +14,7 @@ import {
 } from "@/store/quickBooks/quickBooksApi";
 import { setSelectedVendor } from "@/store/vendor/vendorSlice";
 import { CURRENCY_OPTIONS } from "@/lib/currencies";
+import { showToast } from "@/lib/dialogManager";
 import type { TaxCode } from "@/store/quickBooks/quickBooksSlice";
 
 type ActiveTab = "suggested" | "all" | "create";
@@ -98,7 +99,7 @@ export function VendorResolutionContent({ invoiceId }: { invoiceId: string }) {
 
   const handleCreateVendor = async () => {
     if (!newVendorName.trim()) {
-      window.alert("Please enter a vendor name.");
+      showToast("Please enter a vendor name.", "error");
       return;
     }
     if (creatingVendor || !accessToken) return;
@@ -144,7 +145,7 @@ export function VendorResolutionContent({ invoiceId }: { invoiceId: string }) {
         router.back();
       } else {
         const payload = result.payload as { message?: string } | undefined;
-        window.alert(payload?.message || "Failed to create vendor");
+        showToast(payload?.message || "Failed to create vendor", "error");
       }
     } finally {
       setCreatingVendor(false);

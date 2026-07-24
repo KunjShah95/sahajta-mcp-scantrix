@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 
+import { showToast } from "@/lib/dialogManager";
+
 import { logoutUser } from "./auth/authApi";
 import { useAppDispatch, useAppSelector } from "./hooks";
 
@@ -14,7 +16,7 @@ export function useLogout() {
 
   return async () => {
     if (!refreshToken) {
-      window.alert("Refresh token not found");
+      showToast("Refresh token not found", "error");
       return;
     }
     const result = await dispatch(logoutUser({ refreshToken }));
@@ -22,7 +24,7 @@ export function useLogout() {
       router.replace("/login");
     } else {
       const payload = result.payload;
-      window.alert(typeof payload === "string" ? payload : "Something went wrong");
+      showToast(typeof payload === "string" ? payload : "Something went wrong", "error");
     }
   };
 }

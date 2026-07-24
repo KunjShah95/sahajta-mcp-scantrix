@@ -45,3 +45,14 @@ research/reasoning behind each decision.
   post-mount to avoid a hydration mismatch against the server's
   always-expanded markup. CSS width transition, 200ms. Gate green,
   color-token diff clean.
+- D1.3: Built `src/lib/dialogManager.ts` (eventemitter3 singleton,
+  mirrors the existing `sessionManager.ts` pattern) +
+  `src/components/ui/DialogHost.tsx`, mounted once in providers.tsx.
+  `confirmDialog()` is a Promise-based blocking modal (destructive
+  actions get `danger`-variant buttons); `showToast()` is a
+  4s-auto-dismiss notification for everything else. Replaced all 34
+  `window.alert`/`window.confirm` call sites across 12 files,
+  including 2 in `src/store/useLogout.ts` (explicitly allowed —
+  UI-layer call site only, dispatch/router logic untouched, documented
+  in DESIGN_ASSUMPTIONS.md). Gate green, color-token diff clean, no
+  `*Api.ts` touched.

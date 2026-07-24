@@ -4,6 +4,8 @@ import Link from "next/link";
 import { Check, ChevronRight, Eye } from "lucide-react";
 import { useState } from "react";
 
+import { showToast } from "@/lib/dialogManager";
+
 // Mock data, ported verbatim from Scantrix_v2 src/screens/subscription/
 // PlansScreen.tsx — pricing is fixed, not open for reinterpretation (see
 // ASSUMPTIONS.md). Pure UI, no real billing calls.
@@ -71,7 +73,7 @@ export function PlansContent() {
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
 
   const handleChoosePlan = () => {
-    window.alert("Preview only — full subscription flow coming soon.");
+    showToast("Preview only — full subscription flow coming soon.", "info");
   };
 
   return (

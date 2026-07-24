@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { ReactNode, useState } from "react";
 
+import { confirmDialog, showToast } from "@/lib/dialogManager";
 import { useAppSelector } from "@/store/hooks";
 import { useLogout } from "@/store/useLogout";
 
@@ -54,7 +55,13 @@ export function ProfileContent() {
   const photoURL = normalizePhotoURL(apiUser?.icon);
 
   const handleLogout = async () => {
-    if (!window.confirm("Are you sure you want to logout?")) return;
+    const confirmed = await confirmDialog({
+      title: "Logout?",
+      message: "Are you sure you want to logout?",
+      confirmLabel: "Logout",
+      tone: "destructive",
+    });
+    if (!confirmed) return;
     setIsLoggingOut(true);
     try {
       await logout();
@@ -68,17 +75,17 @@ export function ProfileContent() {
   // "Coming Soon" stub — no backend endpoint exists (flagged separately as
   // a real compliance requirement needing scoped backend work, per
   // TASKS.md's Pre-Marked BLOCKED list).
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = async () => {
     if (isDeleting) return;
-    if (
-      !window.confirm(
-        "Delete Account Permanently?\n\nThis action cannot be undone. Your account will be deleted permanently.",
-      )
-    ) {
-      return;
-    }
+    const confirmed = await confirmDialog({
+      title: "Delete account permanently?",
+      message: "This action cannot be undone. Your account will be deleted permanently.",
+      confirmLabel: "Delete account",
+      tone: "destructive",
+    });
+    if (!confirmed) return;
     setIsDeleting(true);
-    window.alert("Coming Soon: Delete account API will be integrated next.");
+    showToast("Coming Soon: Delete account API will be integrated next.", "info");
     setIsDeleting(false);
   };
 

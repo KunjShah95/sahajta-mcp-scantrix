@@ -10,6 +10,7 @@ import { getInvoices } from "@/store/invoice/invoiceApi";
 import { getMyQBConnections } from "@/store/quickBooks/quickBooksApi";
 import { scanInvoice } from "@/store/invoice/invoiceApi";
 import { connectToQuickBooks } from "@/lib/quickbooks/connect";
+import { showToast } from "@/lib/dialogManager";
 import {
   INVOICE_STATUS_THEME,
   getInvoiceAmount,
@@ -145,7 +146,7 @@ export function DashboardContent() {
     if (!file) return;
 
     if (!qbConnectionId) {
-      window.alert("Please connect a QuickBooks account before scanning invoices.");
+      showToast("Please connect a QuickBooks account before scanning invoices.", "error");
       return;
     }
 
@@ -156,7 +157,7 @@ export function DashboardContent() {
         setTimeout(syncInvoices, 1500);
       } else {
         const payload = result.payload;
-        window.alert(typeof payload === "string" ? payload : "Invoice scan failed");
+        showToast(typeof payload === "string" ? payload : "Invoice scan failed", "error");
       }
     } finally {
       setUploading(false);

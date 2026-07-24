@@ -14,6 +14,7 @@ import {
 import { fetchQuickBooksAccounts, fetchQuickBooksVendors } from "@/store/quickBooks/quickBooksApi";
 import { setSelectedVendor } from "@/store/vendor/vendorSlice";
 import { CURRENCY_OPTIONS } from "@/lib/currencies";
+import { confirmDialog, showToast } from "@/lib/dialogManager";
 import { getReviewTheme } from "@/lib/invoiceReviewTheme";
 
 interface NormalizedInvoiceData {
@@ -251,16 +252,21 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
   const isRejectDisabled = posting || rejecting;
 
   const handleReject = async () => {
-    if (!window.confirm("Reject this invoice? It will be permanently moved to the Failed section and cannot be undone.")) {
-      return;
-    }
+    const confirmed = await confirmDialog({
+      title: "Reject this invoice?",
+      message: "It will be permanently moved to the Failed section and cannot be undone.",
+      confirmLabel: "Reject",
+      tone: "destructive",
+    });
+    if (!confirmed) return;
+
     const result = await dispatch(rejectInvoice({ invoiceId }));
     if (rejectInvoice.fulfilled.match(result)) {
-      window.alert("The invoice has been moved to the Failed section.");
+      showToast("The invoice has been moved to the Failed section.", "success");
       router.push("/invoices/pending");
     } else {
       const payload = result.payload as { message?: string } | string | undefined;
-      window.alert(typeof payload === "string" ? payload : payload?.message || "Failed to reject the invoice.");
+      showToast(typeof payload === "string" ? payload : payload?.message || "Failed to reject the invoice.", "error");
     }
   };
 
@@ -274,7 +280,7 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
     const vendorId = selectedVendor?._id || selectedVendor?.qbVendorId || invoiceObject?.vendor?.vendorDbId || "";
 
     if (!vendorId) {
-      window.alert("Could not find vendor ID. Please resolve the vendor first.");
+      showToast("Could not find vendor ID. Please resolve the vendor first.", "error");
       return;
     }
 
@@ -299,31 +305,38 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
     );
 
     if (postInvoiceToQuickBooks.fulfilled.match(result)) {
-      window.alert("Invoice posted to QuickBooks successfully.");
+      showToast("Invoice posted to QuickBooks successfully.", "success");
       router.push("/invoices/pending");
     } else {
       const payload = result.payload as { message?: string } | string | undefined;
-      window.alert(
+      showToast(
         typeof payload === "string" ? payload : payload?.message || "Failed to post invoice to QuickBooks.",
+        "error",
       );
     }
   };
 
-  const handlePrimaryAction = () => {
+  const handlePrimaryAction = async () => {
     const errors = validateQuickBooksFields();
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
       return;
     }
     if (vendorResolutionRequired && !vendorIsResolved) {
-      if (window.confirm("This vendor is not registered in QuickBooks. Resolve the vendor now?")) {
-        router.push(`/invoices/${invoiceId}/vendor`);
-      }
+      const confirmed = await confirmDialog({
+        title: "Vendor not registered",
+        message: "This vendor is not registered in QuickBooks. Resolve the vendor now?",
+        confirmLabel: "Resolve vendor",
+      });
+      if (confirmed) router.push(`/invoices/${invoiceId}/vendor`);
       return;
     }
-    if (window.confirm("Post this invoice to QuickBooks? Please verify all details are correct before confirming.")) {
-      submitToQuickBooks();
-    }
+    const confirmed = await confirmDialog({
+      title: "Post to QuickBooks?",
+      message: "Please verify all details are correct before confirming.",
+      confirmLabel: "Post invoice",
+    });
+    if (confirmed) submitToQuickBooks();
   };
 
   if (!invoiceObject) {

@@ -278,3 +278,67 @@ labels hide (need width to render); nav icons, the profile-link
 initial-avatar, and the logout icon stay and gain `title`/`aria-label`
 tooltips. Collapsing is purely a `src/components/shell/AppShell.tsx` +
 `src/lib/storage.ts` change — no `src/store/` or `*Api.ts` edits.
+
+## D1.3 — Destructive-action and error dialogs
+
+**Research:** `--domain ux` query for "confirmation modal destructive
+action toast notification" returned three directly relevant rows:
+confirm before delete/irreversible actions (High severity — "Are you
+sure" modal, not a direct delete), toast notifications should
+auto-dismiss in 3-5s and never persist indefinitely, and successful
+actions should get a brief confirmation rather than silent success.
+Adopted directly: **confirmations stay a blocking modal** (matches
+DESIGN_TASKS.md's explicit "preserve the exact same
+blocking-until-dismissed behavior" requirement), **everything else
+becomes an auto-dismissing toast** (4000ms — inside the researched
+3-5s window) rather than another modal, since forcing a click to
+dismiss every success/error message a user didn't ask a yes/no
+question about would be a regression from a fast SaaS product, not an
+improvement over `window.alert`.
+
+**Architecture — reused an existing codebase pattern rather than
+inventing a new one:** `src/lib/sessionManager.ts` already uses a
+module-level `eventemitter3` instance (`sessionEmitter`) so plain,
+non-component code can trigger cross-cutting UI behavior without React
+context plumbing — `eventemitter3` was already a direct dependency
+for exactly this reason. `src/lib/dialogManager.ts` mirrors that same
+shape: `confirmDialog(options): Promise<boolean>` and
+`showToast(message, tone)` are plain functions any client component's
+event handler can call directly, no hook/provider import needed at
+each of the ~30 call sites. `src/components/ui/DialogHost.tsx` is the
+one subscriber, mounted once in `src/app/providers.tsx` (wraps every
+route, including pre-auth pages like `/login`). `confirmDialog`
+resolves its Promise only on the dialog's own button click — the same
+"caller awaits, execution pauses" contract `window.confirm` had.
+
+**Visual design:** reuses the existing `Button` primitive's
+`primary`/`outline`/`danger` variants (destructive confirms get
+`danger`) and the locked palette's `--color-error`/`--color-success`
+tokens for toast icon tinting — no new colors introduced. Modal uses
+`shadow-xl` (Tailwind's default, not a new token) — see D2.1 for why a
+dedicated elevation-token scale is deferred to that task rather than
+introduced piecemeal here.
+
+**Accessibility baseline:** confirm dialog uses `role="alertdialog"` +
+`aria-modal` + labelled title/message, autofocuses its confirm button
+on open, and Escape/backdrop-click cancels (same "cancel" outcome a
+user expects from dismissing a native dialog). Toasts use
+`role="status"`/`aria-live="polite"` so screen readers announce them
+without stealing focus. A full focus trap was not added — out of
+scope for this task's own research findings, which centered on the
+confirm/toast split rather than modal focus management; flagged as a
+candidate for D2.3's accessibility pass if a gap is found there.
+
+**Call-site sweep:** replaced all 34 `window.alert`/`window.confirm`
+call sites found via `grep -rn` across 12 files. One file,
+`src/store/useLogout.ts`, sits inside the `src/store/` directory the
+Cycle's mechanical gate greps for — flagged explicitly rather than
+silently changed: DESIGN_LOOP.md's own Cycle step 4 scopes this pass
+to "presentation only... **and the specific UI-layer call sites that
+currently trigger `window.alert`/`window.confirm`**" as an explicit
+inclusion, distinct from the "business logic, API contracts" it
+excludes. The diff there is exactly two `window.alert(...)` →
+`showToast(...)` swaps; `dispatch(logoutUser(...))` and
+`router.replace(...)` — the actual logic — are untouched. Verified via
+`git diff -- src/store/` showing only that 4-line change before
+committing.

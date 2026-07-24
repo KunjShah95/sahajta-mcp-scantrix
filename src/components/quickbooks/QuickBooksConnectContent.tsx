@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { disconnectQuickBooks, getMyQBConnections, getQuickBooksStatus } from "@/store/quickBooks/quickBooksApi";
 import { connectToQuickBooks } from "@/lib/quickbooks/connect";
+import { confirmDialog, showToast } from "@/lib/dialogManager";
 
 interface QBConnection {
   _id: string;
@@ -57,13 +58,24 @@ export function QuickBooksConnectContent() {
   const handleSwitch = async (connection: QBConnection) => {
     if (connection._id === qbConnectionId) return;
     if (!accessToken) return;
-    if (!window.confirm(`Switch active account to ${connection.name}?`)) return;
+    const confirmed = await confirmDialog({
+      title: "Switch active account?",
+      message: `Switch active account to ${connection.name}?`,
+      confirmLabel: "Switch",
+    });
+    if (!confirmed) return;
     await dispatch(getQuickBooksStatus({ accessToken, qbConnectionId: connection._id }));
   };
 
   const handleDisconnect = async (connection: QBConnection) => {
     if (!accessToken) return;
-    if (!window.confirm(`Disconnect "${connection.name}"? This cannot be undone.`)) return;
+    const confirmed = await confirmDialog({
+      title: "Disconnect QuickBooks account?",
+      message: `Disconnect "${connection.name}"? This cannot be undone.`,
+      confirmLabel: "Disconnect",
+      tone: "destructive",
+    });
+    if (!confirmed) return;
     setDisconnectingId(connection._id);
     try {
       const result = await dispatch(disconnectQuickBooks({ accessToken, qbConnectionId: connection._id }));
@@ -71,7 +83,7 @@ export function QuickBooksConnectContent() {
         setConnections((prev) => prev.filter((c) => c._id !== connection._id));
         await checkStatus();
       } else {
-        window.alert(typeof result.payload === "string" ? result.payload : "Unable to disconnect.");
+        showToast(typeof result.payload === "string" ? result.payload : "Unable to disconnect.", "error");
       }
     } finally {
       setDisconnectingId(null);
