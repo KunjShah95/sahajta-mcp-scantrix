@@ -83,3 +83,72 @@ check compares against):
   (component structure, Tailwind classes, computed spacing/color paths)
   against the researched design-system rules, not by looking at
   pixels.
+
+## D0.5 — Design-system research (persisted to design-system/scantrix-web/MASTER.md)
+
+Ran three queries: `--design-system --persist` for "professional B2B
+SaaS invoice expense management tool for accountants and small
+business owners, dashboard-heavy, trust-and-accuracy-oriented"
+(persisted), a `--density 8 --motion 4 --variance 3` re-run to check
+for a denser dashboard-specific match, and targeted `--domain product`
+/ `--domain typography` queries for an admin/dashboard-app fit
+specifically (the tool's own database leans toward marketing-landing-
+page patterns, confirmed by both design-system runs returning a
+"Landing Page Pattern" section neither applies to this app — Scantrix
+Web has no marketing site, every route sits behind auth).
+
+**Per DESIGN_LOOP.md, every COLORS section from all three runs is
+discarded** — locked palette stands, D0.2 snapshot is the only color
+reference for the rest of this loop.
+
+**Style match:** "Trust & Authority" (`healthcare/medical, financial
+services, enterprise software`) — validates the product-type fit
+independent of its color suggestion. Its non-color anti-patterns
+(playful design, hidden credentials) and its forbidden-pattern list
+(emoji-as-icons, missing cursor-pointer, invisible focus states,
+instant 0ms state changes) become the working checklist for Phase 1–2.
+
+**Typography — researched, decision made:** the typography domain
+query for "professional corporate finance dashboard readable"
+returned three finance-appropriate pairings (Corporate Trust:
+Lexend+Source Sans 3; Financial Trust: IBM Plex Sans; Modern
+Professional: Poppins+Open Sans, the same pairing the design-system
+run defaulted to). **Decision: keep Geist Sans/Geist Mono** (already
+wired via `next/font` in `src/app/layout.tsx`, zero added network
+request, zero FOUT risk) rather than swap to any researched pairing.
+Reasoning: Geist is itself a modern, professional, high-legibility
+grotesque already used across serious fintech/SaaS products (it's
+Vercel's own product typeface) — it satisfies every "mood" keyword the
+research returned (modern, professional, clean, corporate) without
+introducing a third-party font-loading dependency for a problem
+(illegible or unprofessional type) that doesn't actually exist here.
+The real, named typography problem for this loop (D2.1) is
+*inconsistent use of the existing type scale* — hardcoded font sizes
+on some ported screens instead of the `--text-*` tokens — not the
+wrong typeface family. Swapping families would also touch every page
+cosmetically for no problem-statement reason, working against "the
+smallest complete change that solves the stated problem."
+
+**Spacing/radius/shadow — adopted:** MASTER.md's spacing scale
+(`--space-xs` 4px … ) matches this repo's existing `--space-*` tokens
+exactly through `--space-xl` (32px); MASTER.md additionally proposes
+`--space-2xl` (48px) and `--space-3xl` (64px) for section-level
+margins/hero padding this app doesn't have (no marketing hero
+sections) — not adopted, no real gap found for them. MASTER.md's
+component-spec radii (button 8px, card 12px, modal 16px) match this
+repo's `--radius-sm`/`--radius-md`/`--radius-lg` exactly — existing
+radius tokens confirmed correct, no change needed. **Real gap found
+and adopted:** this repo's `globals.css` has no elevation/shadow scale
+at all (every card currently either has no shadow or an ad-hoc
+Tailwind `shadow-sm`/`shadow-md` utility with browser-default values,
+not a themed token) — MASTER.md's 4-step shadow scale
+(`--shadow-sm/md/lg/xl`, values above) is adopted verbatim as new
+tokens in D2.1, since Tailwind's default shadow palette is exactly the
+kind of one-off-value drift D2.1 is scoped to fix.
+
+**Icons — confirmed, detailed in D1.1:** MASTER.md's forbidden-pattern
+list and pre-delivery checklist both explicitly call out "emoji as
+icons" as a checked anti-pattern and recommend SVG icon sets
+(Heroicons, Lucide, Simple Icons for brand marks) — corroborates the
+D1.1 task statement and will be the starting point for that task's own
+deeper icon-domain research.

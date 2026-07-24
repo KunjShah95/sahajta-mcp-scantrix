@@ -18,7 +18,7 @@
 - [x] D0.4: Read AGENTS.md, FINAL_REPORT.md, STATUS.md for context on
       what already exists — do not re-derive the app's structure from
       scratch, it's already documented.
-- [ ] D0.5: Run the design-system search (per DESIGN_LOOP.md) for this
+- [x] D0.5: Run the design-system search (per DESIGN_LOOP.md) for this
       product — a professional B2B SaaS invoice/expense-management
       tool for accountants and small business owners, dashboard-heavy,
       trust-and-accuracy-oriented — with `--persist` to produce

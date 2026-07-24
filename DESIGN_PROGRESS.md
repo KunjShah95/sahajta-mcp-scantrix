@@ -19,3 +19,10 @@ research/reasoning behind each decision.
   SSR-safe localStorage pattern D1.2 must reuse, and the cross-cutting
   `window.alert`/`window.confirm` note in FINAL_REPORT.md lists every
   known call site D1.3 needs to find and replace.
+- D0.5: Persisted `design-system/scantrix-web/MASTER.md`. Color output
+  discarded per guardrail. Decisions: keep Geist typeface (researched
+  alternatives documented, not adopted — reasoning in
+  DESIGN_ASSUMPTIONS.md); existing `--space-*`/`--radius-*` tokens
+  confirmed correct as-is; new `--shadow-sm/md/lg/xl` elevation tokens
+  identified as a real gap, to be added in D2.1; icon direction
+  (SVG icon set, no emoji) confirmed, deeper research deferred to D1.1.
