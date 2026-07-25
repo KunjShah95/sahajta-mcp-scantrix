@@ -3,10 +3,10 @@
 import { useRouter } from "next/navigation";
 import { Lock, X } from "lucide-react";
 
-import { showToast } from "@/lib/dialogManager";
-
-// Mock 402-style block preview, ported verbatim from Scantrix_v2
-// src/screens/subscription/SubscriptionPaywallScreen.tsx — no real gating.
+// Static block-screen copy — this page isn't wired to a real 402 trigger yet
+// (no global interceptor redirects here); reachable today only via the
+// "Preview blocked screen" link on /plans. "Upgrade Now" routes to the real,
+// live /plans page.
 const MOCK_BLOCK = {
   reasonCode: "SUBSCRIPTION_REQUIRED",
   title: "Subscription Required",
@@ -17,7 +17,7 @@ export function SubscriptionPaywallContent() {
   const router = useRouter();
 
   const handleUpgrade = () => {
-    showToast("Preview only — full subscription flow coming soon.", "info");
+    router.push("/plans");
   };
 
   return (

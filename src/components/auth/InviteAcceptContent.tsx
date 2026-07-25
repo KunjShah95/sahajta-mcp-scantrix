@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { acceptQBInvite } from "@/store/quickBooks/quickBooksApi";
 import { savePendingInviteToken } from "@/lib/storage";
+import { useLogout } from "@/store/useLogout";
 import { Spinner } from "@/components/ui/Spinner";
 
 type ScreenStatus = "checking" | "redirecting" | "accepting" | "success" | "error";
@@ -15,6 +16,7 @@ export function InviteAcceptContent() {
   const dispatch = useAppDispatch();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const logout = useLogout();
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
 
   const inviteToken = searchParams.get("token");
@@ -98,7 +100,7 @@ export function InviteAcceptContent() {
             </button>
             <button
               type="button"
-              onClick={() => router.replace("/login")}
+              onClick={logout}
               className="mt-[var(--space-sm)] font-semibold text-primary"
             >
               Try logging in again

@@ -30,10 +30,14 @@ interface QBConnection {
 
 interface QBMember {
   _id: string;
-  email: string;
+  invitedEmail: string;
   role: string;
   inviteStatus?: string;
+  userId?: { firstName: string; lastName: string; email: string } | null;
 }
+
+const memberDisplayName = (member: QBMember) =>
+  member.userId ? `${member.userId.firstName} ${member.userId.lastName}` : member.invitedEmail;
 
 const ROLE_META: Record<string, { label: string; className: string }> = {
   owner: { label: "Owner", className: "bg-[#E5F7F5] text-[#177E71]" },
@@ -125,7 +129,7 @@ export function TeamMembersContent() {
     if (!activeConnection) return;
     const confirmed = await confirmDialog({
       title: "Remove team member?",
-      message: `${member.email} will lose access to ${activeConnection.name} immediately. Remove them?`,
+      message: `${memberDisplayName(member)} will lose access to ${activeConnection.name} immediately. Remove them?`,
       confirmLabel: "Remove",
       tone: "destructive",
     });
@@ -261,7 +265,10 @@ export function TeamMembersContent() {
             return (
               <Card key={member._id} className="flex items-center justify-between">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-text-primary">{member.email}</p>
+                  <p className="truncate font-semibold text-text-primary">{memberDisplayName(member)}</p>
+                  {member.userId && (
+                    <p className="truncate text-caption text-text-secondary">{member.userId.email}</p>
+                  )}
                   {pending && <p className="text-caption font-semibold text-warning">Invite pending</p>}
                 </div>
                 <span className={`mr-[var(--space-sm)] rounded-pill px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold ${meta.className}`}>
@@ -273,7 +280,7 @@ export function TeamMembersContent() {
                     onClick={() => handleRemoveMember(member)}
                     disabled={isRemoving}
                     className="flex h-8 w-8 items-center justify-center rounded-md bg-error/10 text-error disabled:opacity-60"
-                    aria-label={`Remove ${member.email}`}
+                    aria-label={`Remove ${memberDisplayName(member)}`}
                   >
                     {isRemoving ? "…" : <UserX size={16} strokeWidth={2} />}
                   </button>
