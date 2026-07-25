@@ -129,7 +129,7 @@ done.)*
 - [x] D5.1: Final full gate pass across all routes: `tsc` + `next
       build` clean, color-token diff clean against the D0.2 snapshot
       for every commit made tonight (not just the last one).
-- [ ] D5.2: Write DESIGN_FINAL_REPORT.md per DESIGN_LOOP.md's Stop
+- [x] D5.2: Write DESIGN_FINAL_REPORT.md per DESIGN_LOOP.md's Stop
       Condition, including the design-system MASTER.md's key
       decisions summarized for a human skimming in the morning.
 - [ ] D5.3: Push `web-app-design-polish` to origin. Do not merge, do

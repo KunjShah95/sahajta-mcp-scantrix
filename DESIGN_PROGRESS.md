@@ -122,3 +122,10 @@ research/reasoning behind each decision.
   byte-for-byte identical; only one commit (D2.1) ever touched the
   file, adding new `--shadow-*` tokens only. Working tree clean, 15
   commits total, one per task.
+- D5.2: Wrote DESIGN_FINAL_REPORT.md — what changed per page/
+  component, DESIGN_ASSUMPTIONS.md reproduced verbatim (matching last
+  night's FINAL_REPORT.md precedent), visual self-review status
+  (not possible, flagged as human's first task), confirmation zero
+  BLOCKED items, color-token diff re-confirmed clean across every
+  commit, MASTER.md's key decisions summarized. Docs-only, gate
+  re-confirmed green.
