@@ -126,7 +126,7 @@ done.)*
 
 ## Phase 5 — Close-out
 
-- [ ] D5.1: Final full gate pass across all routes: `tsc` + `next
+- [x] D5.1: Final full gate pass across all routes: `tsc` + `next
       build` clean, color-token diff clean against the D0.2 snapshot
       for every commit made tonight (not just the last one).
 - [ ] D5.2: Write DESIGN_FINAL_REPORT.md per DESIGN_LOOP.md's Stop

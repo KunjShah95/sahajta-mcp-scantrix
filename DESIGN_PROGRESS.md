@@ -115,3 +115,10 @@ research/reasoning behind each decision.
 - D4.4: Removed `public/{file,globe,next,vercel,window}.svg` —
   confirmed unreferenced anywhere in `src/` before deleting. Gate
   green, color-token diff clean. All Phase 4 tasks complete.
+- D5.1: Clean-cache final gate pass (`rm -rf .next`, then `tsc` +
+  `next build` both green, 20/20 routes + `/_not-found`). Diffed every
+  `--color-*` token in `globals.css` between the branch's base commit
+  and HEAD directly (not just per-commit spot checks) — all 13 values
+  byte-for-byte identical; only one commit (D2.1) ever touched the
+  file, adding new `--shadow-*` tokens only. Working tree clean, 15
+  commits total, one per task.
