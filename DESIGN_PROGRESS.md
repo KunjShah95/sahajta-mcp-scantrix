@@ -109,3 +109,6 @@ research/reasoning behind each decision.
   unauthenticated visitors still redirect to `/login` unchanged;
   authenticated visitors see this page inside the normal `AppShell`.
   No AuthGate changes. Gate green, color-token diff clean.
+- D4.3: Replaced `layout.tsx`'s create-next-app placeholder
+  title/description with real copy pulled from README.md's own
+  product description. Gate green, color-token diff clean.

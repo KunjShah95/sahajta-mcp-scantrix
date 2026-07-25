@@ -537,3 +537,13 @@ a primary-styled "Back to Dashboard" link using the same
 `text-text-primary`-on-`bg-primary` contrast-safe pairing from D2.3).
 No `AuthGate.tsx` changes — this task is scoped to the 404 page's own
 content, not routing/redirect logic.
+
+## D4.3 — Placeholder metadata title/description
+
+No research needed — this is a factual placeholder-vs-real-content
+fix, not a design decision. Pulled the description language directly
+from `README.md`'s own opening line ("AI-assisted invoice scanning,
+QuickBooks sync, and team management for accountants and small
+businesses") rather than writing new marketing copy, so the browser
+tab/link-preview text stays consistent with how the project already
+describes itself elsewhere in the repo.
