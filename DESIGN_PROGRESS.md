@@ -91,3 +91,10 @@ research/reasoning behind each decision.
   Added `focus-visible` ring to Button (previously had none). Card/
   Badge confirmed non-interactive, no target/focus changes needed.
   Gate green, color-token diff empty.
+- D3.1: Wrote DESIGN_STATUS.md — audited all 20 routes + `/_not-found`
+  by reading code (no browser tool available, per D0.3). 19/20 real
+  routes meet the new bar; `/_not-found` doesn't (no custom page
+  exists at all). Populated Phase 4 with 4 concrete tasks: D4.1
+  (password-toggle icon on login/register), D4.2 (themed 404 page),
+  D4.3 (placeholder metadata title/description), D4.4 (remove 5 dead
+  scaffold SVGs). Docs-only commit, gate re-confirmed green.
