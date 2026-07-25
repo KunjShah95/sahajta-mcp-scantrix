@@ -129,3 +129,7 @@ research/reasoning behind each decision.
   BLOCKED items, color-token diff re-confirmed clean across every
   commit, MASTER.md's key decisions summarized. Docs-only, gate
   re-confirmed green.
+- D5.3: Pushed `web-app-design-polish` to origin (new branch, tracking
+  set up). No merge, no PR opened, `main` untouched, no Vercel/deploy
+  invocation at any point tonight. All 21 DESIGN_TASKS.md boxes now
+  checked — loop complete.

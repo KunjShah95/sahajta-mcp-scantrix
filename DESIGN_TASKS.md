@@ -132,5 +132,5 @@ done.)*
 - [x] D5.2: Write DESIGN_FINAL_REPORT.md per DESIGN_LOOP.md's Stop
       Condition, including the design-system MASTER.md's key
       decisions summarized for a human skimming in the morning.
-- [ ] D5.3: Push `web-app-design-polish` to origin. Do not merge, do
+- [x] D5.3: Push `web-app-design-polish` to origin. Do not merge, do
       not deploy.
