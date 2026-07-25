@@ -103,3 +103,9 @@ research/reasoning behind each decision.
   buttons (kept the text too — smallest change, no behavior/layout
   change, just icon + aria-label added). Gate green, color-token diff
   clean.
+- D4.2: Added `src/app/not-found.tsx` — themed 404 (icon, tokens,
+  "Back to Dashboard" link) in place of Next.js's unstyled default.
+  Confirmed via `AuthGate.tsx`'s existing redirect logic that
+  unauthenticated visitors still redirect to `/login` unchanged;
+  authenticated visitors see this page inside the normal `AppShell`.
+  No AuthGate changes. Gate green, color-token diff clean.

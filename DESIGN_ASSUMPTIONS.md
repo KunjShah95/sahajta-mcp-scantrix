@@ -519,3 +519,21 @@ confirmed) — this fix has no visible effect today, but is exactly the
 "fixing it once here is cheaper than fixing it per-page later" case
 D2.3's own task text names, since `Badge` will get reused. `Button`'s
 fix has immediate visible effect across all 7 files that use it.
+
+## D4.2 — Themed not-found page
+
+Checked `AuthGate.tsx`'s redirect logic before writing the page, since
+it wraps every route: an unmatched path isn't in `PUBLIC_ROUTES`, so
+an *unauthenticated* visitor hitting a bad URL is redirected to
+`/login` exactly as they would be for any other unrecognized/protected
+path — unchanged, existing behavior, not something this task alters.
+For an *authenticated* visitor, the same unmatched-pathname check that
+gates every other real page (`!isNoShellRoute(pathname)`) evaluates
+true for a 404 too, so `AppShell` wraps it — meaning the new
+`not-found.tsx` renders with the normal sidebar/shell, not a bare
+page. Built using the same token/icon vocabulary as every other empty-
+state-shaped page in the app (`FileQuestion` icon, `--space-*` tokens,
+a primary-styled "Back to Dashboard" link using the same
+`text-text-primary`-on-`bg-primary` contrast-safe pairing from D2.3).
+No `AuthGate.tsx` changes — this task is scoped to the 404 page's own
+content, not routing/redirect logic.

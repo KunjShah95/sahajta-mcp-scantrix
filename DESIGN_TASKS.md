@@ -113,7 +113,7 @@ done.)*
       text password-visibility toggle in `LoginForm.tsx` and
       `RegisterForm.tsx` with an `Eye`/`EyeOff` icon button, consistent
       with the icon system established in D1.1.
-- [ ] D4.2: `/_not-found` — no `src/app/not-found.tsx` exists, so
+- [x] D4.2: `/_not-found` — no `src/app/not-found.tsx` exists, so
       Next.js's unstyled default 404 renders. Build a themed
       not-found page consistent with the rest of the app (locked
       palette, tokens, a real icon, a link back to `/dashboard`).
