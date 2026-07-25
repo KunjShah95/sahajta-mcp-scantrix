@@ -454,3 +454,68 @@ not an `ErrorState` — `quickBooksSlice` has no `error` field for these
 thunks (confirmed by grep), and adding one would be a `src/store/`
 logic change outside this pass's scope. Flagged here rather than
 silently skipped.
+
+## D2.3 — Touch targets, focus states, contrast on the four primitives
+
+**Research:** `--domain ux` query for "touch target size focus ring
+contrast button input" returned three High-severity rows adopted
+directly: minimum 44×44px touch targets, visible focus rings on every
+interactive element (never remove the outline without a replacement),
+and sufficient text/background contrast.
+
+**Contrast — used the design skill's tooling exactly as
+DESIGN_LOOP.md scopes it** ("only use its color-domain output for
+accessibility validation of the EXISTING locked palette... never to
+choose new hex values"): computed WCAG relative-luminance contrast
+ratios directly (not eyeballed) for every text/background pairing in
+`Button.tsx` and `Badge.tsx`. **Found two real, high-severity
+failures, both already shipping in the app:**
+- `Button`'s `primary` variant (`bg-primary text-white`) — white text
+  on `#1fb6aa` measures **2.52:1**, against a 4.5:1 AA minimum. This
+  is the default button variant, used across 7 files.
+- `Badge`'s `warning` and `success` variants (`text-warning`/
+  `text-success` on their own `/10`-opacity tint) — **2.15:1** and
+  **3.30:1** respectively.
+- For comparison/control: `Button`'s `secondary` (11.48:1), `outline`
+  (11.48:1), `danger` (4.83:1), and `Badge`'s `error` (4.83:1) all
+  already pass — so this wasn't a blanket rewrite, just the two
+  variants that actually fail.
+
+**Fix, without touching the locked palette:** swapped the *text*
+color on the failing variants to the existing `--color-text-primary`
+token (dark), leaving every background (`--color-primary`,
+`--color-warning`, `--color-success`) completely unchanged — verified
+`git diff -- src/app/globals.css` is empty for this commit. New
+contrast: 7.08:1 (Button primary) and 17.85:1 (both Badge variants),
+using only an already-locked token as the fix, not a new one. Also
+fixed a related latent bug found while touching this code: `Button`'s
+loading spinner was hardcoded white regardless of variant, which
+would have been invisible against the `outline` variant's white
+background — made spinner color variant-aware (dark spinner for
+`primary`/`outline`, white for `secondary`/`danger`, matching each
+variant's now-correct text-contrast logic).
+
+**Touch targets:** `Button`'s `sm` size was `h-9` (36px), below the
+44px minimum — bumped to `h-11` (44px). `md` (50px) and `lg` (56px)
+already passed. `Input` (50px tall) already passed. `Badge`/`Card`
+are non-interactive (confirmed via grep: `Card` is never used with a
+raw `onClick` anywhere in the app — every clickable card is wrapped in
+a real `<button>`/`<Link>`), so the 44px minimum doesn't apply to them
+directly.
+
+**Focus states:** `Button` had no focus treatment at all (relying on
+each browser's inconsistent default outline) while `Input` already
+had `focus:ring-2 focus:ring-primary/40`. Added
+`focus-visible:ring-2 focus-visible:ring-primary/50
+focus-visible:ring-offset-2` to `Button` — `focus-visible` rather than
+`focus` (unlike `Input`, where showing a ring on any focus method,
+including a mouse click into a text field, is normal and expected) so
+a button doesn't show a ring on mouse click, only keyboard navigation,
+which is the current standard for buttons specifically. `Card` and
+`Badge` need no focus treatment — neither is itself focusable.
+
+**Scope note:** `Badge` isn't imported anywhere in the app yet (grep-
+confirmed) — this fix has no visible effect today, but is exactly the
+"fixing it once here is cheaper than fixing it per-page later" case
+D2.3's own task text names, since `Badge` will get reused. `Button`'s
+fix has immediate visible effect across all 7 files that use it.

@@ -79,3 +79,15 @@ research/reasoning behind each decision.
   `quickBooksSlice` has no error field for those thunks, flagged
   rather than adding one (would be a src/store change). Gate green,
   color-token diff clean.
+- D2.3: Computed real WCAG contrast ratios (not eyeballed) for every
+  Button/Badge variant. Found and fixed two real AA failures already
+  shipping: Button's default `primary` variant (white-on-teal,
+  2.52:1) and Badge's `warning`/`success` variants (2.15:1/3.30:1) —
+  fixed by swapping text color to the existing `--color-text-primary`
+  token, zero background/palette changes (`globals.css` diff empty
+  this commit). Also fixed Button's loading spinner being hardcoded
+  white (invisible on the `outline` variant) — now variant-aware.
+  Bumped Button's `sm` size from 36px to 44px (touch-target minimum).
+  Added `focus-visible` ring to Button (previously had none). Card/
+  Badge confirmed non-interactive, no target/focus changes needed.
+  Gate green, color-token diff empty.

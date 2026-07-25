@@ -84,7 +84,7 @@ decision in DESIGN_ASSUMPTIONS.md before writing code.
       what a well-designed empty/loading state looks like for a
       dashboard-style product, then implement one shared pattern
       rather than a different ad-hoc treatment per page.
-- [ ] D2.3: Confirm touch/click target sizing and focus states meet
+- [x] D2.3: Confirm touch/click target sizing and focus states meet
       the design skill's accessibility priority checks (minimum target
       size, visible focus rings, contrast) across the primitives built
       last night (`src/components/ui/{Button,Card,Input,Badge}.tsx`)
