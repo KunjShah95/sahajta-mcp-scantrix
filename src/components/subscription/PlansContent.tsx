@@ -119,7 +119,7 @@ export function PlansContent() {
             }`}
           >
             {plan.highlight && (
-              <span className="absolute -top-3 right-[var(--space-md)] rounded-pill bg-primary px-[var(--space-sm)] py-1 text-[10px] font-bold tracking-wide text-white">
+              <span className="absolute -top-3 right-[var(--space-md)] rounded-pill bg-primary px-[var(--space-sm)] py-1 text-caption font-bold tracking-wide text-white">
                 MOST POPULAR
               </span>
             )}

@@ -69,7 +69,7 @@ decision in DESIGN_ASSUMPTIONS.md before writing code.
 
 ## Phase 2 — Foundation: consistent visual language
 
-- [ ] D2.1: Using the design system generated in D0.5 (spacing/
+- [x] D2.1: Using the design system generated in D0.5 (spacing/
       typography/radius/shadow recommendations, not colors), establish
       or tighten a single consistent set of spacing, type, radius, and
       elevation tokens/utilities and confirm every existing page

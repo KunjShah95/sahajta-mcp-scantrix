@@ -342,3 +342,65 @@ excludes. The diff there is exactly two `window.alert(...)` →
 `router.replace(...)` — the actual logic — are untouched. Verified via
 `git diff -- src/store/` showing only that 4-line change before
 committing.
+
+## D2.1 — Spacing/type/radius/elevation token consistency
+
+**Audit method:** grepped the full `src/components`/`src/app` tree for
+every category of one-off value the task names: raw hex colors
+(`#[0-9A-Fa-f]{6}`), arbitrary pixel spacing (`p-[Npx]` etc.),
+arbitrary pixel border-radius, and arbitrary pixel font sizes
+(`text-[Npx]`) — then read each hit's surrounding context individually
+rather than mass-replacing by pattern match, since not every hardcoded
+value is actually drift (see below).
+
+**Elevation — the real, confirmed gap from D0.5:** `globals.css` had
+no shadow scale at all; 28 `shadow-sm` + 2 `shadow-xl` Tailwind
+utility call sites across the app relied on Tailwind's un-themed
+defaults. Added `--shadow-sm/md/lg/xl` to the `@theme` block using
+MASTER.md's researched values verbatim. Tailwind v4 generates its
+`shadow-*` utilities *from* `--shadow-*` theme variables the same way
+this file's existing `--radius-*` block already documents for
+`rounded-*` — so every existing `shadow-sm`/`shadow-xl` call site
+picked up the token automatically with zero component-file changes.
+Verified in the built CSS output (`.next/static/chunks/*.css`):
+`.shadow-sm` resolves to `0 1px 2px ... #0000000d` (0.05 alpha) and
+`.shadow-xl` to `0 20px 25px ... #00000026` (0.15 alpha) — exactly the
+new token values.
+
+**Hex-color audit — found ~40 raw hex values, fixed the ones that were
+real drift, left the rest:** the vast majority (role badges in
+`TeamMembersContent.tsx`, status-pill tints in
+`PendingInvoicesContent.tsx`/`DashboardContent.tsx`/
+`ProfileContent.tsx`, the invoice-preview viewer's dark chrome) are
+deliberate supplementary/categorical accents that don't duplicate any
+locked `--color-*` value — e.g. three distinct owner/admin/accountant
+badge colors are an intentional categorical system, not accidental
+duplication, and systematizing every incidental badge tint into a new
+named token would be a redesign beyond "fix the known drift." Two
+real duplications were found and fixed: (1) `InvoiceReviewContent.tsx`
+hardcoded `#E5484D` for an error-state field border in four places,
+literally inconsistent with the `text-error` class used one line away
+in the same ternary for the same error condition — replaced all four
+with `var(--color-error)`. (2) The same file's primary action button
+had a redundant, conflicting disabled-state treatment: an inline
+`backgroundColor: "#B8B8B8"` override stacked on top of the
+`disabled:opacity-45` Tailwind class already handling dimming (the
+sibling Reject button only uses the opacity class) — removed the
+hardcoded override so both footer buttons share one disabled-state
+mechanism.
+
+**Type-scale audit:** found two `text-[10px]` badge labels ("MOST
+POPULAR", the paywall's reason-code tag) below the smallest defined
+step (`--text-caption` = 12px) — bumped both to `text-caption`.
+
+**Spacing/radius audit:** no arbitrary pixel border-radius found. The
+only arbitrary pixel spacing found was five `[2px]` micro-adjustments
+on pill-badge vertical padding, below `--space-xs` (4px) — left as-is,
+since no token covers that granularity and these are optical
+fine-tuning, not a case of "should have used an existing token."
+
+**UI primitives confirmed already correct:** `Button`/`Card`/`Badge`/
+`Input` (`src/components/ui/`) already reference `--space-*`/
+`--radius-*`/`--text-*` tokens consistently with no raw hex — no
+changes needed here; D2.3 covers their accessibility properties
+separately.

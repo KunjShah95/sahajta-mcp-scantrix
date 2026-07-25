@@ -38,7 +38,7 @@ export function SubscriptionPaywallContent() {
           <Lock size={34} strokeWidth={1.75} className="text-primary" />
         </span>
 
-        <span className="mt-[var(--space-md)] rounded-pill bg-error/10 px-[var(--space-sm)] py-1 text-[10px] font-bold tracking-wide text-error">
+        <span className="mt-[var(--space-md)] rounded-pill bg-error/10 px-[var(--space-sm)] py-1 text-caption font-bold tracking-wide text-error">
           {MOCK_BLOCK.reasonCode}
         </span>
 

@@ -106,7 +106,7 @@ function EditableField({
   error?: string;
   multiline?: boolean;
 }) {
-  const borderStyle = { borderColor: error ? "#E5484D" : fieldBorder, borderWidth: error ? 2 : 1 };
+  const borderStyle = { borderColor: error ? "var(--color-error)" : fieldBorder, borderWidth: error ? 2 : 1 };
   return (
     <div className="mb-[var(--space-sm)] rounded-lg bg-white p-[var(--space-sm)] shadow-sm" style={borderStyle}>
       <label className={`mb-[var(--space-xs)] block text-caption font-medium ${error ? "font-bold text-error" : "text-[#9A9A9A]"}`}>
@@ -425,7 +425,7 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
         {/* Vendor field */}
         <div
           className="mb-[var(--space-sm)] rounded-lg bg-white p-[var(--space-sm)] shadow-sm"
-          style={{ borderColor: fieldErrors.vendor ? "#E5484D" : theme.fieldBorder, borderWidth: fieldErrors.vendor ? 2 : 1 }}
+          style={{ borderColor: fieldErrors.vendor ? "var(--color-error)" : theme.fieldBorder, borderWidth: fieldErrors.vendor ? 2 : 1 }}
         >
           <label className={`mb-[var(--space-xs)] block text-caption font-medium ${fieldErrors.vendor ? "font-bold text-error" : "text-[#9A9A9A]"}`}>
             Vendor
@@ -456,7 +456,7 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
         {/* Currency field */}
         <div
           className="mb-[var(--space-sm)] rounded-lg bg-white p-[var(--space-sm)] shadow-sm"
-          style={{ borderColor: fieldErrors.currency ? "#E5484D" : theme.fieldBorder, borderWidth: fieldErrors.currency ? 2 : 1 }}
+          style={{ borderColor: fieldErrors.currency ? "var(--color-error)" : theme.fieldBorder, borderWidth: fieldErrors.currency ? 2 : 1 }}
         >
           <label className={`mb-[var(--space-xs)] block text-caption font-medium ${fieldErrors.currency ? "font-bold text-error" : "text-[#9A9A9A]"}`}>
             Currency
@@ -482,7 +482,7 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
         {/* GL Account field */}
         <div
           className="mb-[var(--space-sm)] rounded-lg bg-white p-[var(--space-sm)] shadow-sm"
-          style={{ borderColor: fieldErrors.glAccountId ? "#E5484D" : theme.fieldBorder, borderWidth: fieldErrors.glAccountId ? 2 : 1 }}
+          style={{ borderColor: fieldErrors.glAccountId ? "var(--color-error)" : theme.fieldBorder, borderWidth: fieldErrors.glAccountId ? 2 : 1 }}
         >
           <label className={`mb-[var(--space-xs)] block text-caption font-medium ${fieldErrors.glAccountId ? "font-bold text-error" : "text-[#9A9A9A]"}`}>
             GL Code / Category
@@ -527,7 +527,7 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
           onClick={handlePrimaryAction}
           disabled={isPostDisabled}
           className="h-12 flex-[3] rounded-lg font-extrabold text-white disabled:opacity-45"
-          style={{ backgroundColor: isPostDisabled ? "#B8B8B8" : theme.buttonBg }}
+          style={{ backgroundColor: theme.buttonBg }}
         >
           {posting ? "Posting…" : theme.actionText}
         </button>

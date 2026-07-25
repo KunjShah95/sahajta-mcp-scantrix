@@ -56,3 +56,15 @@ research/reasoning behind each decision.
   UI-layer call site only, dispatch/router logic untouched, documented
   in DESIGN_ASSUMPTIONS.md). Gate green, color-token diff clean, no
   `*Api.ts` touched.
+- D2.1: Added `--shadow-sm/md/lg/xl` elevation tokens to
+  `globals.css`'s `@theme` block (Tailwind v4 auto-generates
+  `shadow-*` utilities from them, so all 30 existing `shadow-sm`/
+  `shadow-xl` call sites picked up the tokens with zero component
+  changes — verified in built CSS output). Audited ~40 raw hex color
+  usages across the app; fixed 2 real cases of token duplication
+  (`#E5484D` error-red → `var(--color-error)`, 4 places in
+  InvoiceReviewContent.tsx; removed a redundant hardcoded disabled-
+  button gray) and left deliberate categorical/badge accent colors
+  alone. Bumped 2 sub-scale `text-[10px]` labels to `text-caption`.
+  No arbitrary-radius drift found; UI primitives already token-clean.
+  Gate green, color-token diff clean (additive only).
