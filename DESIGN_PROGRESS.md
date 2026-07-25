@@ -112,3 +112,6 @@ research/reasoning behind each decision.
 - D4.3: Replaced `layout.tsx`'s create-next-app placeholder
   title/description with real copy pulled from README.md's own
   product description. Gate green, color-token diff clean.
+- D4.4: Removed `public/{file,globe,next,vercel,window}.svg` —
+  confirmed unreferenced anywhere in `src/` before deleting. Gate
+  green, color-token diff clean. All Phase 4 tasks complete.
