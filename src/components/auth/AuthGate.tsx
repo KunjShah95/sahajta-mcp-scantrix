@@ -7,6 +7,7 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { restoreUser } from "@/store/auth/authSlice";
 import { getUser } from "@/lib/storage";
 import { AppShell } from "@/components/shell/AppShell";
+import { Spinner } from "@/components/ui/Spinner";
 
 // Routes reachable regardless of auth state. /invite/accept and
 // /register/verify-otp both have their own internal auth-aware logic
@@ -36,10 +37,7 @@ function isNoShellRoute(pathname: string): boolean {
 function FullScreenLoader() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-[var(--space-md)] bg-background-soft">
-      <span
-        aria-hidden
-        className="h-10 w-10 animate-spin rounded-full border-4 border-primary/20 border-t-primary"
-      />
+      <Spinner size="lg" />
       <p className="text-body-sm font-medium text-text-secondary">Loading…</p>
     </div>
   );

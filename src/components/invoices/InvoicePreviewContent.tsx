@@ -4,6 +4,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 import { useState } from "react";
 
+import { Spinner } from "@/components/ui/Spinner";
+
 // Ported directly from Scantrix_v2's own
 // src/screens/invoice/InvoicePreviewScreen.web.tsx — the mobile source
 // already ships a web-specific variant of this exact screen (iframe for
@@ -35,7 +37,7 @@ export function InvoicePreviewContent() {
 
       {loading && url && (
         <div className="flex flex-1 flex-col items-center justify-center gap-[var(--space-sm)]">
-          <span aria-hidden className="h-10 w-10 animate-spin rounded-full border-4 border-white/30 border-t-white" />
+          <Spinner size="lg" tone="white" />
           <p className="text-body-sm font-medium text-white">Loading preview...</p>
         </div>
       )}

@@ -68,3 +68,14 @@ research/reasoning behind each decision.
   alone. Bumped 2 sub-scale `text-[10px]` labels to `text-caption`.
   No arbitrary-radius drift found; UI primitives already token-clean.
   Gate green, color-token diff clean (additive only).
+- D2.2: Built `Spinner`/`Skeleton`+`SkeletonListRows`/`EmptyState`/
+  `ErrorState` shared components. `Spinner` consolidated 5 already-
+  duplicated inline spinner spans. Applied skeleton loading + error-
+  with-retry to Dashboard recent invoices, invoices list, pending
+  queue, and team members (using its existing but previously-inert
+  `membersError` state). Applied blocking `Spinner` consistently to
+  invoice detail/review/vendor full-page loads. Vendor resolution's
+  vendor/account/tax-code lists got skeletons only, no error state —
+  `quickBooksSlice` has no error field for those thunks, flagged
+  rather than adding one (would be a src/store change). Gate green,
+  color-token diff clean.

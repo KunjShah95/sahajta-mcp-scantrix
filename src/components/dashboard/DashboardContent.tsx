@@ -5,6 +5,9 @@ import { ArrowRight, Clock, Upload } from "lucide-react";
 import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { Card } from "@/components/ui/Card";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { SkeletonListRows } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { getInvoices } from "@/store/invoice/invoiceApi";
 import { getMyQBConnections } from "@/store/quickBooks/quickBooksApi";
@@ -108,6 +111,7 @@ export function DashboardContent() {
     pendingInvoices,
     failedInvoices,
     loading: invoiceLoading,
+    error: invoiceError,
   } = useAppSelector((state) => state.invoice);
   const { connected, statusLoading, qbConnectionId } = useAppSelector((state) => state.quickBooks);
 
@@ -233,15 +237,16 @@ export function DashboardContent() {
 
       <div className="mt-[var(--space-md)] flex items-center justify-between">
         <h2 className="text-h3 font-bold text-text-primary">Recent</h2>
-        {invoiceLoading && (
-          <span
-            aria-hidden
-            className="h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary"
-          />
-        )}
+        {invoiceLoading && recentInvoices.length > 0 && <Spinner size="sm" />}
       </div>
 
-      {!invoiceLoading && recentInvoices.length === 0 && (
+      {invoiceLoading && recentInvoices.length === 0 && <SkeletonListRows count={3} />}
+
+      {!invoiceLoading && invoiceError && recentInvoices.length === 0 && (
+        <ErrorState message="Couldn't load recent invoices." onRetry={syncInvoices} />
+      )}
+
+      {!invoiceLoading && !invoiceError && recentInvoices.length === 0 && (
         <Card className="flex flex-col items-center py-[var(--space-lg)] text-center">
           <p className="font-bold text-text-primary">No invoices yet</p>
           <p className="mt-[var(--space-xs)] text-body-sm text-text-secondary">

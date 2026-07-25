@@ -16,6 +16,7 @@ import { setSelectedVendor } from "@/store/vendor/vendorSlice";
 import { CURRENCY_OPTIONS } from "@/lib/currencies";
 import { confirmDialog, showToast } from "@/lib/dialogManager";
 import { getReviewTheme } from "@/lib/invoiceReviewTheme";
+import { Spinner } from "@/components/ui/Spinner";
 
 interface NormalizedInvoiceData {
   vendor: string;
@@ -342,7 +343,7 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
   if (!invoiceObject) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background-soft">
-        <span aria-hidden className="h-8 w-8 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
+        <Spinner size="md" />
       </div>
     );
   }

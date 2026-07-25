@@ -404,3 +404,53 @@ fine-tuning, not a case of "should have used an existing token."
 `--radius-*`/`--text-*` tokens consistently with no raw hex — no
 changes needed here; D2.3 covers their accessibility properties
 separately.
+
+## D2.2 — Loading/empty/error states
+
+**Research:** `--domain ux` query for "loading skeleton empty state
+error state dashboard list" returned three directly relevant rows:
+empty states need a helpful message + action rather than blank space,
+errors must be announced (`role="alert"`/`aria-live`, not visual-only),
+and error states need a clear recovery action (retry), not a dead
+end — all three adopted directly into the new shared components. A
+web search ("skeleton loading vs spinner dashboard SaaS list UX best
+practice 2026") gave the loading-treatment decision: spinners for
+short/blocking waits (form submit, whole-page transitions before any
+layout exists), content-shaped skeleton placeholders for list/dashboard
+content specifically — cites Stripe/Linear/Notion using shimmer
+skeletons for exactly this list-loading case, and explains why:
+skeletons set a layout expectation, a bare spinner doesn't.
+
+**Built four shared primitives** (`src/components/ui/`):
+`Spinner` (consolidates a spinner markup pattern that was already
+byte-identical, copy-pasted across `AuthGate`, `InviteAcceptContent`,
+`InvoiceDetailContent`, `InvoiceReviewContent`, `InvoicePreviewContent`
+— one component now, swapped into all five); `Skeleton`/
+`SkeletonListRows` (new, per the research above); `EmptyState` (new,
+icon+title+description+action shape); `ErrorState` (new,
+`role="alert"` + retry button, per the accessibility/recovery research
+findings).
+
+**Applied to every page D2.2 names:** Dashboard (recent invoices —
+skeleton on first load, existing small `Spinner` kept for background
+refresh so the list doesn't flash away during the 3s processing-poll,
+new `ErrorState` reading `state.invoice.error`), Invoices list
+(`InvoiceListContent` — skeleton + new `ErrorState`, kept its existing
+well-designed per-status-themed empty state as-is since it already
+followed a consistent icon+title+description shape, just not
+extracted as a component), Pending queue (`PendingInvoicesContent` —
+same treatment), Team members (`TeamMembersContent` — its
+component-local `membersError` state already existed but only
+rendered as plain red text with no retry; now `ErrorState` with a
+real retry wired to `fetchMembers`), Invoice detail/review/vendor
+(full-page blocking `Spinner`, consistent with the "spinner for
+whole-page blocking waits" research finding — these three pages have
+no content shape to preview until the record loads, so a skeleton
+doesn't apply the way it does for a list).
+
+**Where an error state was *not* added:** `VendorResolutionContent`'s
+vendor/GL-account/tax-code loading only got the skeleton treatment,
+not an `ErrorState` — `quickBooksSlice` has no `error` field for these
+thunks (confirmed by grep), and adding one would be a `src/store/`
+logic change outside this pass's scope. Flagged here rather than
+silently skipped.

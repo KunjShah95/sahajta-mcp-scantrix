@@ -15,6 +15,7 @@ import {
 import { setSelectedVendor } from "@/store/vendor/vendorSlice";
 import { CURRENCY_OPTIONS } from "@/lib/currencies";
 import { showToast } from "@/lib/dialogManager";
+import { SkeletonListRows } from "@/components/ui/Skeleton";
 import type { TaxCode } from "@/store/quickBooks/quickBooksSlice";
 
 type ActiveTab = "suggested" | "all" | "create";
@@ -226,7 +227,7 @@ export function VendorResolutionContent({ invoiceId }: { invoiceId: string }) {
         {activeTab === "suggested" && (
           <div className="flex flex-col gap-[var(--space-sm)]">
             {vendorsLoading ? (
-              <p className="text-center text-body-sm text-text-secondary">Loading vendors…</p>
+              <SkeletonListRows count={3} />
             ) : suggestedVendors.length === 0 ? (
               <div className="rounded-lg bg-white p-[var(--space-lg)] text-center shadow-sm">
                 <p className="font-bold text-text-primary">No close matches found</p>
@@ -263,7 +264,7 @@ export function VendorResolutionContent({ invoiceId }: { invoiceId: string }) {
               className="h-11 rounded-md border border-border bg-white px-[var(--space-md)] text-body focus:outline-none focus:ring-2 focus:ring-primary/40"
             />
             {vendorsLoading ? (
-              <p className="text-center text-body-sm text-text-secondary">Loading vendors…</p>
+              <SkeletonListRows count={3} />
             ) : filteredVendors.length === 0 ? (
               <div className="rounded-lg bg-white p-[var(--space-lg)] text-center shadow-sm">
                 <p className="font-bold text-text-primary">No results</p>

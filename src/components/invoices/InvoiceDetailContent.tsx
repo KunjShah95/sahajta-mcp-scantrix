@@ -8,6 +8,7 @@ import { useEffect, useMemo } from "react";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { getInvoiceDetails } from "@/store/invoice/invoiceApi";
 import { fetchQuickBooksAccounts } from "@/store/quickBooks/quickBooksApi";
+import { Spinner } from "@/components/ui/Spinner";
 import {
   INVOICE_DETAIL_THEME,
   formatDetailAmount,
@@ -102,7 +103,7 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
   if (!invoiceObject) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background-soft">
-        <span aria-hidden className="h-8 w-8 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
+        <Spinner size="md" />
       </div>
     );
   }

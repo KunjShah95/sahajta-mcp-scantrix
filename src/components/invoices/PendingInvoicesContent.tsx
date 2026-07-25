@@ -9,6 +9,8 @@ import { getInvoices } from "@/store/invoice/invoiceApi";
 import { setSelectedInvoice } from "@/store/invoice/invoiceSlice";
 import { clearCreatedVendor, clearSelectedVendor } from "@/store/vendor/vendorSlice";
 import type { InvoiceRecord } from "@/store/invoice/invoiceSlice";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { SkeletonListRows } from "@/components/ui/Skeleton";
 
 function getInvoiceTitle(invoice: InvoiceRecord): string {
   const vendor = invoice.extractedData?.vendorName;
@@ -44,10 +46,14 @@ export function PendingInvoicesContent() {
   const dispatch = useAppDispatch();
   const router = useRouter();
 
-  const { pendingInvoices, loading } = useAppSelector((state) => state.invoice);
+  const { pendingInvoices, loading, error } = useAppSelector((state) => state.invoice);
+
+  const refetch = () => {
+    dispatch(getInvoices());
+  };
 
   useEffect(() => {
-    dispatch(getInvoices());
+    refetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -71,7 +77,7 @@ export function PendingInvoicesContent() {
         </div>
         <button
           type="button"
-          onClick={() => dispatch(getInvoices())}
+          onClick={refetch}
           className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white"
           aria-label="Refresh"
         >
@@ -81,7 +87,9 @@ export function PendingInvoicesContent() {
 
       <div className="mx-auto max-w-2xl p-[var(--space-lg)]">
         {loading ? (
-          <p className="py-[var(--space-xl)] text-center text-body-sm text-text-secondary">Loading invoices…</p>
+          <SkeletonListRows count={4} className="py-[var(--space-sm)]" />
+        ) : error ? (
+          <ErrorState message="Couldn't load pending invoices." onRetry={refetch} />
         ) : pendingInvoices.length === 0 ? (
           <div className="mt-[var(--space-xl)] flex flex-col items-center px-[var(--space-lg)] text-center">
             <span className="mb-[var(--space-md)] flex h-18 w-18 items-center justify-center rounded-full bg-primary/10">
@@ -93,7 +101,7 @@ export function PendingInvoicesContent() {
             </p>
             <button
               type="button"
-              onClick={() => dispatch(getInvoices())}
+              onClick={refetch}
               className="mt-[var(--space-lg)] flex items-center gap-[var(--space-xs)] rounded-md border-2 border-primary px-[var(--space-lg)] py-[var(--space-sm)] font-bold text-primary"
             >
               <RefreshCw size={16} strokeWidth={2.25} />

@@ -15,6 +15,8 @@ import {
   getInvoicePostedDate,
   getInvoiceTitle,
 } from "@/lib/invoiceDisplay";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { SkeletonListRows } from "@/components/ui/Skeleton";
 
 type ListType = "auto" | "manual" | "failed";
 
@@ -47,12 +49,16 @@ export function InvoiceListContent() {
   const theme = INVOICE_STATUS_THEME[type];
   const meta = LIST_META[type];
 
-  const { autoPostedInvoices, manualPostedInvoices, failedInvoices, loading } = useAppSelector(
+  const { autoPostedInvoices, manualPostedInvoices, failedInvoices, loading, error } = useAppSelector(
     (state) => state.invoice,
   );
 
-  useEffect(() => {
+  const refetch = () => {
     dispatch(getInvoices());
+  };
+
+  useEffect(() => {
+    refetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -78,7 +84,9 @@ export function InvoiceListContent() {
 
       <div className="mx-auto max-w-3xl p-[var(--space-lg)]">
         {loading ? (
-          <p className="py-[var(--space-xl)] text-center text-body-sm text-text-secondary">Loading invoices…</p>
+          <SkeletonListRows count={4} className="py-[var(--space-sm)]" />
+        ) : error ? (
+          <ErrorState message="Couldn't load these invoices." onRetry={refetch} />
         ) : invoices.length === 0 ? (
           <div className="flex flex-col items-center py-[var(--space-xl)] text-center">
             <span className="mb-[var(--space-md)] flex h-24 w-24 items-center justify-center rounded-full" style={{ backgroundColor: `${theme.accentHex}22` }}>

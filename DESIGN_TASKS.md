@@ -78,7 +78,7 @@ decision in DESIGN_ASSUMPTIONS.md before writing code.
       own hex/spacing instead of using shared tokens (this was already
       true on mobile and got ported forward) — resolve it here for the
       web app rather than propagating it further.
-- [ ] D2.2: Apply consistent loading, empty, and error states across
+- [x] D2.2: Apply consistent loading, empty, and error states across
       every list/detail page (dashboard, invoices list, invoice
       detail/review/vendor, team members, pending queue) — research
       what a well-designed empty/loading state looks like for a

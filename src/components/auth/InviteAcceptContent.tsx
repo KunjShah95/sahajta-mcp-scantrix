@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { acceptQBInvite } from "@/store/quickBooks/quickBooksApi";
 import { savePendingInviteToken } from "@/lib/storage";
+import { Spinner } from "@/components/ui/Spinner";
 
 type ScreenStatus = "checking" | "redirecting" | "accepting" | "success" | "error";
 
@@ -60,10 +61,7 @@ export function InviteAcceptContent() {
       <div className="w-full max-w-sm rounded-2xl bg-white p-[var(--space-xl)] text-center shadow-sm">
         {(status === "checking" || status === "redirecting" || status === "accepting") && (
           <>
-            <span
-              aria-hidden
-              className="mx-auto block h-10 w-10 animate-spin rounded-full border-4 border-primary/20 border-t-primary"
-            />
+            <Spinner size="lg" className="mx-auto block" />
             <p className="mt-[var(--space-md)] text-h3 font-bold text-text-primary">
               {status === "redirecting" ? "Almost there…" : "Verifying your invite…"}
             </p>

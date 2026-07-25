@@ -8,6 +8,9 @@ import { confirmDialog, showToast } from "@/lib/dialogManager";
 
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { SkeletonListRows } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   fetchQBMembers,
@@ -180,8 +183,8 @@ export function TeamMembersContent() {
 
   if (loadingConnections) {
     return (
-      <div className="mx-auto max-w-2xl p-[var(--space-lg)] text-center text-body-sm text-text-secondary">
-        Loading company details…
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <Spinner size="md" />
       </div>
     );
   }
@@ -243,9 +246,9 @@ export function TeamMembersContent() {
         Members{members.length > 0 ? ` (${members.length})` : ""}
       </p>
       {membersLoading ? (
-        <p className="text-center text-body-sm text-text-secondary">Loading members…</p>
+        <SkeletonListRows count={3} />
       ) : membersError ? (
-        <Card className="text-body-sm text-error">{membersError}</Card>
+        <ErrorState message={membersError} onRetry={() => fetchMembers(activeConnection._id)} />
       ) : members.length === 0 ? (
         <Card className="text-body-sm text-text-secondary">No team members yet. Invited teammates will show up here.</Card>
       ) : (
