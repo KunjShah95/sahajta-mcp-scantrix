@@ -109,7 +109,7 @@ decision in DESIGN_ASSUMPTIONS.md before writing code.
 determines what's actually still needed once the foundation work is
 done.)*
 
-- [ ] D4.1: `/login` and `/register` — replace the plain "Show"/"Hide"
+- [x] D4.1: `/login` and `/register` — replace the plain "Show"/"Hide"
       text password-visibility toggle in `LoginForm.tsx` and
       `RegisterForm.tsx` with an `Eye`/`EyeOff` icon button, consistent
       with the icon system established in D1.1.

@@ -98,3 +98,8 @@ research/reasoning behind each decision.
   (password-toggle icon on login/register), D4.2 (themed 404 page),
   D4.3 (placeholder metadata title/description), D4.4 (remove 5 dead
   scaffold SVGs). Docs-only commit, gate re-confirmed green.
+- D4.1: Added `Eye`/`EyeOff` icons alongside the existing "Show"/"Hide"
+  text in `LoginForm.tsx` and `RegisterForm.tsx`'s password toggle
+  buttons (kept the text too — smallest change, no behavior/layout
+  change, just icon + aria-label added). Gate green, color-token diff
+  clean.

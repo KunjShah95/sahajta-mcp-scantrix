@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
 import { FormEvent, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -242,9 +243,11 @@ export function RegisterForm() {
                 </label>
                 <button
                   type="button"
-                  className="text-caption font-semibold text-primary"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="flex items-center gap-1 text-caption font-semibold text-primary"
                   onClick={() => setShowPassword((v) => !v)}
                 >
+                  {showPassword ? <EyeOff size={16} strokeWidth={2} /> : <Eye size={16} strokeWidth={2} />}
                   {showPassword ? "Hide" : "Show"}
                 </button>
               </div>
