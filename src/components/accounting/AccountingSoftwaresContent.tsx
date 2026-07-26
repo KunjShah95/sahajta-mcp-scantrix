@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { Calculator } from "lucide-react";
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useCallback, useEffect, useState } from "react";
 
 import { BrandIcon } from "@/components/icons/BrandIcon";
+import { confirmDialog, showToast } from "@/lib/dialogManager";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { getMyQBConnections } from "@/store/quickBooks/quickBooksApi";
-
-const DRIVE_CONNECTED_STORAGE_KEY = "driveConnected";
+import { connectGoogleDrive, getGoogleDriveStatus, disconnectGoogleDrive } from "@/store/googleDrive/googleDriveApi";
 
 function SoftwareCard({
   icon,
@@ -69,25 +69,90 @@ export function AccountingSoftwaresContent() {
   const { connected, statusLoading } = useAppSelector((state) => state.quickBooks);
 
   const [driveConnected, setDriveConnected] = useState(false);
+  const [driveStatusLoading, setDriveStatusLoading] = useState(true);
+  const [driveConnecting, setDriveConnecting] = useState(false);
+
+  const checkDriveStatus = useCallback(async () => {
+    setDriveStatusLoading(true);
+    const result = await dispatch(getGoogleDriveStatus());
+    if (getGoogleDriveStatus.fulfilled.match(result)) {
+      setDriveConnected(Boolean(result.payload?.data?.connected));
+    }
+    setDriveStatusLoading(false);
+  }, [dispatch]);
 
   useEffect(() => {
     if (accessToken) dispatch(getMyQBConnections({ accessToken }));
-    setDriveConnected(window.localStorage.getItem(DRIVE_CONNECTED_STORAGE_KEY) === "true");
-  }, [accessToken, dispatch]);
+    checkDriveStatus();
+    // Re-check on focus: covers returning from the Google OAuth redirect (the
+    // /google-drive landing page bounces back here) and a disconnect done in
+    // another tab.
+    const onFocus = () => checkDriveStatus();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [accessToken, dispatch, checkDriveStatus]);
 
-  // Mockup only — see ASSUMPTIONS.md (C9): the mobile source actually calls a
-  // real /google-drive/connect + /google-drive/status backend pair, but this
-  // was explicitly pre-scoped (TASKS.md + ASSUMPTIONS.md, before this loop
-  // started) to stay a client-side-only mockup for this pass. Toggles a
-  // localStorage flag, no network call.
-  const handleToggleDrive = () => {
-    const next = !driveConnected;
-    setDriveConnected(next);
-    window.localStorage.setItem(DRIVE_CONNECTED_STORAGE_KEY, next ? "true" : "false");
+  const handleDriveDisconnect = async () => {
+    const confirmed = await confirmDialog({
+      title: "Disconnect Google Drive?",
+      message: "Scantrix will stop saving copies of posted invoices to your Drive. This cannot be undone.",
+      confirmLabel: "Disconnect",
+      tone: "destructive",
+    });
+    if (!confirmed) return;
+    const result = await dispatch(disconnectGoogleDrive());
+    if (disconnectGoogleDrive.fulfilled.match(result)) {
+      setDriveConnected(false);
+    } else {
+      const payload = result.payload as { message?: string } | undefined;
+      showToast(payload?.message || "Could not disconnect. Please try again.", "error");
+    }
+  };
+
+  const handleDriveConnect = async () => {
+    setDriveConnecting(true);
+    try {
+      const redirectUri = `${window.location.origin}/`;
+      const result = await dispatch(connectGoogleDrive({ redirectUri }));
+      if (connectGoogleDrive.fulfilled.match(result)) {
+        const url = result.payload?.data?.url;
+        if (url) {
+          window.location.href = url;
+          return;
+        }
+        showToast("Could not start Google Drive connection. Please try again.", "error");
+      } else {
+        const payload = result.payload as { message?: string } | undefined;
+        showToast(
+          payload?.message === "X-QB-Id header is required"
+            ? "Connect a QuickBooks company first — Google Drive is linked to your QuickBooks workspace."
+            : payload?.message || "Could not start Google Drive connection. Please try again.",
+          "error",
+        );
+      }
+    } finally {
+      setDriveConnecting(false);
+    }
+  };
+
+  const handleDriveClick = () => {
+    if (driveConnected) {
+      handleDriveDisconnect();
+    } else {
+      handleDriveConnect();
+    }
   };
 
   const qbStatusLabel = statusLoading ? "Checking…" : connected ? "Connected" : "Not connected";
   const qbStatusClass = connected ? "bg-success/10 text-success" : "bg-warning/10 text-warning";
+
+  const driveStatusLabel = driveConnecting ? "Connecting…" : driveStatusLoading ? "Checking…" : driveConnected ? "Connected" : "Not connected";
+  const driveStatusClass =
+    driveConnecting || driveStatusLoading
+      ? "bg-warning/10 text-warning"
+      : driveConnected
+        ? "bg-[#0066DA]/10 text-[#0066DA]"
+        : "bg-background-alt text-text-secondary";
 
   return (
     <div className="mx-auto max-w-2xl p-[var(--space-lg)]">
@@ -111,10 +176,15 @@ export function AccountingSoftwaresContent() {
         <SoftwareCard
           icon={<BrandIcon name="google-drive" size={28} />}
           name="Google Drive"
-          description={driveConnected ? "Read-only access granted." : "Connect to grant read-only access to your Drive files."}
-          status={driveConnected ? "Connected" : "Not connected"}
-          statusClassName={driveConnected ? "bg-[#0066DA]/10 text-[#0066DA]" : "bg-background-alt text-text-secondary"}
-          onClick={handleToggleDrive}
+          description={
+            driveConnected
+              ? "Posted invoices are copied to your Drive automatically."
+              : "Connect to save a copy of every posted invoice to your Drive."
+          }
+          status={driveStatusLabel}
+          statusClassName={driveStatusClass}
+          onClick={handleDriveClick}
+          disabled={driveConnecting || driveStatusLoading}
         />
       </div>
 

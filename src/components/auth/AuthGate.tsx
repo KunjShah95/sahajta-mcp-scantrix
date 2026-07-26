@@ -20,7 +20,7 @@ const AUTH_ONLY_REDIRECT_ROUTES = ["/login", "/register"];
 // (C12), even once authenticated — same list as PUBLIC_ROUTES (all
 // transient auth screens) plus /paywall, which is deliberately a full-bleed
 // block screen matching mobile's modal-like presentation.
-const NO_SHELL_ROUTES = [...PUBLIC_ROUTES, "/paywall"];
+const NO_SHELL_ROUTES = [...PUBLIC_ROUTES, "/paywall", "/google-drive"];
 
 function matchesRoute(pathname: string, routes: string[]): boolean {
   return routes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
