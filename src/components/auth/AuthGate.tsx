@@ -70,21 +70,27 @@ export function AuthGate({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // "/" is the public marketing landing page for logged-out visitors, and a
+  // redirect-to-dashboard for authenticated ones. It is matched exactly (not
+  // via matchesRoute) so it never widens any prefix check to the whole app.
+  const isRoot = pathname === "/";
+
   useEffect(() => {
     if (restoring) return;
-    if (!isAuthenticated && !isPublicRoute(pathname)) {
+    if (!isAuthenticated && !isRoot && !isPublicRoute(pathname)) {
       router.replace("/login");
-    } else if (isAuthenticated && (AUTH_ONLY_REDIRECT_ROUTES.includes(pathname) || pathname === "/")) {
+    } else if (isAuthenticated && (AUTH_ONLY_REDIRECT_ROUTES.includes(pathname) || isRoot)) {
       router.replace("/dashboard");
     }
-  }, [restoring, isAuthenticated, pathname, router]);
+  }, [restoring, isAuthenticated, isRoot, pathname, router]);
 
   if (restoring) return <FullScreenLoader />;
 
   // Avoid flashing protected/auth-only content for the tick before the
-  // redirect effect above actually navigates away.
-  if (!isAuthenticated && !isPublicRoute(pathname)) return <FullScreenLoader />;
-  if (isAuthenticated && (AUTH_ONLY_REDIRECT_ROUTES.includes(pathname) || pathname === "/")) {
+  // redirect effect above actually navigates away. The logged-out landing
+  // page ("/") is exempt — it renders its own content immediately.
+  if (!isAuthenticated && !isRoot && !isPublicRoute(pathname)) return <FullScreenLoader />;
+  if (isAuthenticated && (AUTH_ONLY_REDIRECT_ROUTES.includes(pathname) || isRoot)) {
     return <FullScreenLoader />;
   }
 

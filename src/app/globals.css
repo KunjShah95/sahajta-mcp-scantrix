@@ -70,3 +70,151 @@ body {
   color: var(--color-text-primary);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
+
+/* ==========================================================================
+   Landing page (/) — marketing surface only. Everything here is scoped under
+   .lp-root so it never touches the authenticated app. Palette is derived
+   entirely from the app's own tokens (teal #1fb6aa + navy #1f3a5f) per
+   design-system/scantrix-web/pages/landing.md — no new brand identity.
+   ========================================================================== */
+.lp-root {
+  --lp-teal: #1fb6aa;
+  --lp-teal-600: #17998f;
+  /* teal-700 is the darkest teal used for *small* text — measures 4.8:1 on
+     white (WCAG AA). Brighter teals stay on fills, borders, dots and glows. */
+  --lp-teal-700: #0f8074;
+  --lp-teal-050: #eafaf8;
+  --lp-navy: #1f3a5f;
+  --lp-navy-800: #16304e;
+  --lp-navy-900: #0e2138;
+  --lp-navy-950: #0a1929;
+  --lp-ink: #0f172a;
+  --lp-ink-2: #475569;
+  --lp-border: #e2e8f0;
+  --lp-soft: #f8fafc;
+  --lp-alt: #f7f8fa;
+
+  /* status colors, verbatim from lib/invoiceDisplay.ts */
+  --lp-auto: #21a77a;
+  --lp-manual: #eda320;
+  --lp-failed: #e74949;
+
+  background: #ffffff;
+  color: var(--lp-ink);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+
+/* Scroll-reveal: elements start slightly lowered + faded, settle when seen. */
+.lp-reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--lp-delay, 0ms);
+  will-change: opacity, transform;
+}
+.lp-reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* Above-the-fold load-in: runs on first paint (no JS/observer dependency) so
+   the hero is never stuck invisible and never hurts LCP. Staggered by delay. */
+@keyframes lp-load-in {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
+}
+.lp-load {
+  opacity: 0;
+  animation: lp-load-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--lp-delay, 0ms);
+}
+
+/* Fine dot-grid texture used behind hero / dark bands. */
+.lp-dotgrid {
+  background-image: radial-gradient(circle at center, rgba(31, 58, 95, 0.08) 1px, transparent 1.4px);
+  background-size: 22px 22px;
+}
+.lp-dotgrid-light {
+  background-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.09) 1px, transparent 1.4px);
+  background-size: 24px 24px;
+}
+
+/* Ambient teal glow blob (soft, not a decorative gradient). */
+.lp-glow {
+  background: radial-gradient(closest-side, rgba(31, 182, 170, 0.28), transparent 78%);
+  filter: blur(6px);
+}
+
+/* Hero extraction demo — scan sweep, staggered field reveal, status flip. */
+@keyframes lp-scan {
+  0% { transform: translateY(-8%); opacity: 0; }
+  8% { opacity: 1; }
+  92% { opacity: 1; }
+  100% { transform: translateY(560%); opacity: 0; }
+}
+@keyframes lp-field-in {
+  0%, 100% { opacity: 0; transform: translateX(6px); }
+  6%, 94% { opacity: 1; transform: none; }
+}
+@keyframes lp-status-flip {
+  0%, 44% { opacity: 0; transform: translateY(6px) scale(0.96); }
+  56%, 100% { opacity: 1; transform: none; }
+}
+@keyframes lp-status-out {
+  0%, 44% { opacity: 1; transform: none; }
+  56%, 100% { opacity: 0; transform: translateY(-6px) scale(0.96); }
+}
+@keyframes lp-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+@keyframes lp-pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(31, 182, 170, 0.45); }
+  70% { box-shadow: 0 0 0 12px rgba(31, 182, 170, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(31, 182, 170, 0); }
+}
+@keyframes lp-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@keyframes lp-bar-grow {
+  from { transform: scaleY(0.15); }
+  to { transform: scaleY(1); }
+}
+
+.lp-scanline { animation: lp-scan 5.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+.lp-field { animation: lp-field-in 5.5s ease-in-out infinite; }
+.lp-status-processing { animation: lp-status-out 5.5s ease-in-out infinite; }
+.lp-status-posted { animation: lp-status-flip 5.5s ease-in-out infinite; }
+.lp-float { animation: lp-float 7s ease-in-out infinite; }
+.lp-pulse { animation: lp-pulse-ring 2.6s ease-out infinite; }
+.lp-marquee-track { animation: lp-marquee 34s linear infinite; }
+.lp-bar { transform-origin: bottom; animation: lp-bar-grow 0.9s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Respect reduced-motion everywhere: reveals appear instantly, loops stop. */
+@media (prefers-reduced-motion: reduce) {
+  .lp-reveal,
+  .lp-load {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
+  }
+  .lp-scanline,
+  .lp-field,
+  .lp-status-processing,
+  .lp-status-posted,
+  .lp-float,
+  .lp-pulse,
+  .lp-marquee-track,
+  .lp-bar {
+    animation: none !important;
+  }
+  /* With motion off, show the settled "posted" state, hide the transient one. */
+  .lp-status-processing { opacity: 0 !important; }
+  .lp-status-posted { opacity: 1 !important; }
+  .lp-field { opacity: 1 !important; transform: none !important; }
+}
