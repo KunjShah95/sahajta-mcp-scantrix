@@ -5,8 +5,12 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Card } from "@/components/ui/Card";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { disconnectQuickBooks, getMyQBConnections, getQuickBooksStatus } from "@/store/quickBooks/quickBooksApi";
-import { connectToQuickBooks } from "@/lib/quickbooks/connect";
+import {
+  connectQuickBooks,
+  disconnectQuickBooks,
+  getMyQBConnections,
+  getQuickBooksStatus,
+} from "@/store/quickBooks/quickBooksApi";
 import { confirmDialog, showToast } from "@/lib/dialogManager";
 
 interface QBConnection {
@@ -25,6 +29,7 @@ export function QuickBooksConnectContent() {
   const [connections, setConnections] = useState<QBConnection[]>([]);
   const [checkingStatus, setCheckingStatus] = useState(true);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
 
   const checkStatus = useCallback(async () => {
     if (!accessToken) {
@@ -65,6 +70,26 @@ export function QuickBooksConnectContent() {
     });
     if (!confirmed) return;
     await dispatch(getQuickBooksStatus({ accessToken, qbConnectionId: connection._id }));
+  };
+
+  const handleConnect = async () => {
+    if (!accessToken || connecting) return;
+    setConnecting(true);
+    try {
+      const result = await dispatch(connectQuickBooks({ accessToken }));
+      if (connectQuickBooks.fulfilled.match(result)) {
+        const authUrl = result.payload?.data?.authUrl;
+        if (authUrl) {
+          window.location.href = authUrl;
+          return;
+        }
+        showToast("Could not start QuickBooks connection. Please try again.", "error");
+      } else {
+        showToast(typeof result.payload === "string" ? result.payload : "Could not start QuickBooks connection.", "error");
+      }
+    } finally {
+      setConnecting(false);
+    }
   };
 
   const handleDisconnect = async (connection: QBConnection) => {
@@ -152,10 +177,11 @@ export function QuickBooksConnectContent() {
 
           <button
             type="button"
-            onClick={() => connectToQuickBooks()}
-            className="mt-[var(--space-sm)] flex h-12 items-center justify-center gap-[var(--space-xs)] rounded-md bg-primary font-bold text-white"
+            onClick={handleConnect}
+            disabled={connecting}
+            className="mt-[var(--space-sm)] flex h-12 items-center justify-center gap-[var(--space-xs)] rounded-md bg-primary font-bold text-white disabled:opacity-60"
           >
-            {connections.length > 0 ? "Add Another Account" : "Connect QuickBooks"}
+            {connecting ? "Connecting…" : connections.length > 0 ? "Add Another Account" : "Connect QuickBooks"}
             <ArrowRight size={16} strokeWidth={2.25} />
           </button>
         </div>
