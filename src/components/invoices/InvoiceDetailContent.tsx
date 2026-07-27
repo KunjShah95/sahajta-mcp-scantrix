@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, ChevronLeft } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { getInvoiceDetails } from "@/store/invoice/invoiceApi";
@@ -17,6 +17,7 @@ import {
   isInvoiceDetailType,
   safeDetailValue,
 } from "@/lib/invoiceDetailTheme";
+import { translateInvoiceReason } from "@/lib/invoiceDisplay";
 
 function SectionHeader({ title, bg, color }: { title: string; bg: string; color: string }) {
   return (
@@ -100,6 +101,10 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
     [glAccounts, rawData?.glAccountId],
   );
 
+  const latestStatus = statusHistory.length > 0 ? statusHistory[statusHistory.length - 1] : null;
+  const reasonDisplay = useMemo(() => translateInvoiceReason(latestStatus?.reason), [latestStatus]);
+  const [showTechnicalReason, setShowTechnicalReason] = useState(false);
+
   if (!invoiceObject) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background-soft">
@@ -121,7 +126,6 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
   const vendorBankDetails = safeDetailValue(rawData?.bankingDetails);
   const glCode = safeDetailValue(resolvedGlAccount?.name);
   const itemDescriptions = safeDetailValue(rawData?.description);
-  const latestStatus = statusHistory.length > 0 ? statusHistory[statusHistory.length - 1] : null;
 
   const previewHref = invoiceUrl
     ? `/invoices/preview?url=${encodeURIComponent(invoiceUrl)}&mimeType=${encodeURIComponent(previewMimeType)}`
@@ -179,10 +183,26 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
             </div>
           )}
 
-          {type === "failed" && latestStatus?.reason && (
+          {type === "failed" && reasonDisplay && (
             <div className="mt-[var(--space-sm)] flex items-start gap-[var(--space-xs)] rounded-md bg-white/70 p-[var(--space-sm)]">
               <AlertTriangle size={16} strokeWidth={2} className="mt-0.5 shrink-0 text-error" />
-              <p className="text-body-sm font-medium text-error">{latestStatus.reason}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-body-sm font-medium text-error">{reasonDisplay.message}</p>
+                {reasonDisplay.isTranslated && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setShowTechnicalReason((v) => !v)}
+                      className="mt-1 text-caption font-semibold text-error/80 underline"
+                    >
+                      {showTechnicalReason ? "Hide technical details" : "Show technical details"}
+                    </button>
+                    {showTechnicalReason && (
+                      <p className="mt-1 break-words text-caption text-error/70">{reasonDisplay.raw}</p>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -272,6 +292,7 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
             <div className="flex flex-col gap-[var(--space-md)] px-[var(--space-md)] py-[var(--space-md)]">
               {statusHistory.map((entry, index) => {
                 const isLast = index === statusHistory.length - 1;
+                const entryReason = translateInvoiceReason(entry.reason);
                 return (
                   <div key={index} className="flex gap-[var(--space-sm)]">
                     <span
@@ -286,9 +307,9 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
                         {entry.postedStatus ? entry.postedStatus.charAt(0).toUpperCase() + entry.postedStatus.slice(1) : "—"}
                       </p>
                       {entry.changedAt && <p className="text-caption text-text-secondary">{formatDetailDate(entry.changedAt)}</p>}
-                      {entry.reason && (
+                      {entryReason && (
                         <p className="text-caption font-semibold" style={{ color: theme.accentColor }}>
-                          {entry.reason}
+                          {entryReason.message}
                         </p>
                       )}
                     </div>

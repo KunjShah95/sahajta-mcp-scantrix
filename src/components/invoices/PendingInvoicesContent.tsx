@@ -9,6 +9,7 @@ import { getInvoices } from "@/store/invoice/invoiceApi";
 import { setSelectedInvoice } from "@/store/invoice/invoiceSlice";
 import { clearCreatedVendor, clearSelectedVendor } from "@/store/vendor/vendorSlice";
 import type { InvoiceRecord } from "@/store/invoice/invoiceSlice";
+import { translateInvoiceReason } from "@/lib/invoiceDisplay";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { SkeletonListRows } from "@/components/ui/Skeleton";
 
@@ -34,8 +35,8 @@ function getInvoiceAmount(invoice: InvoiceRecord): string | null {
 function getPrimaryIssue(invoice: InvoiceRecord): string | null {
   const history = invoice.statusHistory;
   if (history && history.length > 0) {
-    const reason = history[history.length - 1]?.reason?.trim();
-    if (reason) return reason;
+    const reason = translateInvoiceReason(history[history.length - 1]?.reason);
+    if (reason) return reason.message;
   }
   const missing = invoice.confidenceBreakdown?.missingFields;
   if (missing && missing.length > 0) return `Missing: ${missing.join(", ")}`;

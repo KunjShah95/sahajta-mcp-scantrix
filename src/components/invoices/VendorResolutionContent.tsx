@@ -15,13 +15,10 @@ import {
 import { setSelectedVendor } from "@/store/vendor/vendorSlice";
 import { CURRENCY_OPTIONS } from "@/lib/currencies";
 import { showToast } from "@/lib/dialogManager";
+import { taxCodeId, taxCodeName } from "@/lib/quickbooks/taxCode";
 import { SkeletonListRows } from "@/components/ui/Skeleton";
-import type { TaxCode } from "@/store/quickBooks/quickBooksSlice";
 
 type ActiveTab = "suggested" | "all" | "create";
-
-const taxCodeId = (taxCode: TaxCode) => taxCode.id || taxCode.qbTaxCodeId || taxCode.Id || taxCode._id || "";
-const taxCodeName = (taxCode: TaxCode) => taxCode.name || taxCode.Name || taxCodeId(taxCode);
 
 export function VendorResolutionContent({ invoiceId }: { invoiceId: string }) {
   const dispatch = useAppDispatch();

@@ -160,6 +160,7 @@ export interface PostInvoiceExtractedData {
   totalAmount: number;
   /** Top-level GL account ID */
   glAccountId?: string | null;
+  taxCodeId?: string | null;
   lineItems: LineItem[];
   description?: string | null;
   vendorAddress?: string | null;

@@ -40,6 +40,7 @@ export interface ExtractedData {
   taxAmount?: number;
   totalAmount?: number;
   glAccountId?: string | null;
+  taxCodeId?: string | null;
   lineItems?: LineItem[];
   description?: string | null;
   vendorAddress?: string | null;

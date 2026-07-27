@@ -86,7 +86,60 @@ export function getInvoiceAmount(invoice: InvoiceLike): string {
 export function getInvoiceFailureReason(invoice: InvoiceLike): string {
   if (invoice.postedStatus !== "failed") return "";
   const latest = invoice.statusHistory?.[invoice.statusHistory.length - 1];
-  return latest?.reason || "";
+  return translateInvoiceReason(latest?.reason)?.message || "";
+}
+
+// Backend/QuickBooks failure reasons land in statusHistory[].reason verbatim
+// (e.g. raw QBO fault text like "Business Validation Error: ... (code: 6000)").
+// That's fine for support/debugging but reads as alarming, technical noise to
+// a non-technical end user, so anything that *looks* raw gets swapped for a
+// short plain-language explanation; the original is kept alongside for a
+// "Show technical details" toggle rather than discarded.
+export interface TranslatedInvoiceReason {
+  /** Plain-language text safe to show by default. */
+  message: string;
+  /** The untouched backend/QuickBooks text, for a "technical details" toggle. */
+  raw: string;
+  /** False when `raw` already read as plain language and was passed through unchanged. */
+  isTranslated: boolean;
+}
+
+const RAW_REASON_SIGNS: RegExp[] = [
+  /\(code:\s*\d+\)/i,
+  /business validation error/i,
+  /\bfault\b/i,
+  /\n\s*at\s+\S+/, // JS-style stack trace frame
+  /^[a-z][\w.]*(?:error|exception):/i, // "TypeError: ...", "ValidationException: ..."
+  /invalid_grant/i, // Intuit OAuth error code for a dead/revoked refresh token
+  /invalid_token/i,
+  /refresh token/i,
+];
+
+const KNOWN_REASON_TRANSLATIONS: { test: RegExp; message: string }[] = [
+  {
+    test: /\(code:\s*6000\)/i,
+    message:
+      "This invoice's currency doesn't match what QuickBooks expects for this vendor. Update the currency or contact support.",
+  },
+  {
+    test: /invalid_grant|invalid_token|refresh token/i,
+    message: "The QuickBooks connection needs to be reconnected.",
+  },
+];
+
+const GENERIC_REASON_FALLBACK = "This invoice needs attention before it can be posted.";
+
+export function translateInvoiceReason(reason?: string | null): TranslatedInvoiceReason | null {
+  const raw = (reason || "").trim();
+  if (!raw) return null;
+
+  const looksRaw = RAW_REASON_SIGNS.some((pattern) => pattern.test(raw));
+  if (!looksRaw) {
+    return { message: raw, raw, isTranslated: false };
+  }
+
+  const known = KNOWN_REASON_TRANSLATIONS.find(({ test }) => test.test(raw));
+  return { message: known?.message || GENERIC_REASON_FALLBACK, raw, isTranslated: true };
 }
 
 export function formatInvoiceDate(dateStr?: string | null): string {
