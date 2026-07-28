@@ -29,8 +29,14 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">
+      {/* suppressHydrationWarning here only ignores attribute-level mismatches
+          on this one tag (e.g. browser extensions like Grammarly injecting
+          data-gr-ext-installed/data-new-gr-c-s-check-loaded before React
+          hydrates) — it does not suppress hydration mismatches anywhere else
+          in the tree. See https://react.dev/link/hydration-mismatch. */}
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <Providers>
           <AuthGate>{children}</AuthGate>
         </Providers>
