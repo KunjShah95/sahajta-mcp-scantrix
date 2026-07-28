@@ -4,7 +4,7 @@
 // INVOICE_STATUS_THEME (used for lists/dashboard) — this screen has more
 // per-status surfaces (section headers, dividers, timeline accents) than
 // that shared theme carries.
-export type InvoiceDetailType = "auto" | "manual" | "failed";
+export type InvoiceDetailType = "auto" | "manual" | "pending" | "failed";
 
 export interface InvoiceDetailTheme {
   headerBg: string;
@@ -60,10 +60,37 @@ export const INVOICE_DETAIL_THEME: Record<InvoiceDetailType, InvoiceDetailTheme>
     divider: "#F3C8CD",
     statusLabel: "Failed",
   },
+  // Matches src/lib/invoiceDisplay.ts's INVOICE_STATUS_THEME.pending accent
+  // (--color-trust-navy, #1f3a5f) for cross-page consistency. Used whenever
+  // an invoice's real postedStatus isn't auto/manual/failed (pending,
+  // processing, or anything unrecognized) — see resolveInvoiceDetailType.
+  pending: {
+    headerBg: "#1F3A5F",
+    screenBg: "#F5F8FB",
+    cardBg: "#E1EAF5",
+    sectionHeaderBg: "#EEF3FA",
+    accentColor: "#1F3A5F",
+    labelColor: "#13253D",
+    valueColor: "#1A3352",
+    pillBg: "#E1EAF5",
+    pillText: "#13253D",
+    divider: "#D6E4F5",
+    statusLabel: "Pending",
+  },
 };
 
-export function isInvoiceDetailType(value: string | null): value is InvoiceDetailType {
-  return value === "auto" || value === "manual" || value === "failed";
+// The invoice's own postedStatus is the source of truth for which badge/
+// theme renders here — never a URL query param, which can be absent, stale,
+// or simply wrong for the invoice actually being viewed (e.g. a bookmarked
+// or directly-navigated link with no ?type=). Any status this page doesn't
+// have a dedicated theme for (pending, processing, or unrecognized) safely
+// falls back to the neutral "pending" theme rather than ever guessing
+// "auto" or "failed".
+export function resolveInvoiceDetailType(postedStatus?: string | null): InvoiceDetailType {
+  if (postedStatus === "auto" || postedStatus === "manual" || postedStatus === "failed") {
+    return postedStatus;
+  }
+  return "pending";
 }
 
 export function safeDetailValue(value?: string | number | null): string {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, ChevronLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -15,7 +15,7 @@ import {
   formatDetailAmount,
   formatDetailDate,
   getDetailInvoiceUrl,
-  isInvoiceDetailType,
+  resolveInvoiceDetailType,
   safeDetailValue,
 } from "@/lib/invoiceDetailTheme";
 import { translateInvoiceReason } from "@/lib/invoiceDisplay";
@@ -66,13 +66,10 @@ function DetailRow({
 export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
   const dispatch = useAppDispatch();
   const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const typeParam = searchParams.get("type");
-  const type = isInvoiceDetailType(typeParam) ? typeParam : "auto";
-  const theme = INVOICE_DETAIL_THEME[type];
 
   const invoiceObject = useAppSelector((state) => state.invoice.selectedInvoice);
+  const type = resolveInvoiceDetailType(invoiceObject?.postedStatus);
+  const theme = INVOICE_DETAIL_THEME[type];
   const accessToken = useAppSelector((state) => state.auth.user?.data?.accessToken);
   const glAccounts = useAppSelector((state) => state.quickBooks.accounts);
 
