@@ -3,8 +3,9 @@ import type { Metadata } from "next";
 import { LandingPage } from "@/components/landing/LandingPage";
 
 // AuthGate (src/components/auth/AuthGate.tsx) renders this marketing landing
-// page for logged-out visitors at "/", and redirects authenticated ones to
-// /dashboard before it is ever shown — see its root-route logic.
+// page at "/" for every visitor, logged in or not — it's the one route that
+// doesn't redirect authenticated users away, so it can still be previewed
+// without logging out first. See its root-route logic.
 export const metadata: Metadata = {
   title: "Scantrix — Invoices, posted to QuickBooks automatically",
   description:
