@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, ChevronLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { BrandIcon } from "@/components/icons/BrandIcon";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { getInvoiceDetails } from "@/store/invoice/invoiceApi";
 import { fetchQuickBooksAccounts } from "@/store/quickBooks/quickBooksApi";
@@ -95,6 +96,7 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
 
   const invoiceUrl = invoiceObject ? getDetailInvoiceUrl(invoiceObject) : undefined;
   const previewMimeType = invoiceObject?.file?.mimeType ?? "";
+  const driveFileUrl = invoiceObject?.googleDrive?.fileUrl;
 
   const resolvedGlAccount = useMemo(
     () => glAccounts.find((acc) => acc.qbAccountId === String(rawData?.glAccountId ?? "")),
@@ -328,6 +330,18 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
           >
             View Original Invoice
           </Link>
+        )}
+
+        {driveFileUrl && (
+          <a
+            href={driveFileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-[var(--space-xs)] rounded-lg border-2 border-[#0066DA] py-[var(--space-md)] font-bold text-[#0066DA]"
+          >
+            <BrandIcon name="google-drive" size={18} />
+            View in Google Drive
+          </a>
         )}
       </div>
     </div>

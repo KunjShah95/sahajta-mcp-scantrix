@@ -99,6 +99,7 @@ export interface InvoiceRecord {
   quickbooks?: QuickBooksData;
   vendor?: VendorData;
   file?: FileData;
+  googleDrive?: { fileId?: string | null; fileUrl?: string | null; uploadedAt?: string | null };
   statusHistory?: StatusHistoryItem[];
   processedBy?: string;
   extractedByModel?: string;

@@ -10,9 +10,8 @@ import { SkeletonListRows } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { getInvoices } from "@/store/invoice/invoiceApi";
-import { getMyQBConnections } from "@/store/quickBooks/quickBooksApi";
+import { connectQuickBooks, getMyQBConnections } from "@/store/quickBooks/quickBooksApi";
 import { scanInvoice } from "@/store/invoice/invoiceApi";
-import { connectToQuickBooks } from "@/lib/quickbooks/connect";
 import { showToast } from "@/lib/dialogManager";
 import {
   INVOICE_STATUS_THEME,
@@ -102,6 +101,7 @@ export function DashboardContent() {
   const dispatch = useAppDispatch();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [connectingQB, setConnectingQB] = useState(false);
 
   const user = useAppSelector((state) => state.auth.user);
   const {
@@ -121,6 +121,26 @@ export function DashboardContent() {
   const syncInvoices = useCallback(() => {
     dispatch(getInvoices());
   }, [dispatch]);
+
+  const handleConnectQuickBooks = async () => {
+    if (!accessToken || connectingQB) return;
+    setConnectingQB(true);
+    try {
+      const result = await dispatch(connectQuickBooks({ accessToken }));
+      if (connectQuickBooks.fulfilled.match(result)) {
+        const authUrl = result.payload?.data?.authUrl;
+        if (authUrl) {
+          window.location.href = authUrl;
+          return;
+        }
+        showToast("Could not start QuickBooks connection. Please try again.", "error");
+      } else {
+        showToast(typeof result.payload === "string" ? result.payload : "Could not start QuickBooks connection.", "error");
+      }
+    } finally {
+      setConnectingQB(false);
+    }
+  };
 
   useEffect(() => {
     syncInvoices();
@@ -190,13 +210,14 @@ export function DashboardContent() {
       {!statusLoading && !connected && (
         <button
           type="button"
-          onClick={() => connectToQuickBooks()}
-          className="flex items-center justify-between rounded-lg border border-[#F5D7A4] bg-[#FFF7E6] p-[var(--space-md)] text-left"
+          onClick={handleConnectQuickBooks}
+          disabled={connectingQB}
+          className="flex items-center justify-between rounded-lg border border-[#F5D7A4] bg-[#FFF7E6] p-[var(--space-md)] text-left disabled:opacity-60"
         >
           <div>
             <p className="font-bold text-[#9A6700]">QuickBooks Not Connected</p>
             <p className="mt-[var(--space-xs)] text-caption text-text-secondary">
-              Connect QuickBooks to sync vendors and post invoices.
+              {connectingQB ? "Connecting…" : "Connect QuickBooks to sync vendors and post invoices."}
             </p>
           </div>
           <ArrowRight size={20} strokeWidth={2} className="shrink-0 text-primary" />
