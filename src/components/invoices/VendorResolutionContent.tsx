@@ -15,13 +15,10 @@ import {
 import { setSelectedVendor } from "@/store/vendor/vendorSlice";
 import { CURRENCY_OPTIONS } from "@/lib/currencies";
 import { showToast } from "@/lib/dialogManager";
+import { taxCodeId, taxCodeName } from "@/lib/quickbooks/taxCode";
 import { SkeletonListRows } from "@/components/ui/Skeleton";
-import type { TaxCode } from "@/store/quickBooks/quickBooksSlice";
 
 type ActiveTab = "suggested" | "all" | "create";
-
-const taxCodeId = (taxCode: TaxCode) => taxCode.id || taxCode.qbTaxCodeId || taxCode.Id || taxCode._id || "";
-const taxCodeName = (taxCode: TaxCode) => taxCode.name || taxCode.Name || taxCodeId(taxCode);
 
 export function VendorResolutionContent({ invoiceId }: { invoiceId: string }) {
   const dispatch = useAppDispatch();
@@ -188,8 +185,8 @@ export function VendorResolutionContent({ invoiceId }: { invoiceId: string }) {
   };
 
   return (
-    <div className="min-h-screen bg-background-alt pb-28">
-      <div className="flex h-14 items-center justify-between bg-primary px-[var(--space-md)]">
+    <div className="flex h-screen flex-col bg-background-alt">
+      <div className="flex h-14 shrink-0 items-center justify-between bg-primary px-[var(--space-md)]">
         <button type="button" onClick={() => router.back()} aria-label="Back" className="text-white">
           <ChevronLeft size={26} strokeWidth={2.25} />
         </button>
@@ -197,7 +194,8 @@ export function VendorResolutionContent({ invoiceId }: { invoiceId: string }) {
         <span className="w-6" />
       </div>
 
-      <div className="mx-auto max-w-2xl px-[var(--space-md)] pt-[var(--space-md)]">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto max-w-2xl px-[var(--space-md)] pb-[var(--space-md)] pt-[var(--space-md)]">
         <div className="mb-[var(--space-md)] flex items-start gap-[var(--space-sm)] rounded-lg bg-white p-[var(--space-md)] shadow-sm">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-background-alt font-bold text-text-secondary">
             ?
@@ -361,9 +359,10 @@ export function VendorResolutionContent({ invoiceId }: { invoiceId: string }) {
           </div>
         )}
       </div>
+      </div>
 
       {selectedVendorObj && activeTab !== "create" && (
-        <div className="fixed bottom-0 left-0 right-0 flex items-center justify-between gap-[var(--space-md)] border-t border-border bg-white px-[var(--space-md)] py-[var(--space-sm)]">
+        <div className="flex shrink-0 items-center justify-between gap-[var(--space-md)] border-t border-border bg-white px-[var(--space-md)] py-[var(--space-sm)]">
           <div className="min-w-0">
             <p className="text-caption text-text-secondary">Selected vendor</p>
             <p className="truncate font-bold text-text-primary">{selectedVendorObj.displayName}</p>

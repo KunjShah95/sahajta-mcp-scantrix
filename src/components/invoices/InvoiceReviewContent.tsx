@@ -11,11 +11,17 @@ import {
   postInvoiceToQuickBooks,
   rejectInvoice,
 } from "@/store/invoice/invoiceApi";
-import { fetchQuickBooksAccounts, fetchQuickBooksVendors } from "@/store/quickBooks/quickBooksApi";
+import {
+  fetchQuickBooksAccounts,
+  fetchQuickBooksTaxCodes,
+  fetchQuickBooksVendors,
+} from "@/store/quickBooks/quickBooksApi";
 import { setSelectedVendor } from "@/store/vendor/vendorSlice";
 import { CURRENCY_OPTIONS } from "@/lib/currencies";
 import { confirmDialog, showToast } from "@/lib/dialogManager";
+import { translateInvoiceReason } from "@/lib/invoiceDisplay";
 import { getReviewTheme } from "@/lib/invoiceReviewTheme";
+import { taxCodeId as getTaxCodeId, taxCodeName as getTaxCodeName } from "@/lib/quickbooks/taxCode";
 import { Spinner } from "@/components/ui/Spinner";
 
 interface NormalizedInvoiceData {
@@ -30,6 +36,7 @@ interface NormalizedInvoiceData {
   totalAfterTax: string;
   currency: string;
   glAccountId: string;
+  taxCodeId: string;
   itemDescriptionsText: string;
 }
 
@@ -60,6 +67,7 @@ function normalizeInvoiceData(data: {
   totalAmount?: number;
   currency?: string;
   glAccountId?: string | null;
+  taxCodeId?: string | null;
   description?: string | null;
 }): NormalizedInvoiceData {
   return {
@@ -74,6 +82,7 @@ function normalizeInvoiceData(data: {
     totalAfterTax: safeValue(data.totalAmount),
     currency: safeValue(data.currency),
     glAccountId: safeValue(data.glAccountId),
+    taxCodeId: safeValue(data.taxCodeId),
     itemDescriptionsText: safeValue(data.description),
   };
 }
@@ -146,6 +155,10 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
   const vendors = useAppSelector((state) => state.quickBooks.vendors);
   const glAccounts = useAppSelector((state) => state.quickBooks.accounts);
   const glAccountsLoading = useAppSelector((state) => state.quickBooks.accountsLoading);
+  const glAccountsError = useAppSelector((state) => state.quickBooks.accountsError);
+  const taxCodes = useAppSelector((state) => state.quickBooks.taxCodes);
+  const taxCodesLoading = useAppSelector((state) => state.quickBooks.taxCodesLoading);
+  const taxCodesError = useAppSelector((state) => state.quickBooks.taxCodesError);
   const createdVendor = useAppSelector((state) => state.vendor.createdVendor);
   const selectedVendor = useAppSelector((state) => state.vendor.selectedVendor);
   const accessToken = useAppSelector((state) => state.auth.user?.data?.accessToken);
@@ -157,8 +170,16 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
 
   useEffect(() => {
     if (!accessToken) return;
-    dispatch(fetchQuickBooksVendors({ accessToken }));
-    dispatch(fetchQuickBooksAccounts({ accessToken }));
+    // Sequential, not parallel: three near-simultaneous requests sharing the
+    // same QuickBooks connection can race a backend token refresh (each
+    // reads the same refresh token before either writes back the rotated
+    // one). Awaiting each in turn avoids ever having more than one in
+    // flight for this connection at a time.
+    (async () => {
+      await dispatch(fetchQuickBooksVendors({ accessToken }));
+      await dispatch(fetchQuickBooksAccounts({ accessToken }));
+      await dispatch(fetchQuickBooksTaxCodes({ accessToken }));
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
@@ -172,6 +193,12 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
   const postingReason = latestStatus?.reason || "";
   const vendorResolutionRequired = postingReason.toLowerCase().includes("vendor");
   const vendorIsResolved = !!(selectedVendor || createdVendor);
+  const reasonDisplay = useMemo(() => translateInvoiceReason(postingReason), [postingReason]);
+  const [showTechnicalReason, setShowTechnicalReason] = useState(false);
+  const glAccountsErrorDisplay = useMemo(() => translateInvoiceReason(glAccountsError), [glAccountsError]);
+  const [showGlAccountsErrorDetails, setShowGlAccountsErrorDetails] = useState(false);
+  const taxCodesErrorDisplay = useMemo(() => translateInvoiceReason(taxCodesError), [taxCodesError]);
+  const [showTaxCodesErrorDetails, setShowTaxCodesErrorDetails] = useState(false);
 
   const [invoice, setInvoice] = useState<NormalizedInvoiceData>(() => normalizeInvoiceData(rawData));
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>(() =>
@@ -204,6 +231,11 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
     () => glAccounts.find((acc) => acc.qbAccountId === invoice.glAccountId)?.name || "",
     [glAccounts, invoice.glAccountId],
   );
+
+  const resolvedTaxCodeName = useMemo(() => {
+    const match = taxCodes.find((code) => getTaxCodeId(code) === invoice.taxCodeId);
+    return match ? getTaxCodeName(match) : "";
+  }, [taxCodes, invoice.taxCodeId]);
 
   const previewUrl =
     invoiceObject?.file?.s3Url || (invoiceObject as unknown as { s3Url?: string })?.s3Url;
@@ -301,6 +333,7 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
           vendorAddress: cleanValue(invoice.vendorAddress) || null,
           bankingDetails: cleanValue(invoice.vendorBankDetails) || null,
           glAccountId: cleanValue(invoice.glAccountId) || null,
+          taxCodeId: cleanValue(invoice.taxCodeId) || null,
         },
       }),
     );
@@ -349,9 +382,9 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
   }
 
   return (
-    <div className="min-h-screen pb-32" style={{ backgroundColor: theme.screenBg }}>
+    <div className="flex h-screen flex-col" style={{ backgroundColor: theme.screenBg }}>
       <div
-        className="flex h-[58px] items-center justify-between px-[var(--space-md)]"
+        className="flex h-[58px] shrink-0 items-center justify-between px-[var(--space-md)]"
         style={{ backgroundColor: theme.headerBg }}
       >
         <button type="button" onClick={() => router.back()} aria-label="Back" className="text-white">
@@ -370,7 +403,8 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
         )}
       </div>
 
-      <div className="mx-auto max-w-2xl px-[var(--space-md)] pt-[var(--space-lg)]">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto max-w-2xl px-[var(--space-md)] pb-[var(--space-lg)] pt-[var(--space-lg)]">
         {/* Confidence card */}
         <div className="relative mb-[var(--space-lg)] rounded-2xl p-[var(--space-lg)] text-center" style={{ backgroundColor: theme.cardBg }}>
           <p className="text-5xl font-extrabold" style={{ color: theme.primaryText }}>
@@ -394,10 +428,26 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
             />
           </div>
 
-          {postingReason && (
+          {reasonDisplay && (
             <div className="mt-[var(--space-md)] rounded-lg bg-white p-[var(--space-md)] text-left">
               <p className="font-bold text-text-primary">Why this requires review</p>
-              <p className="mt-[var(--space-xs)] text-body-sm text-error">{postingReason}</p>
+              <p className="mt-[var(--space-xs)] text-body-sm text-error">{reasonDisplay.message}</p>
+              {reasonDisplay.isTranslated && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowTechnicalReason((v) => !v)}
+                    className="mt-[var(--space-xs)] text-caption font-semibold text-text-secondary underline"
+                  >
+                    {showTechnicalReason ? "Hide technical details" : "Show technical details"}
+                  </button>
+                  {showTechnicalReason && (
+                    <p className="mt-[var(--space-xs)] break-words text-caption text-text-secondary">
+                      {reasonDisplay.raw}
+                    </p>
+                  )}
+                </>
+              )}
               {vendorResolutionRequired &&
                 (vendorIsResolved ? (
                   <div className="mt-[var(--space-sm)] flex items-center justify-between rounded-md border border-[#B6E8D3] bg-[#EAF7F1] px-[var(--space-sm)] py-[var(--space-xs)]">
@@ -495,7 +545,10 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
             style={{ color: theme.valueText }}
           >
             <option value="" disabled>
-              {glAccountsLoading ? "Loading accounts…" : resolvedGlAccountName || "Select GL Account"}
+              {glAccountsLoading
+                ? "Loading accounts…"
+                : resolvedGlAccountName ||
+                  (!glAccountsError && glAccounts.length === 0 ? "No GL accounts configured" : "Select GL Account")}
             </option>
             {glAccounts.map((account) => (
               <option key={account._id} value={account.qbAccountId}>
@@ -504,6 +557,74 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
             ))}
           </select>
           {fieldErrors.glAccountId && <p className="mt-[var(--space-xs)] text-caption font-semibold text-error">{fieldErrors.glAccountId}</p>}
+          {glAccountsErrorDisplay && (
+            <div className="mt-[var(--space-xs)]">
+              <p className="text-caption font-semibold text-error">
+                Couldn&apos;t load GL accounts — {glAccountsErrorDisplay.message}
+              </p>
+              {glAccountsErrorDisplay.isTranslated && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowGlAccountsErrorDetails((v) => !v)}
+                    className="mt-1 text-caption font-semibold text-text-secondary underline"
+                  >
+                    {showGlAccountsErrorDetails ? "Hide technical details" : "Show technical details"}
+                  </button>
+                  {showGlAccountsErrorDetails && (
+                    <p className="mt-1 break-words text-caption text-text-secondary">{glAccountsErrorDisplay.raw}</p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Tax Code field (optional) */}
+        <div
+          className="mb-[var(--space-sm)] rounded-lg bg-white p-[var(--space-sm)] shadow-sm"
+          style={{ borderColor: theme.fieldBorder, borderWidth: 1 }}
+        >
+          <label className="mb-[var(--space-xs)] block text-caption font-medium text-[#9A9A9A]">Tax Code</label>
+          <select
+            value={invoice.taxCodeId}
+            onChange={(e) => updateField("taxCodeId", e.target.value)}
+            className="w-full bg-transparent text-body font-bold focus:outline-none"
+            style={{ color: theme.valueText }}
+          >
+            <option value="">
+              {taxCodesLoading
+                ? "Loading tax codes…"
+                : resolvedTaxCodeName ||
+                  (!taxCodesError && taxCodes.length === 0 ? "No tax codes configured" : "Select Tax Code (optional)")}
+            </option>
+            {taxCodes.map((code) => (
+              <option key={getTaxCodeId(code)} value={getTaxCodeId(code)}>
+                {getTaxCodeName(code)}
+              </option>
+            ))}
+          </select>
+          {taxCodesErrorDisplay && (
+            <div className="mt-[var(--space-xs)]">
+              <p className="text-caption font-semibold text-error">
+                Couldn&apos;t load tax codes — {taxCodesErrorDisplay.message}
+              </p>
+              {taxCodesErrorDisplay.isTranslated && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowTaxCodesErrorDetails((v) => !v)}
+                    className="mt-1 text-caption font-semibold text-text-secondary underline"
+                  >
+                    {showTaxCodesErrorDetails ? "Hide technical details" : "Show technical details"}
+                  </button>
+                  {showTaxCodesErrorDetails && (
+                    <p className="mt-1 break-words text-caption text-text-secondary">{taxCodesErrorDisplay.raw}</p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         <EditableField label="Amount Before Tax" value={invoice.amountBeforeTax} onChange={(v) => updateField("amountBeforeTax", v)} fieldBorder={theme.fieldBorder} valueColor={theme.valueText} error={fieldErrors.amountBeforeTax} />
@@ -512,9 +633,10 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
         <EditableField label="Vendor Bank Details" value={invoice.vendorBankDetails} onChange={(v) => updateField("vendorBankDetails", v)} fieldBorder={theme.fieldBorder} valueColor={theme.valueText} multiline />
         <EditableField label="Item Descriptions" value={invoice.itemDescriptionsText} onChange={(v) => updateField("itemDescriptionsText", v)} fieldBorder={theme.fieldBorder} valueColor={theme.valueText} multiline />
       </div>
+      </div>
 
       {/* Footer actions */}
-      <div className="fixed bottom-[var(--space-md)] left-1/2 flex w-full max-w-2xl -translate-x-1/2 gap-[var(--space-sm)] px-[var(--space-md)]">
+      <div className="mx-auto flex w-full max-w-2xl shrink-0 gap-[var(--space-sm)] border-t border-border px-[var(--space-md)] py-[var(--space-md)]">
         <button
           type="button"
           onClick={handleReject}

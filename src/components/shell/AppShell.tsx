@@ -13,7 +13,7 @@ import {
   Puzzle,
   Users,
 } from "lucide-react";
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 
 import { BrandIcon } from "@/components/icons/BrandIcon";
 import { getSidebarCollapsed, setSidebarCollapsed } from "@/lib/storage";
@@ -53,6 +53,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [connections, setConnections] = useState<QBConnection[]>([]);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const switcherRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -73,6 +74,25 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     setCollapsed(getSidebarCollapsed());
   }, []);
+
+  // AppShell is the persistent layout and never remounts between route
+  // navigations, so without this the switcher dropdown stays open
+  // (rendered on top of whatever page you navigate to) until manually
+  // toggled shut again.
+  useEffect(() => {
+    setSwitcherOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!switcherOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (switcherRef.current && !switcherRef.current.contains(event.target as Node)) {
+        setSwitcherOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [switcherOpen]);
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
@@ -113,14 +133,18 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         {connections.length > 0 && !collapsed && (
-          <div className="relative mx-[var(--space-md)] mb-[var(--space-sm)]">
+          <div ref={switcherRef} className="relative mx-[var(--space-md)] mb-[var(--space-sm)]">
             <button
               type="button"
               onClick={() => setSwitcherOpen((v) => !v)}
+              aria-expanded={switcherOpen}
               className="flex w-full items-center justify-between rounded-md border border-border bg-background-soft px-[var(--space-sm)] py-[var(--space-xs)] text-left text-body-sm"
             >
               <span className="truncate font-semibold text-text-primary">{activeConnection?.name ?? "Select company"}</span>
-              <ChevronDown size={16} className="shrink-0 text-text-secondary" />
+              <ChevronDown
+                size={16}
+                className={`shrink-0 text-text-secondary transition-transform ${switcherOpen ? "rotate-180" : ""}`}
+              />
             </button>
             {switcherOpen && (
               <div className="absolute left-0 right-0 top-full z-10 mt-[var(--space-xs)] rounded-md border border-border bg-white shadow-sm">

@@ -20,17 +20,22 @@ import { SkeletonListRows } from "@/components/ui/Skeleton";
 
 type ListType = "auto" | "manual" | "failed";
 
-const LIST_META: Record<ListType, { title: string; emptyMessage: string }> = {
+const TAB_ORDER: ListType[] = ["auto", "manual", "failed"];
+
+const LIST_META: Record<ListType, { title: string; tabLabel: string; emptyMessage: string }> = {
   auto: {
     title: "Auto-Posted Invoices",
+    tabLabel: "Auto-Posted",
     emptyMessage: "No auto-posted invoices yet. Invoices with high confidence will appear here.",
   },
   manual: {
     title: "Manually Posted Invoices",
+    tabLabel: "Manually Posted",
     emptyMessage: "No manually posted invoices yet. Reviewed invoices will appear here.",
   },
   failed: {
     title: "Failed Invoices",
+    tabLabel: "Failed",
     emptyMessage: "No failed invoices. Invoices that couldn't be processed will appear here.",
   },
 };
@@ -73,6 +78,12 @@ export function InvoiceListContent() {
     router.push(`/invoices/${invoice._id}?type=${type}`);
   };
 
+  const tabCounts: Record<ListType, number> = {
+    auto: autoPostedInvoices.length,
+    manual: manualPostedInvoices.length,
+    failed: failedInvoices.length,
+  };
+
   return (
     <div>
       <div className="flex h-16 items-center gap-[var(--space-sm)] px-[var(--space-lg)]" style={{ backgroundColor: theme.accentHex }}>
@@ -83,6 +94,29 @@ export function InvoiceListContent() {
       </div>
 
       <div className="mx-auto max-w-3xl p-[var(--space-lg)]">
+        {/* Category tabs — this is the only in-page way to reach Manually
+            Posted / Failed; the sidebar's "Invoices" link carries no query
+            string and always lands here defaulted to Auto-Posted. */}
+        <div className="mb-[var(--space-lg)] flex gap-[var(--space-xs)] rounded-md bg-background-alt p-[var(--space-xs)]">
+          {TAB_ORDER.map((t) => {
+            const active = t === type;
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => router.replace(`/invoices?type=${t}`)}
+                aria-current={active ? "page" : undefined}
+                className={`flex-1 rounded-md px-[var(--space-sm)] py-[var(--space-xs)] text-body-sm font-semibold ${
+                  active ? "bg-white shadow-sm" : "text-text-secondary"
+                }`}
+                style={active ? { color: INVOICE_STATUS_THEME[t].accentHex } : undefined}
+              >
+                {LIST_META[t].tabLabel} ({tabCounts[t]})
+              </button>
+            );
+          })}
+        </div>
+
         {loading ? (
           <SkeletonListRows count={4} className="py-[var(--space-sm)]" />
         ) : error ? (
