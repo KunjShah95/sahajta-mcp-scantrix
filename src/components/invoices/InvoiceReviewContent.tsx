@@ -382,9 +382,9 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
   }
 
   return (
-    <div className="min-h-screen pb-32" style={{ backgroundColor: theme.screenBg }}>
+    <div className="flex h-screen flex-col" style={{ backgroundColor: theme.screenBg }}>
       <div
-        className="flex h-[58px] items-center justify-between px-[var(--space-md)]"
+        className="flex h-[58px] shrink-0 items-center justify-between px-[var(--space-md)]"
         style={{ backgroundColor: theme.headerBg }}
       >
         <button type="button" onClick={() => router.back()} aria-label="Back" className="text-white">
@@ -403,7 +403,8 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
         )}
       </div>
 
-      <div className="mx-auto max-w-2xl px-[var(--space-md)] pt-[var(--space-lg)]">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto max-w-2xl px-[var(--space-md)] pb-[var(--space-lg)] pt-[var(--space-lg)]">
         {/* Confidence card */}
         <div className="relative mb-[var(--space-lg)] rounded-2xl p-[var(--space-lg)] text-center" style={{ backgroundColor: theme.cardBg }}>
           <p className="text-5xl font-extrabold" style={{ color: theme.primaryText }}>
@@ -632,9 +633,10 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
         <EditableField label="Vendor Bank Details" value={invoice.vendorBankDetails} onChange={(v) => updateField("vendorBankDetails", v)} fieldBorder={theme.fieldBorder} valueColor={theme.valueText} multiline />
         <EditableField label="Item Descriptions" value={invoice.itemDescriptionsText} onChange={(v) => updateField("itemDescriptionsText", v)} fieldBorder={theme.fieldBorder} valueColor={theme.valueText} multiline />
       </div>
+      </div>
 
       {/* Footer actions */}
-      <div className="fixed bottom-[var(--space-md)] left-1/2 flex w-full max-w-2xl -translate-x-1/2 gap-[var(--space-sm)] px-[var(--space-md)]">
+      <div className="mx-auto flex w-full max-w-2xl shrink-0 gap-[var(--space-sm)] border-t border-border px-[var(--space-md)] py-[var(--space-md)]">
         <button
           type="button"
           onClick={handleReject}
