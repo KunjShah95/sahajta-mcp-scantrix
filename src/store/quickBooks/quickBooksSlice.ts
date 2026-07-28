@@ -1,17 +1,26 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import {
+  deleteQuickBooksVendor,
   fetchQuickBooksAccounts,
   fetchQuickBooksTaxCodes,
   fetchQuickBooksVendors,
   getMyQBConnections,
   getQuickBooksStatus,
+  updateQuickBooksVendor,
 } from "./quickBooksApi";
 
-interface Vendor {
+export interface Vendor {
   _id: string;
   qbVendorId: string;
   displayName: string;
   normalizedName: string;
+  currency?: string;
+  glAccountId?: string | null;
+  taxCodeId?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  syncedFromQB?: boolean;
 }
 
 export interface GLAccount {
@@ -168,6 +177,21 @@ const quickBooksSlice = createSlice({
       .addCase(fetchQuickBooksVendors.rejected, (state, action) => {
         state.vendorsLoading = false;
         state.vendorsError = action.payload as string;
+      });
+
+    // ── Update / Delete Vendor ────────────────────────────────────────
+    builder
+      .addCase(updateQuickBooksVendor.fulfilled, (state, action) => {
+        const updated = action.payload?.data?.vendor;
+        if (updated?._id) {
+          state.vendors = state.vendors.map((v) => (v._id === updated._id ? updated : v));
+        }
+      })
+      .addCase(deleteQuickBooksVendor.fulfilled, (state, action) => {
+        const vendorId = (action.payload as { vendorId?: string })?.vendorId;
+        if (vendorId) {
+          state.vendors = state.vendors.filter((v) => v._id !== vendorId);
+        }
       });
 
     // ── GL Accounts ────────────────────────────────────────────────────
