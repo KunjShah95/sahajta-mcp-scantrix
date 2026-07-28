@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowRight } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { Card } from "@/components/ui/Card";
@@ -23,12 +24,15 @@ interface QBConnection {
 
 export function QuickBooksConnectContent() {
   const dispatch = useAppDispatch();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const accessToken = useAppSelector((state) => state.auth.user?.data?.accessToken);
   const qbConnectionId = useAppSelector((state) => state.quickBooks.qbConnectionId);
 
   const [connections, setConnections] = useState<QBConnection[]>([]);
   const [checkingStatus, setCheckingStatus] = useState(true);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+  const [reconnectingId, setReconnectingId] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
 
   const checkStatus = useCallback(async () => {
@@ -60,6 +64,16 @@ export function QuickBooksConnectContent() {
     return () => window.removeEventListener("focus", onFocus);
   }, [checkStatus]);
 
+  // Backend's QB OAuth callback redirects errors back here as ?error=<code>
+  // (success carries no query param — checkStatus() above already re-fetches
+  // the connection list, which is enough to reflect a successful connect).
+  useEffect(() => {
+    const error = searchParams.get("error");
+    if (!error) return;
+    showToast(error, "error");
+    router.replace("/quickbooks");
+  }, [searchParams, router]);
+
   const handleSwitch = async (connection: QBConnection) => {
     if (connection._id === qbConnectionId) return;
     if (!accessToken) return;
@@ -76,7 +90,8 @@ export function QuickBooksConnectContent() {
     if (!accessToken || connecting) return;
     setConnecting(true);
     try {
-      const result = await dispatch(connectQuickBooks({ accessToken }));
+      const redirectAfter = `${window.location.origin}/quickbooks`;
+      const result = await dispatch(connectQuickBooks({ accessToken, redirectAfter }));
       if (connectQuickBooks.fulfilled.match(result)) {
         const authUrl = result.payload?.data?.authUrl;
         if (authUrl) {
@@ -89,6 +104,31 @@ export function QuickBooksConnectContent() {
       }
     } finally {
       setConnecting(false);
+    }
+  };
+
+  // Re-authorizes the SAME connection (refreshes its tokens) — the fix for a
+  // malformed/expired token that's currently blocking both disconnect and
+  // scanning on that connection. Owner/admin only, mirrored from the backend
+  // check in connectQuickBooks (?qbConnectionId=... path).
+  const handleReconnect = async (connection: QBConnection) => {
+    if (!accessToken || reconnectingId) return;
+    setReconnectingId(connection._id);
+    try {
+      const redirectAfter = `${window.location.origin}/quickbooks`;
+      const result = await dispatch(connectQuickBooks({ accessToken, redirectAfter, qbConnectionId: connection._id }));
+      if (connectQuickBooks.fulfilled.match(result)) {
+        const authUrl = result.payload?.data?.authUrl;
+        if (authUrl) {
+          window.location.href = authUrl;
+          return;
+        }
+        showToast("Could not start reconnect. Please try again.", "error");
+      } else {
+        showToast(typeof result.payload === "string" ? result.payload : "Could not start reconnect.", "error");
+      }
+    } finally {
+      setReconnectingId(null);
     }
   };
 
@@ -149,17 +189,23 @@ export function QuickBooksConnectContent() {
                   </div>
                 </div>
                 <div className="flex items-center gap-[var(--space-sm)]">
-                  {isActive ? (
-                    <span className="rounded-pill bg-primary px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold text-white">
-                      Active
-                    </span>
-                  ) : (
+                  {!isActive && (
                     <button
                       type="button"
                       onClick={() => handleSwitch(connection)}
                       className="text-body-sm font-semibold text-primary"
                     >
                       Switch
+                    </button>
+                  )}
+                  {(connection.role === "owner" || connection.role === "admin") && (
+                    <button
+                      type="button"
+                      onClick={() => handleReconnect(connection)}
+                      disabled={reconnectingId === connection._id}
+                      className="text-body-sm font-semibold text-primary disabled:opacity-60"
+                    >
+                      {reconnectingId === connection._id ? "…" : "Reconnect"}
                     </button>
                   )}
                   <button

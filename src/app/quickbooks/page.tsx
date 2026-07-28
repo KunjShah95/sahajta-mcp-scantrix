@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 
 import { QuickBooksConnectContent } from "@/components/quickbooks/QuickBooksConnectContent";
@@ -7,5 +8,9 @@ export const metadata: Metadata = {
 };
 
 export default function QuickBooksPage() {
-  return <QuickBooksConnectContent />;
+  return (
+    <Suspense fallback={null}>
+      <QuickBooksConnectContent />
+    </Suspense>
+  );
 }

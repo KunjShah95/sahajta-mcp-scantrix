@@ -10,6 +10,7 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { getInvoiceDetails } from "@/store/invoice/invoiceApi";
 import { fetchQuickBooksAccounts } from "@/store/quickBooks/quickBooksApi";
 import { Spinner } from "@/components/ui/Spinner";
+import { showToast } from "@/lib/dialogManager";
 import {
   INVOICE_DETAIL_THEME,
   formatDetailAmount,
@@ -72,6 +73,7 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
   const theme = INVOICE_DETAIL_THEME[type];
 
   const invoiceObject = useAppSelector((state) => state.invoice.selectedInvoice);
+  const fetchError = useAppSelector((state) => state.invoice.error);
   const accessToken = useAppSelector((state) => state.auth.user?.data?.accessToken);
   const glAccounts = useAppSelector((state) => state.quickBooks.accounts);
 
@@ -84,6 +86,17 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
     if (accessToken) dispatch(fetchQuickBooksAccounts({ accessToken }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
+
+  // Deleted/missing invoice (e.g. a stale link after deletion) — bounce back
+  // to the list instead of leaving the user stuck on an infinite spinner.
+  useEffect(() => {
+    if (!fetchError || invoiceObject) return;
+    showToast(
+      typeof fetchError === "string" ? fetchError : "This invoice could not be found.",
+      "error",
+    );
+    router.replace("/invoices");
+  }, [fetchError, invoiceObject, router]);
 
   const rawData = invoiceObject?.extractedData;
   const statusHistory = invoiceObject?.statusHistory ?? [];

@@ -8,6 +8,8 @@ import { RootState } from "..";
 interface ConnectQuickBooksPayload {
   accessToken: string;
   redirectAfter?: string;
+  /** Present → re-auth an existing connection instead of creating a new one */
+  qbConnectionId?: string;
 }
 
 export const connectQuickBooks = createAsyncThunk(
@@ -15,7 +17,10 @@ export const connectQuickBooks = createAsyncThunk(
   async (data: ConnectQuickBooksPayload, thunkAPI) => {
     try {
       console.log("========== QUICKBOOKS CONNECT REQUEST ==========");
-      const params = data.redirectAfter ? { redirectAfter: data.redirectAfter } : {};
+      const params = {
+        ...(data.redirectAfter ? { redirectAfter: data.redirectAfter } : {}),
+        ...(data.qbConnectionId ? { qbConnectionId: data.qbConnectionId } : {}),
+      };
       console.log("GET /quickbooks/connect", params);
       const response = await api.get("/quickbooks/connect", {
         headers: { Authorization: `Bearer ${data.accessToken}` },
