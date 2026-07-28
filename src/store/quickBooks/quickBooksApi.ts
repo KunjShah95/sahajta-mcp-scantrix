@@ -8,6 +8,8 @@ import { RootState } from "..";
 interface ConnectQuickBooksPayload {
   accessToken: string;
   redirectAfter?: string;
+  /** Present → re-auth an existing connection instead of creating a new one */
+  qbConnectionId?: string;
 }
 
 export const connectQuickBooks = createAsyncThunk(
@@ -15,7 +17,10 @@ export const connectQuickBooks = createAsyncThunk(
   async (data: ConnectQuickBooksPayload, thunkAPI) => {
     try {
       console.log("========== QUICKBOOKS CONNECT REQUEST ==========");
-      const params = data.redirectAfter ? { redirectAfter: data.redirectAfter } : {};
+      const params = {
+        ...(data.redirectAfter ? { redirectAfter: data.redirectAfter } : {}),
+        ...(data.qbConnectionId ? { qbConnectionId: data.qbConnectionId } : {}),
+      };
       console.log("GET /quickbooks/connect", params);
       const response = await api.get("/quickbooks/connect", {
         headers: { Authorization: `Bearer ${data.accessToken}` },
@@ -145,6 +150,9 @@ interface CreateVendorPayload {
   // strings for both, so they're always sent.
   glAccountId?: string;
   taxCodeId?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
 }
 
 export const createQuickBooksVendor = createAsyncThunk(
@@ -168,6 +176,9 @@ export const createQuickBooksVendor = createAsyncThunk(
           currency: data.currency,
           glAccountId,
           taxCodeId,
+          ...(data.email ? { email: data.email } : {}),
+          ...(data.phone ? { phone: data.phone } : {}),
+          ...(data.address ? { address: data.address } : {}),
         },
         { headers },
       );
@@ -188,7 +199,14 @@ export const createQuickBooksVendor = createAsyncThunk(
           );
           const retryResponse = await api.post(
             "/quickbooks/vendors",
-            { displayName: data.displayName, glAccountId, taxCodeId },
+            {
+              displayName: data.displayName,
+              glAccountId,
+              taxCodeId,
+              ...(data.email ? { email: data.email } : {}),
+              ...(data.phone ? { phone: data.phone } : {}),
+              ...(data.address ? { address: data.address } : {}),
+            },
             { headers },
           );
           console.log("========== CREATE VENDOR SUCCESS (no currency) ==========");
@@ -215,9 +233,171 @@ export const createQuickBooksVendor = createAsyncThunk(
   },
 );
 
+interface UpdateVendorPayload {
+  accessToken: string;
+  vendorId: string;
+  displayName?: string;
+  currency?: string;
+  glAccountId?: string;
+  taxCodeId?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+}
+
+export const updateQuickBooksVendor = createAsyncThunk(
+  "quickbooks/updateVendor",
+  async (data: UpdateVendorPayload, thunkAPI) => {
+    const state = thunkAPI.getState() as RootState;
+    const qbConnectionId = state.quickBooks.qbConnectionId;
+    const headers = {
+      Authorization: `Bearer ${data.accessToken}`,
+      ...(qbConnectionId ? { "X-QB-Id": qbConnectionId } : {}),
+    };
+    const { vendorId, ...rest } = data;
+    const body: Record<string, string> = {};
+    if (rest.displayName !== undefined) body.displayName = rest.displayName;
+    if (rest.currency !== undefined) body.currency = rest.currency;
+    if (rest.glAccountId !== undefined) body.glAccountId = rest.glAccountId;
+    if (rest.taxCodeId !== undefined) body.taxCodeId = rest.taxCodeId;
+    if (rest.email !== undefined) body.email = rest.email;
+    if (rest.phone !== undefined) body.phone = rest.phone;
+    if (rest.address !== undefined) body.address = rest.address;
+
+    try {
+      console.log("========== UPDATE VENDOR REQUEST ==========");
+      const response = await api.patch(`/quickbooks/vendors/${vendorId}`, body, { headers });
+      console.log("========== UPDATE VENDOR SUCCESS ==========");
+      console.log(JSON.stringify(response.data, null, 2));
+      return response.data;
+    } catch (error: any) {
+      const message = error?.response?.data?.message || error?.message || "";
+
+      // Same QBO error-code-6000 workaround as create — retry once without
+      // the currency change if the company doesn't have Multi-Currency on.
+      if (message.includes("Multi Currency should be enabled") && body.currency !== undefined) {
+        const bodyWithoutCurrency = { ...body };
+        delete bodyWithoutCurrency.currency;
+        try {
+          console.log("========== RETRYING UPDATE VENDOR WITHOUT CURRENCY ==========");
+          const retryResponse = await api.patch(`/quickbooks/vendors/${vendorId}`, bodyWithoutCurrency, { headers });
+          console.log("========== UPDATE VENDOR SUCCESS (no currency) ==========");
+          console.log(JSON.stringify(retryResponse.data, null, 2));
+          return retryResponse.data;
+        } catch (retryError: any) {
+          console.log("========== UPDATE VENDOR RETRY ERROR ==========");
+          return thunkAPI.rejectWithValue({
+            message: retryError?.response?.data?.message || retryError?.message || "Failed to update vendor",
+            statusCode: retryError?.response?.data?.statusCode,
+          });
+        }
+      }
+
+      console.log("========== UPDATE VENDOR ERROR ==========");
+      return thunkAPI.rejectWithValue({
+        message: message || "Failed to update vendor",
+        statusCode: error?.response?.data?.statusCode,
+      });
+    }
+  },
+);
+
+interface DeleteVendorPayload {
+  accessToken: string;
+  vendorId: string;
+}
+
+export const deleteQuickBooksVendor = createAsyncThunk(
+  "quickbooks/deleteVendor",
+  async (data: DeleteVendorPayload, thunkAPI) => {
+    const state = thunkAPI.getState() as RootState;
+    const qbConnectionId = state.quickBooks.qbConnectionId;
+    const headers = {
+      Authorization: `Bearer ${data.accessToken}`,
+      ...(qbConnectionId ? { "X-QB-Id": qbConnectionId } : {}),
+    };
+
+    try {
+      console.log("========== DELETE VENDOR REQUEST ==========");
+      const response = await api.delete(`/quickbooks/vendors/${data.vendorId}`, { headers });
+      console.log("========== DELETE VENDOR SUCCESS ==========");
+      console.log(JSON.stringify(response.data, null, 2));
+      return { ...response.data, vendorId: data.vendorId };
+    } catch (error: any) {
+      console.log("========== DELETE VENDOR ERROR ==========");
+      const message = error?.response?.data?.message || error?.message || "Failed to delete vendor";
+      return thunkAPI.rejectWithValue({ message, statusCode: error?.response?.data?.statusCode });
+    }
+  },
+);
+
+interface ReactivateVendorPayload {
+  accessToken: string;
+  vendorId: string;
+}
+
+export const reactivateQuickBooksVendor = createAsyncThunk(
+  "quickbooks/reactivateVendor",
+  async (data: ReactivateVendorPayload, thunkAPI) => {
+    const state = thunkAPI.getState() as RootState;
+    const qbConnectionId = state.quickBooks.qbConnectionId;
+    const headers = {
+      Authorization: `Bearer ${data.accessToken}`,
+      ...(qbConnectionId ? { "X-QB-Id": qbConnectionId } : {}),
+    };
+
+    try {
+      console.log("========== REACTIVATE VENDOR REQUEST ==========");
+      const response = await api.post(`/quickbooks/vendors/${data.vendorId}/reactivate`, {}, { headers });
+      console.log("========== REACTIVATE VENDOR SUCCESS ==========");
+      console.log(JSON.stringify(response.data, null, 2));
+      return { ...response.data, vendorId: data.vendorId };
+    } catch (error: any) {
+      console.log("========== REACTIVATE VENDOR ERROR ==========");
+      const message = error?.response?.data?.message || error?.message || "Failed to reactivate vendor";
+      return thunkAPI.rejectWithValue({ message, statusCode: error?.response?.data?.statusCode });
+    }
+  },
+);
+
 interface FetchVendorsPayload {
   accessToken: string;
 }
+
+// Deliberately separate from fetchQuickBooksVendors below (which backs
+// state.quickBooks.vendors — the shared active-vendor cache other screens
+// like VendorResolutionContent rely on for invoice matching). Fetching
+// inactive vendors through that same thunk/reducer would overwrite the
+// shared cache with deactivated vendors. This one is read directly from its
+// return value by the caller and never touches the slice.
+interface FetchInactiveVendorsPayload {
+  accessToken: string;
+}
+
+export const fetchInactiveQuickBooksVendors = createAsyncThunk(
+  "quickbooks/fetchInactiveVendors",
+  async (data: FetchInactiveVendorsPayload, thunkAPI) => {
+    const state = thunkAPI.getState() as RootState;
+    const qbConnectionId = state.quickBooks.qbConnectionId;
+    try {
+      console.log("========== FETCH INACTIVE VENDORS REQUEST ==========");
+      const response = await api.get("/quickbooks/vendors", {
+        params: { status: "inactive" },
+        headers: {
+          Authorization: `Bearer ${data.accessToken}`,
+          ...(qbConnectionId ? { "X-QB-Id": qbConnectionId } : {}),
+        },
+      });
+      console.log("========== FETCH INACTIVE VENDORS SUCCESS ==========");
+      console.log(JSON.stringify(response.data, null, 2));
+      return response.data.data.vendors;
+    } catch (error: any) {
+      console.log("========== FETCH INACTIVE VENDORS ERROR ==========");
+      const message = error?.response?.data?.message || error?.message || "Failed to fetch inactive vendors";
+      return thunkAPI.rejectWithValue(message);
+    }
+  },
+);
 
 export const fetchQuickBooksVendors = createAsyncThunk(
   "quickbooks/fetchVendors",
@@ -276,6 +456,45 @@ export const fetchQuickBooksAccounts = createAsyncThunk(
         error?.message ||
         "Failed to fetch GL accounts";
       return thunkAPI.rejectWithValue(message);
+    }
+  },
+);
+
+interface CreateAccountPayload {
+  accessToken: string;
+  name: string;
+  accountType: string;
+  accountSubType?: string;
+}
+
+export const createQuickBooksAccount = createAsyncThunk(
+  "quickbooks/createAccount",
+  async (data: CreateAccountPayload, thunkAPI) => {
+    const state = thunkAPI.getState() as RootState;
+    const qbConnectionId = state.quickBooks.qbConnectionId;
+    const headers = {
+      Authorization: `Bearer ${data.accessToken}`,
+      ...(qbConnectionId ? { "X-QB-Id": qbConnectionId } : {}),
+    };
+
+    try {
+      console.log("========== CREATE GL ACCOUNT REQUEST ==========");
+      const response = await api.post(
+        "/quickbooks/accounts",
+        {
+          name: data.name,
+          accountType: data.accountType,
+          ...(data.accountSubType ? { accountSubType: data.accountSubType } : {}),
+        },
+        { headers },
+      );
+      console.log("========== CREATE GL ACCOUNT SUCCESS ==========");
+      console.log(JSON.stringify(response.data, null, 2));
+      return response.data;
+    } catch (error: any) {
+      console.log("========== CREATE GL ACCOUNT ERROR ==========");
+      const message = error?.response?.data?.message || error?.message || "Failed to create GL account";
+      return thunkAPI.rejectWithValue({ message, statusCode: error?.response?.data?.statusCode });
     }
   },
 );

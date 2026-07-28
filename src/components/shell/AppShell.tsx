@@ -6,11 +6,13 @@ import {
   ChevronDown,
   CreditCard,
   FileText,
+  Landmark,
   LayoutDashboard,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
   Puzzle,
+  Store,
   Users,
 } from "lucide-react";
 import { ReactNode, useEffect, useRef, useState } from "react";
@@ -34,6 +36,8 @@ const NAV_ITEMS = [
   { href: "/invoices", label: "Invoices", icon: FileText },
   { href: "/quickbooks", label: "QuickBooks", icon: null },
   { href: "/team", label: "Team", icon: Users },
+  { href: "/vendors", label: "Vendors", icon: Store },
+  { href: "/gl-tax-codes", label: "GL Account & TaxCode", icon: Landmark },
   { href: "/accounting-software", label: "Accounting Software", icon: Puzzle },
   { href: "/subscription", label: "Subscription", icon: CreditCard },
 ] as const;
