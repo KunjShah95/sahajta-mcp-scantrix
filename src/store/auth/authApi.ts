@@ -1,4 +1,5 @@
 import { createAsyncThunk } from "@reduxjs/toolkit";
+import { PURGE } from "redux-persist";
 
 import api from "../../lib/api";
 
@@ -8,6 +9,17 @@ import {
   saveUser,
   clearStorage,
 } from "../../lib/storage";
+
+// Dispatches redux-persist's PURGE action, which every persistReducer-wrapped
+// slice (currently just quickBooks — see store/index.ts) intercepts to wipe
+// its own localStorage entry. Called on every logout and fresh login so a
+// previous session's persisted qbConnectionId/connected/realmId can never
+// sit in storage waiting to be rehydrated into a different user's session.
+const purgePersistedState = (dispatch: (action: unknown) => void) => {
+  const results: Promise<unknown>[] = [];
+  dispatch({ type: PURGE, result: (r: Promise<unknown>) => results.push(r) });
+  return Promise.all(results);
+};
 
 
 
@@ -296,6 +308,11 @@ export const loginUser = createAsyncThunk(
         )
       );
 
+      // Defensively reset any QB session data left over from a previous
+      // user on this browser before this session saves its own tokens or
+      // any QB-scoped fetch can fire.
+      await purgePersistedState(thunkAPI.dispatch);
+
       // ==============================
       // EXTRACT DATA
       // ==============================
@@ -387,10 +404,12 @@ export const logoutUser = createAsyncThunk(
       );
 
       await clearStorage();
+      await purgePersistedState(thunkAPI.dispatch);
 
       return response.data;
     } catch (error: any) {
       await clearStorage();
+      await purgePersistedState(thunkAPI.dispatch);
 
       const errorMessage =
         error?.response?.data
@@ -522,6 +541,11 @@ export const googleLogin = createAsyncThunk(
         JSON.stringify(response.data, null, 2)
       );
 
+      // Defensively reset any QB session data left over from a previous
+      // user on this browser before this session saves its own tokens or
+      // any QB-scoped fetch can fire.
+      await purgePersistedState(thunkAPI.dispatch);
+
       // ==============================
       // EXTRACT DATA
       // ==============================
@@ -607,6 +631,11 @@ export const appleLogin = createAsyncThunk(
       console.log(
         JSON.stringify(response.data, null, 2)
       );
+
+      // Defensively reset any QB session data left over from a previous
+      // user on this browser before this session saves its own tokens or
+      // any QB-scoped fetch can fire.
+      await purgePersistedState(thunkAPI.dispatch);
 
       const accessToken =
         response.data?.data?.accessToken;

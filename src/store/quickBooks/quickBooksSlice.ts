@@ -8,6 +8,7 @@ import {
   getQuickBooksStatus,
   updateQuickBooksVendor,
 } from "./quickBooksApi";
+import { appleLogin, googleLogin, loginUser, logoutUser } from "../auth/authApi";
 
 export interface Vendor {
   _id: string;
@@ -92,6 +93,19 @@ const quickBooksSlice = createSlice({
     },
   },
   extraReducers: (builder) => {
+    // ── Session boundary ────────────────────────────────────────────────
+    // This is the only persisted slice in the app (see the persistReducer
+    // whitelist in store/index.ts), so it's the one place a value can
+    // survive across users on a shared browser. Reset it to initialState on
+    // every logout and every fresh login — before any component can read a
+    // qbConnectionId left over from whoever used this browser last.
+    builder
+      .addCase(logoutUser.fulfilled, () => initialState)
+      .addCase(logoutUser.rejected, () => initialState)
+      .addCase(loginUser.fulfilled, () => initialState)
+      .addCase(googleLogin.fulfilled, () => initialState)
+      .addCase(appleLogin.fulfilled, () => initialState);
+
     // ── Get My Connections (bootstrap) ─────────────────────────────────
     builder
       .addCase(getMyQBConnections.pending, (state) => {
