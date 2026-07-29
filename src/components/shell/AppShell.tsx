@@ -19,6 +19,7 @@ import { ReactNode, useEffect, useRef, useState } from "react";
 
 import { BrandIcon } from "@/components/icons/BrandIcon";
 import { getSidebarCollapsed, setSidebarCollapsed } from "@/lib/storage";
+import { capitalizeWords } from "@/lib/textFormat";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { useLogout } from "@/store/useLogout";
 import { getMyQBConnections, getQuickBooksStatus } from "@/store/quickBooks/quickBooksApi";
@@ -114,7 +115,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     await dispatch(getQuickBooksStatus({ accessToken, qbConnectionId: connection._id }));
   };
 
-  const name = user?.data?.user?.firstName || user?.data?.user?.email?.split("@")[0] || "Account";
+  const name = capitalizeWords(user?.data?.user?.firstName || user?.data?.user?.email?.split("@")[0] || "Account");
 
   return (
     <div className="flex min-h-screen bg-background-alt">

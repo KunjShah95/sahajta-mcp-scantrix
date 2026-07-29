@@ -15,6 +15,7 @@ import {
 import { ReactNode, useState } from "react";
 
 import { confirmDialog, showToast } from "@/lib/dialogManager";
+import { capitalizeWords } from "@/lib/textFormat";
 import { useAppSelector } from "@/store/hooks";
 import { useLogout } from "@/store/useLogout";
 
@@ -50,7 +51,7 @@ export function ProfileContent() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const apiUser = user?.data?.user;
-  const name = apiUser?.firstName || apiUser?.email?.split("@")[0] || "User";
+  const name = capitalizeWords(apiUser?.firstName || apiUser?.email?.split("@")[0] || "User");
   const email = apiUser?.email || "No email";
   const photoURL = normalizePhotoURL(apiUser?.icon);
 

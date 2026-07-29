@@ -5,6 +5,7 @@ import { ChevronRight, UserX, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { confirmDialog, showToast } from "@/lib/dialogManager";
+import { capitalizeWords } from "@/lib/textFormat";
 
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -37,7 +38,9 @@ interface QBMember {
 }
 
 const memberDisplayName = (member: QBMember) =>
-  member.userId ? `${member.userId.firstName} ${member.userId.lastName}` : member.invitedEmail;
+  member.userId
+    ? capitalizeWords(`${member.userId.firstName} ${member.userId.lastName}`)
+    : member.invitedEmail;
 
 const ROLE_META: Record<string, { label: string; className: string }> = {
   owner: { label: "Owner", className: "bg-[#E5F7F5] text-[#177E71]" },

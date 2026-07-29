@@ -13,6 +13,7 @@ import { getInvoices } from "@/store/invoice/invoiceApi";
 import { connectQuickBooks, getMyQBConnections } from "@/store/quickBooks/quickBooksApi";
 import { scanInvoice } from "@/store/invoice/invoiceApi";
 import { showToast } from "@/lib/dialogManager";
+import { capitalizeWords } from "@/lib/textFormat";
 import {
   INVOICE_STATUS_THEME,
   getInvoiceAmount,
@@ -209,7 +210,7 @@ export function DashboardContent() {
   } = useAppSelector((state) => state.invoice);
   const { connected, statusLoading, qbConnectionId } = useAppSelector((state) => state.quickBooks);
 
-  const name = user?.data?.user?.firstName || user?.data?.user?.email?.split("@")[0] || "there";
+  const name = capitalizeWords(user?.data?.user?.firstName || user?.data?.user?.email?.split("@")[0] || "there");
   const accessToken: string | undefined = user?.data?.accessToken;
 
   const syncInvoices = useCallback(() => {
