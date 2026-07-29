@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowRight, Clock, Upload } from "lucide-react";
-import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -29,7 +29,11 @@ function greetingFor(name: string): string {
   return `Good evening, ${name}`;
 }
 
-function SummaryCard({
+// Vertical scoreboard row — replaces the old side-by-side SummaryCard grid
+// now that the stat column sits narrower, next to the dropzone. Same theme
+// classes and same live counts, just laid out horizontally per row instead
+// of stacked vertically per card.
+function StatRow({
   count,
   label,
   href,
@@ -45,13 +49,104 @@ function SummaryCard({
   return (
     <Link
       href={href}
-      className={`flex min-h-[120px] flex-1 flex-col items-center justify-between rounded-lg p-[var(--space-md)] ${INVOICE_STATUS_THEME[theme].cardBgClass}`}
+      className={`flex flex-1 items-center justify-between gap-[var(--space-sm)] rounded-lg p-[var(--space-md)] ${INVOICE_STATUS_THEME[theme].cardBgClass}`}
     >
+      <span className={`text-body-sm font-semibold ${colorClass}`}>{label}</span>
       <span className={`text-h1 font-bold ${colorClass}`}>{count}</span>
-      <span className={`mt-[var(--space-xs)] text-center text-caption font-semibold ${colorClass}`}>
-        {label}
-      </span>
     </Link>
+  );
+}
+
+// Real dropzone matching the landing page's ScanVisual card style (dashed
+// border, centered icon-in-circle, generous padding) — visual language
+// only, none of that component's fake demo content. Both drag-and-drop and
+// click-to-browse funnel into the same `onFileSelected`, which the parent
+// wires to the exact scanInvoice upload path the old small button used —
+// no parallel upload logic.
+function InvoiceDropzone({
+  uploading,
+  onFileSelected,
+}: {
+  uploading: boolean;
+  onFileSelected: (file: File) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const dragDepth = useRef(0);
+
+  const openPicker = () => {
+    if (!uploading) fileInputRef.current?.click();
+  };
+
+  const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    dragDepth.current += 1;
+    setDragActive(true);
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    // Required so the browser treats this element as a valid drop target.
+    event.preventDefault();
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDragActive(false);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    dragDepth.current = 0;
+    setDragActive(false);
+    const file = event.dataTransfer.files?.[0];
+    if (file) onFileSelected(file);
+  };
+
+  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) onFileSelected(file);
+  };
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label="Upload invoice — drag and drop or click to browse"
+      onClick={openPicker}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openPicker();
+        }
+      }}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`flex min-h-[280px] flex-1 cursor-pointer flex-col items-center justify-center gap-[var(--space-sm)] rounded-xl border-2 border-dashed p-[var(--space-xl)] text-center transition-colors ${
+        dragActive ? "border-primary bg-primary/10" : "border-primary/40 bg-background-soft hover:bg-primary/5"
+      } ${uploading ? "pointer-events-none opacity-70" : ""}`}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,.pdf"
+        className="hidden"
+        disabled={uploading}
+        onChange={handleChange}
+      />
+      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-sm">
+        {uploading ? <Spinner size="md" /> : <Upload size={26} strokeWidth={2} className="text-primary" />}
+      </span>
+      <p className="text-body font-bold text-trust-navy">
+        {uploading ? "Uploading…" : "Drag & drop your invoice"}
+      </p>
+      <p className="text-body-sm text-text-secondary">
+        {uploading ? "This won't take long." : "or click to browse — PDF or photo"}
+      </p>
+    </div>
   );
 }
 
@@ -99,7 +194,6 @@ function InvoiceRow({ invoice }: { invoice: InvoiceRecord }) {
 
 export function DashboardContent() {
   const dispatch = useAppDispatch();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [connectingQB, setConnectingQB] = useState(false);
 
@@ -164,48 +258,36 @@ export function DashboardContent() {
 
   const recentInvoices = invoices.slice(0, 5);
 
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
-    if (!qbConnectionId) {
-      showToast("Please connect a QuickBooks account before scanning invoices.", "error");
-      return;
-    }
-
-    setUploading(true);
-    try {
-      const result = await dispatch(scanInvoice({ file, qbId: qbConnectionId }));
-      if (scanInvoice.fulfilled.match(result)) {
-        setTimeout(syncInvoices, 1500);
-      } else {
-        const payload = result.payload;
-        showToast(typeof payload === "string" ? payload : "Invoice scan failed", "error");
+  // Single upload path for every entry point (click-to-browse, drag-and-drop) —
+  // both call this, neither duplicates it. Keeps the FormData/scanInvoice call
+  // exactly as it was before the dropzone existed (see scanInvoice's own
+  // comment on the RN-FormData bug this fixed once already).
+  const uploadFile = useCallback(
+    async (file: File) => {
+      if (!qbConnectionId) {
+        showToast("Please connect a QuickBooks account before scanning invoices.", "error");
+        return;
       }
-    } finally {
-      setUploading(false);
-    }
-  };
+
+      setUploading(true);
+      try {
+        const result = await dispatch(scanInvoice({ file, qbId: qbConnectionId }));
+        if (scanInvoice.fulfilled.match(result)) {
+          setTimeout(syncInvoices, 1500);
+        } else {
+          const payload = result.payload;
+          showToast(typeof payload === "string" ? payload : "Invoice scan failed", "error");
+        }
+      } finally {
+        setUploading(false);
+      }
+    },
+    [dispatch, qbConnectionId, syncInvoices],
+  );
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-[var(--space-md)] p-[var(--space-lg)]">
-      <div className="flex items-center justify-between gap-[var(--space-md)]">
-        <h1 className="text-h3 font-bold text-trust-navy">{greetingFor(name)}</h1>
-
-        <label className="inline-flex cursor-pointer items-center gap-[var(--space-xs)] rounded-md bg-primary px-[var(--space-md)] py-[var(--space-sm)] text-body-sm font-semibold text-white hover:opacity-90">
-          <Upload size={16} strokeWidth={2.25} />
-          {uploading ? "Uploading…" : "Upload invoice"}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,.pdf"
-            className="hidden"
-            disabled={uploading}
-            onChange={handleFileChange}
-          />
-        </label>
-      </div>
+      <h1 className="text-h3 font-bold text-trust-navy">{greetingFor(name)}</h1>
 
       {!statusLoading && !connected && (
         <button
@@ -245,15 +327,24 @@ export function DashboardContent() {
         </div>
       </Link>
 
-      <div className="flex gap-[var(--space-sm)]">
-        <SummaryCard count={autoPostedInvoices.length} label="Auto-posted" href="/invoices?type=auto" theme="auto" />
-        <SummaryCard
-          count={manualPostedInvoices.length}
-          label="Manually Posted"
-          href="/invoices?type=manual"
-          theme="manual"
-        />
-        <SummaryCard count={failedInvoices.length} label="Failed" href="/invoices?type=failed" theme="failed" />
+      {/*
+        Upload gets the wider, first-read column — it's the primary action on
+        this page. The three totals move into a narrower scoreboard beside it,
+        restacked vertically since they no longer need full card width to be
+        legible as a single number + label each.
+      */}
+      <div className="flex flex-col gap-[var(--space-md)] md:flex-row">
+        <InvoiceDropzone uploading={uploading} onFileSelected={uploadFile} />
+        <div className="flex flex-col gap-[var(--space-sm)] md:w-64">
+          <StatRow count={autoPostedInvoices.length} label="Auto-posted" href="/invoices?type=auto" theme="auto" />
+          <StatRow
+            count={manualPostedInvoices.length}
+            label="Manually Posted"
+            href="/invoices?type=manual"
+            theme="manual"
+          />
+          <StatRow count={failedInvoices.length} label="Failed" href="/invoices?type=failed" theme="failed" />
+        </div>
       </div>
 
       <div className="mt-[var(--space-md)] flex items-center justify-between">
