@@ -119,18 +119,18 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen bg-background-alt">
       <aside
-        className={`flex shrink-0 flex-col border-r border-border bg-white transition-[width] duration-200 ease-in-out ${
+        className={`flex shrink-0 flex-col border-r border-border bg-primary transition-[width] duration-200 ease-in-out ${
           collapsed ? "w-16" : "w-64"
         }`}
       >
         <div className={`flex h-16 items-center ${collapsed ? "justify-center px-[var(--space-sm)]" : "justify-between px-[var(--space-lg)]"}`}>
-          {!collapsed && <span className="truncate text-h3 font-bold text-trust-navy">Scantrix</span>}
+          {!collapsed && <span className="truncate text-h3 font-bold text-text-primary">Scantrix</span>}
           <button
             type="button"
             onClick={toggleCollapsed}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-secondary hover:bg-background-alt"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-primary hover:bg-white/10"
           >
             {collapsed ? <PanelLeftOpen size={18} strokeWidth={2} /> : <PanelLeftClose size={18} strokeWidth={2} />}
           </button>
@@ -181,7 +181,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 aria-label={item.label}
                 className={`flex items-center gap-[var(--space-sm)] rounded-md py-[var(--space-sm)] text-body-sm font-semibold ${
                   collapsed ? "justify-center px-0" : "px-[var(--space-md)]"
-                } ${active ? "bg-primary/10 text-primary" : "text-text-secondary hover:bg-background-alt"}`}
+                } ${active ? "bg-white/25 text-text-primary" : "text-text-primary/80 hover:bg-white/10"}`}
               >
                 {Icon ? (
                   <Icon size={18} strokeWidth={2} className="shrink-0" />
@@ -201,10 +201,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             aria-label={name}
             className={`mb-[var(--space-xs)] flex items-center gap-[var(--space-sm)] truncate rounded-md py-[var(--space-xs)] text-body-sm font-semibold ${
               collapsed ? "justify-center px-0" : "px-[var(--space-sm)]"
-            } ${pathname === "/profile" ? "bg-primary/10 text-primary" : "text-text-primary hover:bg-background-alt"}`}
+            } ${pathname === "/profile" ? "bg-white/25 text-text-primary" : "text-text-primary hover:bg-white/10"}`}
           >
             {collapsed ? (
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-caption font-bold text-primary">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/20 text-caption font-bold text-text-primary">
                 {name.charAt(0).toUpperCase()}
               </span>
             ) : (
@@ -216,7 +216,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             onClick={logout}
             title={collapsed ? "Logout" : undefined}
             aria-label="Logout"
-            className={`flex w-full items-center gap-[var(--space-sm)] rounded-md py-[var(--space-xs)] text-left text-body-sm font-semibold text-error hover:bg-error/10 ${
+            className={`flex w-full items-center gap-[var(--space-sm)] rounded-md py-[var(--space-xs)] text-left text-body-sm font-semibold text-text-primary hover:bg-white/10 ${
               collapsed ? "justify-center px-0" : "px-[var(--space-sm)]"
             }`}
           >
