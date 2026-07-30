@@ -210,7 +210,6 @@ export function VendorsContent() {
             accessToken,
             vendorId: editingVendor._id,
             displayName: trimmedName,
-            currency: form.currency,
             glAccountId: form.glAccountId,
             taxCodeId: form.taxCodeId,
             email: form.email.trim(),
@@ -487,8 +486,8 @@ export function VendorsContent() {
                 <select
                   value={form.currency}
                   onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
-                  disabled={saving}
-                  className="mt-[var(--space-xs)] h-[50px] w-full rounded-md border border-border bg-white px-[var(--space-md)] text-body focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  disabled={saving || !!editingVendor}
+                  className="mt-[var(--space-xs)] h-[50px] w-full rounded-md border border-border bg-white px-[var(--space-md)] text-body focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:bg-background-alt disabled:text-text-secondary"
                 >
                   {CURRENCY_OPTIONS.map((code) => (
                     <option key={code} value={code}>
@@ -496,6 +495,11 @@ export function VendorsContent() {
                     </option>
                   ))}
                 </select>
+                {editingVendor && (
+                  <p className="mt-[var(--space-xs)] text-body-sm text-text-secondary">
+                    Currency can&apos;t be changed after a vendor is created.
+                  </p>
+                )}
               </div>
 
               <div>
