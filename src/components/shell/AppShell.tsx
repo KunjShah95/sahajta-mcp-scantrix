@@ -118,13 +118,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const name = capitalizeWords(user?.data?.user?.firstName || user?.data?.user?.email?.split("@")[0] || "Account");
 
   return (
-    <div className="flex min-h-screen bg-background-alt">
+    <div className="flex h-screen bg-background-alt">
       <aside
-        className={`flex shrink-0 flex-col border-r border-border bg-primary transition-[width] duration-200 ease-in-out ${
+        className={`flex h-screen shrink-0 flex-col overflow-hidden border-r border-border bg-primary transition-[width] duration-200 ease-in-out ${
           collapsed ? "w-16" : "w-64"
         }`}
       >
-        <div className={`flex h-16 items-center ${collapsed ? "justify-center px-[var(--space-sm)]" : "justify-between px-[var(--space-lg)]"}`}>
+        <div className={`flex h-16 shrink-0 items-center ${collapsed ? "justify-center px-[var(--space-sm)]" : "justify-between px-[var(--space-lg)]"}`}>
           {!collapsed && <span className="truncate text-h3 font-bold text-text-primary">Scantrix</span>}
           <button
             type="button"
@@ -138,7 +138,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         {connections.length > 0 && !collapsed && (
-          <div ref={switcherRef} className="relative mx-[var(--space-md)] mb-[var(--space-sm)]">
+          <div ref={switcherRef} className="relative mx-[var(--space-md)] mb-[var(--space-sm)] shrink-0">
             <button
               type="button"
               onClick={() => setSwitcherOpen((v) => !v)}
@@ -170,7 +170,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         )}
 
-        <nav className={`flex flex-1 flex-col gap-[var(--space-xs)] ${collapsed ? "px-[var(--space-xs)]" : "px-[var(--space-sm)]"}`}>
+        <nav className={`flex flex-1 flex-col gap-[var(--space-xs)] overflow-y-auto ${collapsed ? "px-[var(--space-xs)]" : "px-[var(--space-sm)]"}`}>
           {NAV_ITEMS.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
@@ -195,7 +195,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        <div className={`border-t border-border ${collapsed ? "p-[var(--space-xs)]" : "p-[var(--space-md)]"}`}>
+        <div className={`shrink-0 border-t border-border ${collapsed ? "p-[var(--space-xs)]" : "p-[var(--space-md)]"}`}>
           <Link
             href="/profile"
             title={collapsed ? name : undefined}
@@ -227,7 +227,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1">{children}</main>
+      <main className="h-screen min-w-0 flex-1 overflow-y-auto">{children}</main>
     </div>
   );
 }
