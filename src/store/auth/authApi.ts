@@ -146,6 +146,13 @@ export const verifyRegisterOtp = createAsyncThunk(
         JSON.stringify(response.data, null, 2)
       );
 
+      // Defensively reset any QB session data left over from a previous
+      // user on this browser before this session saves its own tokens or
+      // any QB-scoped fetch can fire. Same reasoning as loginUser —
+      // verifyRegisterOtp is the register-flow's own session-establishment
+      // point (see ASSUMPTIONS.md C13), so it needs the same purge.
+      await purgePersistedState(thunkAPI.dispatch);
+
       // ==============================
       // EXTRACT DATA
       // ==============================

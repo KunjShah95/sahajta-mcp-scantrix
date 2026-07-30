@@ -8,7 +8,7 @@ import {
   getQuickBooksStatus,
   updateQuickBooksVendor,
 } from "./quickBooksApi";
-import { appleLogin, googleLogin, loginUser, logoutUser } from "../auth/authApi";
+import { isSessionBoundary } from "../sessionBoundary";
 
 export interface Vendor {
   _id: string;
@@ -97,14 +97,10 @@ const quickBooksSlice = createSlice({
     // This is the only persisted slice in the app (see the persistReducer
     // whitelist in store/index.ts), so it's the one place a value can
     // survive across users on a shared browser. Reset it to initialState on
-    // every logout and every fresh login — before any component can read a
-    // qbConnectionId left over from whoever used this browser last.
-    builder
-      .addCase(logoutUser.fulfilled, () => initialState)
-      .addCase(logoutUser.rejected, () => initialState)
-      .addCase(loginUser.fulfilled, () => initialState)
-      .addCase(googleLogin.fulfilled, () => initialState)
-      .addCase(appleLogin.fulfilled, () => initialState);
+    // every session start/end (see sessionBoundary.ts) — before any
+    // component can read a qbConnectionId left over from whoever used this
+    // browser last.
+    builder.addMatcher(isSessionBoundary, () => initialState);
 
     // ── Get My Connections (bootstrap) ─────────────────────────────────
     builder
