@@ -19,8 +19,10 @@ const AUTH_ONLY_REDIRECT_ROUTES = ["/login", "/register"];
 // Full-screen/transitional routes that never show the persistent app shell
 // (C12), even once authenticated — same list as PUBLIC_ROUTES (all
 // transient auth screens) plus /paywall, which is deliberately a full-bleed
-// block screen matching mobile's modal-like presentation.
-const NO_SHELL_ROUTES = [...PUBLIC_ROUTES, "/paywall", "/google-drive"];
+// block screen matching mobile's modal-like presentation, and
+// /invoices/preview, which is the same: a full-bleed document viewer with
+// its own close button, not a page meant to sit next to the sidebar.
+const NO_SHELL_ROUTES = [...PUBLIC_ROUTES, "/paywall", "/google-drive", "/invoices/preview"];
 
 function matchesRoute(pathname: string, routes: string[]): boolean {
   return routes.some((route) => pathname === route || pathname.startsWith(`${route}/`));

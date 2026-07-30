@@ -21,8 +21,8 @@ export function InvoicePreviewContent() {
   const isPdf = mimeType.includes("pdf") || url.toLowerCase().includes(".pdf");
 
   return (
-    <div className="flex min-h-screen flex-col bg-black">
-      <div className="flex h-[60px] items-center justify-between bg-[#1F2937] px-[var(--space-md)]">
+    <div className="flex h-screen flex-col bg-black">
+      <div className="flex h-[60px] shrink-0 items-center justify-between bg-[#1F2937] px-[var(--space-md)]">
         <button
           type="button"
           onClick={() => router.back()}
@@ -35,14 +35,20 @@ export function InvoicePreviewContent() {
         <span className="w-10" />
       </div>
 
-      {loading && url && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-[var(--space-sm)]">
-          <Spinner size="lg" tone="white" />
-          <p className="text-body-sm font-medium text-white">Loading preview...</p>
-        </div>
-      )}
+      {/* relative + flex-1 on a h-screen ancestor gives this a definite
+          height, which the iframe/img below need to resolve h-full against —
+          without it an iframe collapses to the browser's ~150px default. The
+          spinner is absolutely positioned over that same box instead of
+          taking its own flex slot, so it overlays the content area instead
+          of splitting it in half while loading. */}
+      <div className="relative flex-1 overflow-auto">
+        {loading && url && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-[var(--space-sm)]">
+            <Spinner size="lg" tone="white" />
+            <p className="text-body-sm font-medium text-white">Loading preview...</p>
+          </div>
+        )}
 
-      <div className="flex-1">
         {url ? (
           isPdf ? (
             <iframe src={url} title="Invoice PDF" className="h-full w-full border-none" onLoad={() => setLoading(false)} />
