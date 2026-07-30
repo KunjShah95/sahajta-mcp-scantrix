@@ -22,10 +22,18 @@ export function BrandIcon({
   name,
   size = 24,
   className,
+  monochrome = false,
 }: {
   name: BrandName;
   size?: number;
   className?: string;
+  /** Renders with fill="currentColor" instead of the brand's own hex, so it
+   * follows a surrounding text color (active/hover states, dark rails) the
+   * way every other icon in a nav row already does. Reserve this for
+   * chrome like a dark sidebar rail — anywhere the mark represents the
+   * brand itself (a "Connect to X" button, a status card) should keep the
+   * real brand color; see the note above on why that's deliberate. */
+  monochrome?: boolean;
 }) {
   const icon = BRANDS[name];
   return (
@@ -33,7 +41,7 @@ export function BrandIcon({
       viewBox="0 0 24 24"
       width={size}
       height={size}
-      fill={`#${icon.hex}`}
+      fill={monochrome ? "currentColor" : `#${icon.hex}`}
       className={className}
       role="img"
       aria-label={icon.title}

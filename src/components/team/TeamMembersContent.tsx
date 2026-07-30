@@ -295,9 +295,9 @@ export function TeamMembersContent() {
       )}
 
       {sheetVisible && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={() => !sending && setSheetVisible(false)}>
+        <div className="fixed inset-0 z-50 flex cursor-pointer items-end justify-center bg-black/40 sm:items-center" onClick={() => !sending && setSheetVisible(false)}>
           <div
-            className="w-full max-w-md rounded-t-2xl bg-white p-[var(--space-lg)] sm:rounded-2xl"
+            className="w-full max-w-md cursor-auto rounded-t-2xl bg-white p-[var(--space-lg)] sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-[var(--space-md)] flex items-center justify-between">

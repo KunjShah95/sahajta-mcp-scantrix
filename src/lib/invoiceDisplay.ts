@@ -19,10 +19,13 @@ interface InvoiceStatusTheme {
 export const INVOICE_STATUS_THEME: Record<InvoiceStatus, InvoiceStatusTheme> = {
   auto: {
     label: "Auto-Posted",
-    badgeClass: "bg-success/10 text-success",
-    cardBgClass: "bg-[#E8F7F1]",
-    accentHex: "#21A77A",
-    accentTextClass: "text-[#21A77A]",
+    badgeClass: "bg-primary-100 text-primary-700",
+    cardBgClass: "bg-primary-50",
+    // Same dark green as the sidebar/pending-review card (--color-primary-900)
+    // rather than a separate success-green, so "auto-posted" reads as one
+    // consistent brand color everywhere instead of two different greens.
+    accentHex: "#06332f",
+    accentTextClass: "text-primary-700",
   },
   manual: {
     label: "Manually Posted",

@@ -434,7 +434,7 @@ export function VendorsContent() {
                           onClick={() => handleDeactivate(vendor)}
                           disabled={isDeactivating}
                           aria-label={`Deactivate ${vendor.displayName}`}
-                          className="flex h-8 w-8 items-center justify-center rounded-md bg-error/10 text-error disabled:opacity-60"
+                          className="flex h-8 w-8 items-center justify-center rounded-md bg-error/10 text-error disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {isDeactivating ? "…" : <Ban size={16} strokeWidth={2} />}
                         </button>
@@ -445,7 +445,7 @@ export function VendorsContent() {
                         onClick={() => handleReactivate(vendor)}
                         disabled={isReactivating}
                         aria-label={`Reactivate ${vendor.displayName}`}
-                        className="flex h-8 items-center gap-[var(--space-xs)] rounded-md bg-primary/10 px-[var(--space-sm)] text-caption font-bold text-primary disabled:opacity-60"
+                        className="flex h-8 items-center gap-[var(--space-xs)] rounded-md bg-primary/10 px-[var(--space-sm)] text-caption font-bold text-primary disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {isReactivating ? "…" : <RotateCcw size={14} strokeWidth={2.25} />}
                         Reactivate
@@ -460,9 +460,9 @@ export function VendorsContent() {
       </div>
 
       {sheetVisible && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={closeSheet}>
+        <div className="fixed inset-0 z-50 flex cursor-pointer items-end justify-center bg-black/40 sm:items-center" onClick={closeSheet}>
           <div
-            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-[var(--space-lg)] sm:rounded-2xl"
+            className="max-h-[90vh] w-full max-w-md cursor-auto overflow-y-auto rounded-t-2xl bg-white p-[var(--space-lg)] sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-[var(--space-md)] flex items-center justify-between">

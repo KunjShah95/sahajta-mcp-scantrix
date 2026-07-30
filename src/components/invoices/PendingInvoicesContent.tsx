@@ -48,15 +48,22 @@ export function PendingInvoicesContent() {
   const router = useRouter();
 
   const { pendingInvoices, loading, error } = useAppSelector((state) => state.invoice);
+  const qbConnectionId = useAppSelector((state) => state.quickBooks.qbConnectionId);
 
   const refetch = () => {
     dispatch(getInvoices());
   };
 
+  // Depends on qbConnectionId (not just mount) so switching companies in the
+  // top bar re-fetches for the new entity instead of leaving the previous
+  // one's invoices on screen until a manual reload. Guarded on qbConnectionId
+  // being set since right after login it's briefly blank — see
+  // DashboardContent's identical guard for why firing earlier 400s.
   useEffect(() => {
+    if (!qbConnectionId) return;
     refetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [qbConnectionId]);
 
   const handleOpenInvoice = (invoice: InvoiceRecord) => {
     dispatch(clearSelectedVendor());

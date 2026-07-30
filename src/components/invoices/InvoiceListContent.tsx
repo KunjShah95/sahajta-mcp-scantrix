@@ -17,24 +17,22 @@ import {
 } from "@/lib/invoiceDisplay";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { SkeletonListRows } from "@/components/ui/Skeleton";
+import { StatRow } from "@/components/invoices/StatRow";
 
 type ListType = "auto" | "manual" | "failed";
 
 const TAB_ORDER: ListType[] = ["auto", "manual", "failed"];
 
-const LIST_META: Record<ListType, { title: string; tabLabel: string; emptyMessage: string }> = {
+const LIST_META: Record<ListType, { tabLabel: string; emptyMessage: string }> = {
   auto: {
-    title: "Auto-Posted Invoices",
     tabLabel: "Auto-Posted",
     emptyMessage: "No auto-posted invoices yet. Invoices with high confidence will appear here.",
   },
   manual: {
-    title: "Manually Posted Invoices",
     tabLabel: "Manually Posted",
     emptyMessage: "No manually posted invoices yet. Reviewed invoices will appear here.",
   },
   failed: {
-    title: "Failed Invoices",
     tabLabel: "Failed",
     emptyMessage: "No failed invoices. Invoices that couldn't be processed will appear here.",
   },
@@ -57,15 +55,22 @@ export function InvoiceListContent() {
   const { autoPostedInvoices, manualPostedInvoices, failedInvoices, loading, error } = useAppSelector(
     (state) => state.invoice,
   );
+  const qbConnectionId = useAppSelector((state) => state.quickBooks.qbConnectionId);
 
   const refetch = () => {
     dispatch(getInvoices());
   };
 
+  // Depends on qbConnectionId (not just mount) so switching companies in the
+  // top bar re-fetches for the new entity instead of leaving the previous
+  // one's invoices on screen until a manual reload. Guarded on qbConnectionId
+  // being set since right after login it's briefly blank — see
+  // DashboardContent's identical guard for why firing earlier 400s.
   useEffect(() => {
+    if (!qbConnectionId) return;
     refetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [qbConnectionId]);
 
   const invoices: InvoiceRecord[] = useMemo(() => {
     if (type === "auto") return autoPostedInvoices;
@@ -86,18 +91,13 @@ export function InvoiceListContent() {
 
   return (
     <div>
-      <div className="flex h-16 items-center gap-[var(--space-sm)] px-[var(--space-lg)]" style={{ backgroundColor: theme.accentHex }}>
-        <h1 className="text-body font-extrabold text-white">{meta.title}</h1>
-        <span className="rounded-pill bg-white/25 px-[var(--space-sm)] py-[2px] text-caption font-bold text-white">
-          {invoices.length}
-        </span>
-      </div>
-
       <div className="mx-auto max-w-3xl p-[var(--space-lg)]">
         {/* Category tabs — this is the only in-page way to reach Manually
             Posted / Failed; the sidebar's "Invoices" link carries no query
-            string and always lands here defaulted to Auto-Posted. */}
-        <div className="mb-[var(--space-lg)] flex gap-[var(--space-xs)] rounded-md bg-background-alt p-[var(--space-xs)]">
+            string and always lands here defaulted to Auto-Posted. Plain/
+            uncolored by design — the three StatRow boxes below carry the
+            per-status color instead of the tab bar itself. */}
+        <div className="mb-[var(--space-md)] flex gap-[var(--space-xs)] rounded-md bg-background-alt p-[var(--space-xs)]">
           {TAB_ORDER.map((t) => {
             const active = t === type;
             return (
@@ -107,14 +107,19 @@ export function InvoiceListContent() {
                 onClick={() => router.replace(`/invoices?type=${t}`)}
                 aria-current={active ? "page" : undefined}
                 className={`flex-1 rounded-md px-[var(--space-sm)] py-[var(--space-xs)] text-body-sm font-semibold ${
-                  active ? "bg-white shadow-sm" : "text-text-secondary"
+                  active ? "bg-white text-trust-navy shadow-sm" : "text-text-secondary"
                 }`}
-                style={active ? { color: INVOICE_STATUS_THEME[t].accentHex } : undefined}
               >
                 {LIST_META[t].tabLabel} ({tabCounts[t]})
               </button>
             );
           })}
+        </div>
+
+        <div className="mb-[var(--space-lg)] flex flex-col gap-[var(--space-sm)] sm:flex-row">
+          <StatRow count={tabCounts.auto} label="Auto-Posted" href="/invoices?type=auto" theme="auto" />
+          <StatRow count={tabCounts.manual} label="Manually Posted" href="/invoices?type=manual" theme="manual" />
+          <StatRow count={tabCounts.failed} label="Failed" href="/invoices?type=failed" theme="failed" />
         </div>
 
         {loading ? (

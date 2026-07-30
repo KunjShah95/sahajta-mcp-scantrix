@@ -173,7 +173,7 @@ export function EditProfileContent() {
         type="button"
         onClick={handleSaveProfile}
         disabled={!canSave}
-        className="mt-[var(--space-lg)] h-[54px] w-full rounded-md bg-primary font-bold text-white disabled:opacity-55"
+        className="mt-[var(--space-lg)] h-[54px] w-full rounded-md bg-primary font-bold text-white disabled:cursor-not-allowed disabled:opacity-55"
       >
         {isSaving ? "Saving…" : "Save Changes"}
       </button>

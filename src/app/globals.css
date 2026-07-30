@@ -11,6 +11,22 @@
 @theme {
   /* colors.ts */
   --color-primary: #1fb6aa;
+
+  /* Teal scale added for the dashboard/sidebar design revamp — 500 is kept
+     identical to --color-primary above so existing bg-primary/text-primary
+     call sites and this scale read as the same brand teal, just with dark
+     (900) and light-tint (50-300) values available for depth. */
+  --color-primary-50: #eafaf9;
+  --color-primary-100: #d2f2ee;
+  --color-primary-200: #a3e2da;
+  --color-primary-300: #71cec2;
+  --color-primary-400: #3fb9ac;
+  --color-primary-500: #1fb6aa;
+  --color-primary-600: #17998f;
+  --color-primary-700: #107b73;
+  --color-primary-800: #0a5551;
+  --color-primary-900: #06332f;
+
   --color-background: #ffffff;
   --color-background-soft: #f8fafc;
   --color-background-alt: #f7f8fa;
