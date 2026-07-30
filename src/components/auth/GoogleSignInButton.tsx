@@ -102,7 +102,7 @@ export function GoogleSignInButton({ onSuccess, onError }: GoogleSignInButtonPro
       <Script
         src="https://accounts.google.com/gsi/client"
         strategy="afterInteractive"
-        onLoad={() => setScriptReady(true)}
+        onReady={() => setScriptReady(true)}
       />
       <div ref={buttonRef} className="flex w-full justify-center" />
     </>
