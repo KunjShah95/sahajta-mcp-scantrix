@@ -1,5 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
 import { fetchPlans, fetchMySubscription, choosePlan } from "./subscriptionApi";
+import { isSessionBoundary } from "../sessionBoundary";
 
 export interface PlanCatalogEntry {
   key: "trial" | "standard" | "enterprise";
@@ -106,6 +107,11 @@ const subscriptionSlice = createSlice({
       .addCase(choosePlan.rejected, (state) => {
         state.choosingPlan = false;
       });
+
+    // See sessionBoundary.ts — plan/subscription/billing-slot data is
+    // account-scoped and must not survive into the next session on a
+    // shared browser.
+    builder.addMatcher(isSessionBoundary, () => initialState);
   },
 });
 
