@@ -238,10 +238,23 @@ export function DashboardContent() {
   };
 
   useEffect(() => {
-    syncInvoices();
-    if (accessToken) {
-      dispatch(getMyQBConnections({ accessToken }));
-    }
+    let cancelled = false;
+    (async () => {
+      // getInvoices() is scoped by whatever qbConnectionId is currently in
+      // the store (via the X-QB-Id header — see lib/api.ts's interceptor),
+      // and the backend 400s outright if that header is missing. Right
+      // after a fresh login that id is deliberately blank (the login-time
+      // purge resets it so a previous session's value can't leak in), so
+      // firing this before getMyQBConnections has had a chance to populate
+      // the real one made every first load fail until a manual retry.
+      if (accessToken) {
+        await dispatch(getMyQBConnections({ accessToken }));
+      }
+      if (!cancelled) syncInvoices();
+    })();
+    return () => {
+      cancelled = true;
+    };
     // Only ever needs to run once, on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
