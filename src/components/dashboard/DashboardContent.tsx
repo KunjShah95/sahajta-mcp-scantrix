@@ -368,7 +368,13 @@ export function DashboardContent() {
 
       {invoiceLoading && recentInvoices.length === 0 && <SkeletonListRows count={3} />}
 
-      {!invoiceLoading && invoiceError && recentInvoices.length === 0 && (
+      {/* Show the error whenever the fetch failed, regardless of whether
+          recentInvoices happens to be non-empty — a failed fetch means
+          whatever's in state is not this session's confirmed data, and
+          masking that behind stale data is exactly how the cross-account
+          invoice leak went unnoticed. Don't render the (possibly stale)
+          list alongside it. */}
+      {!invoiceLoading && invoiceError && (
         <ErrorState message="Couldn't load recent invoices." onRetry={syncInvoices} />
       )}
 
@@ -381,9 +387,10 @@ export function DashboardContent() {
         </Card>
       )}
 
-      {recentInvoices.map((invoice) => (
-        <InvoiceRow key={invoice._id} invoice={invoice} />
-      ))}
+      {!invoiceError &&
+        recentInvoices.map((invoice) => (
+          <InvoiceRow key={invoice._id} invoice={invoice} />
+        ))}
     </div>
   );
 }

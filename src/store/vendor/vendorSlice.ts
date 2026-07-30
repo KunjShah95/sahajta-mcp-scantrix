@@ -1,5 +1,7 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
+import { isSessionBoundary } from "../sessionBoundary";
+
 interface CreatedVendor {
   name: string;
   currency: string;
@@ -48,6 +50,11 @@ const vendorSlice = createSlice({
     clearSelectedVendor: (state) => {
       state.selectedVendor = null;
     },
+  },
+  extraReducers: (builder) => {
+    // See sessionBoundary.ts — a previous session's created/selected vendor
+    // must not survive into the next session on a shared browser.
+    builder.addMatcher(isSessionBoundary, () => initialState);
   },
 });
 

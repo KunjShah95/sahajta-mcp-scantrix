@@ -1,13 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
 
-import {
-  registerUser,
-  loginUser,
-  logoutUser,
-  updateProfileIcon,
-  googleLogin,
-  appleLogin,
-} from "../auth/authApi";
+import { isSessionBoundary } from "../sessionBoundary";
 
 import {
   scanInvoice,
@@ -242,6 +235,15 @@ const invoiceSlice = createSlice({
     builder.addCase(getInvoices.rejected, (state, action) => {
       state.loading = false;
       state.error = action.payload;
+      // A failed fetch (e.g. token expiry, or a genuinely disconnected
+      // account getting a 400 for missing X-QB-Id) must not leave a
+      // previous successful fetch's data on screen — otherwise the UI
+      // renders stale invoices as if they belong to whoever's looking now.
+      state.invoices = [];
+      state.autoPostedInvoices = [];
+      state.manualPostedInvoices = [];
+      state.pendingInvoices = [];
+      state.failedInvoices = [];
     });
 
     // ======================================
@@ -319,6 +321,15 @@ const invoiceSlice = createSlice({
       state.updatingExtractedDataError = action.payload;
     });
 
+    // ======================================
+    // SESSION BOUNDARY
+    // ======================================
+    // Not persisted, but very much alive in memory for the tab's whole SPA
+    // lifetime — a logout/login/register that never hard-reloads the page
+    // would otherwise leave the previous account's invoices rendering under
+    // the new session. Reset on every session start/end (see
+    // sessionBoundary.ts).
+    builder.addMatcher(isSessionBoundary, () => initialState);
   },
 });
 
