@@ -93,15 +93,6 @@ const quickBooksSlice = createSlice({
     },
   },
   extraReducers: (builder) => {
-    // ── Session boundary ────────────────────────────────────────────────
-    // This is the only persisted slice in the app (see the persistReducer
-    // whitelist in store/index.ts), so it's the one place a value can
-    // survive across users on a shared browser. Reset it to initialState on
-    // every session start/end (see sessionBoundary.ts) — before any
-    // component can read a qbConnectionId left over from whoever used this
-    // browser last.
-    builder.addMatcher(isSessionBoundary, () => initialState);
-
     // ── Get My Connections (bootstrap) ─────────────────────────────────
     builder
       .addCase(getMyQBConnections.pending, (state) => {
@@ -233,6 +224,16 @@ const quickBooksSlice = createSlice({
         state.taxCodesLoading = false;
         state.taxCodesError = action.payload as string;
       });
+
+    // ── Session boundary ────────────────────────────────────────────────
+    // This is the only persisted slice in the app (see the persistReducer
+    // whitelist in store/index.ts), so it's the one place a value can
+    // survive across users on a shared browser. Reset it to initialState on
+    // every session start/end (see sessionBoundary.ts) — before any
+    // component can read a qbConnectionId left over from whoever used this
+    // browser last. Must come after every addCase above — RTK's builder
+    // requires all addCase calls before any addMatcher call.
+    builder.addMatcher(isSessionBoundary, () => initialState);
   },
 });
 
