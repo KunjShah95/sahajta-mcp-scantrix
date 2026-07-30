@@ -40,17 +40,32 @@ export function GoogleSignInButton({ onSuccess, onError }: GoogleSignInButtonPro
 
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
+  // Callers commonly pass onSuccess/onError as fresh inline closures on every
+  // render (e.g. LoginForm/RegisterForm rebuild them each keystroke since
+  // they're plain consts / inline arrows, not useCallback). Reading them via
+  // refs instead of depending on them directly keeps handleCredential's
+  // identity — and therefore the init effect below — stable across those
+  // renders. Without this, google.accounts.id.initialize()/renderButton()
+  // re-ran on every keystroke in the surrounding form, tearing down and
+  // rebuilding the button and visibly shifting the page layout each time.
+  const onSuccessRef = useRef(onSuccess);
+  const onErrorRef = useRef(onError);
+  useEffect(() => {
+    onSuccessRef.current = onSuccess;
+    onErrorRef.current = onError;
+  }, [onSuccess, onError]);
+
   const handleCredential = useCallback(
     async (response: { credential: string }) => {
       const result = await dispatch(googleLogin({ idToken: response.credential }));
       if (googleLogin.fulfilled.match(result)) {
-        onSuccess();
+        onSuccessRef.current();
       } else {
         const payload = result.payload;
-        onError(typeof payload === "string" ? payload : "Google sign-in failed");
+        onErrorRef.current(typeof payload === "string" ? payload : "Google sign-in failed");
       }
     },
-    [dispatch, onSuccess, onError],
+    [dispatch],
   );
 
   useEffect(() => {
