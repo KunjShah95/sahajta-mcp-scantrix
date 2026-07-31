@@ -500,6 +500,42 @@ export const createQuickBooksAccount = createAsyncThunk(
 );
 
 // ================================
+// SYNC GL ACCOUNTS (pull latest from QuickBooks)
+// ================================
+interface SyncAccountsPayload {
+  accessToken: string;
+}
+
+export const syncQuickBooksAccounts = createAsyncThunk(
+  "quickbooks/syncAccounts",
+  async (data: SyncAccountsPayload, thunkAPI) => {
+    const state = thunkAPI.getState() as RootState;
+    const qbConnectionId = state.quickBooks.qbConnectionId;
+    try {
+      console.log("========== SYNC GL ACCOUNTS REQUEST ==========");
+      const response = await api.post(
+        "/quickbooks/accounts/sync",
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${data.accessToken}`,
+            ...(qbConnectionId ? { "X-QB-Id": qbConnectionId } : {}),
+          },
+        },
+      );
+      console.log("========== SYNC GL ACCOUNTS SUCCESS ==========");
+      console.log(JSON.stringify(response.data, null, 2));
+      return response.data;
+    } catch (error: any) {
+      console.log("========== SYNC GL ACCOUNTS ERROR ==========");
+      const message =
+        error?.response?.data?.message || error?.message || "Failed to sync GL accounts from QuickBooks";
+      return thunkAPI.rejectWithValue({ message, statusCode: error?.response?.data?.statusCode });
+    }
+  },
+);
+
+// ================================
 // TAX CODES
 // ================================
 interface FetchTaxCodesPayload {
@@ -539,6 +575,42 @@ export const fetchQuickBooksTaxCodes = createAsyncThunk(
         error?.message ||
         "Failed to fetch tax codes";
       return thunkAPI.rejectWithValue(message);
+    }
+  },
+);
+
+// ================================
+// SYNC TAX CODES (pull latest from QuickBooks)
+// ================================
+interface SyncTaxCodesPayload {
+  accessToken: string;
+}
+
+export const syncQuickBooksTaxCodes = createAsyncThunk(
+  "quickbooks/syncTaxCodes",
+  async (data: SyncTaxCodesPayload, thunkAPI) => {
+    const state = thunkAPI.getState() as RootState;
+    const qbConnectionId = state.quickBooks.qbConnectionId;
+    try {
+      console.log("========== SYNC TAX CODES REQUEST ==========");
+      const response = await api.post(
+        "/quickbooks/taxcodes/sync",
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${data.accessToken}`,
+            ...(qbConnectionId ? { "X-QB-Id": qbConnectionId } : {}),
+          },
+        },
+      );
+      console.log("========== SYNC TAX CODES SUCCESS ==========");
+      console.log(JSON.stringify(response.data, null, 2));
+      return response.data;
+    } catch (error: any) {
+      console.log("========== SYNC TAX CODES ERROR ==========");
+      const message =
+        error?.response?.data?.message || error?.message || "Failed to sync tax codes from QuickBooks";
+      return thunkAPI.rejectWithValue({ message, statusCode: error?.response?.data?.statusCode });
     }
   },
 );
