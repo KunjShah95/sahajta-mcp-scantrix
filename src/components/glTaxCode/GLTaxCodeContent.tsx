@@ -1,7 +1,8 @@
 "use client";
 
+import { useRouter, useSearchParams } from "next/navigation";
 import { BookOpen, Landmark, Plus, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -57,6 +58,8 @@ const EMPTY_ACCOUNT_FORM: AccountFormState = {
 
 export function GLTaxCodeContent() {
   const dispatch = useAppDispatch();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const accessToken = useAppSelector((state) => state.auth.user?.data?.accessToken);
   const qbConnectionId = useAppSelector((state) => state.quickBooks.qbConnectionId);
   const accounts = useAppSelector((state) => state.quickBooks.accounts);
@@ -134,6 +137,24 @@ export function GLTaxCodeContent() {
     setFormError("");
     setSheetVisible(true);
   };
+
+  // Lets the sidebar's "Create → GL Account" shortcut land straight in
+  // create mode via /gl-tax-codes?create=true — also forces the accounts
+  // tab active since the create button only ever shows there. Waits for
+  // loadingConnections to resolve so canManage reflects the real role
+  // before deciding whether to open it; runs at most once per page load.
+  const autoOpenedCreateRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenedCreateRef.current) return;
+    if (searchParams.get("create") !== "true") return;
+    if (loadingConnections) return;
+    if (!canManage) return;
+    autoOpenedCreateRef.current = true;
+    setActiveTab("accounts");
+    openCreateSheet();
+    router.replace("/gl-tax-codes");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, loadingConnections, canManage]);
 
   const closeSheet = () => {
     if (saving) return;
@@ -305,9 +326,9 @@ export function GLTaxCodeContent() {
       </div>
 
       {sheetVisible && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={closeSheet}>
+        <div className="fixed inset-0 z-50 flex cursor-pointer items-end justify-center bg-black/40 sm:items-center" onClick={closeSheet}>
           <div
-            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-[var(--space-lg)] sm:rounded-2xl"
+            className="max-h-[90vh] w-full max-w-md cursor-auto overflow-y-auto rounded-t-2xl bg-white p-[var(--space-lg)] sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-[var(--space-md)] flex items-center justify-between">

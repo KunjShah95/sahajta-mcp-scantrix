@@ -1,75 +1,55 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Clock, Upload } from "lucide-react";
-import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Check, ChevronRight, Clock, Filter, RefreshCw, Upload } from "lucide-react";
+import { ChangeEvent, DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { SkeletonListRows } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
+import { StatRow } from "@/components/invoices/StatRow";
+import { TopVendorsCard } from "@/components/invoices/TopVendorsCard";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { getInvoices } from "@/store/invoice/invoiceApi";
-import { connectQuickBooks, getMyQBConnections } from "@/store/quickBooks/quickBooksApi";
-import { scanInvoice } from "@/store/invoice/invoiceApi";
+import { getInvoices, rejectInvoice, scanInvoice } from "@/store/invoice/invoiceApi";
+import { connectQuickBooks, getMyQBConnections, getQuickBooksStatus } from "@/store/quickBooks/quickBooksApi";
 import { showToast } from "@/lib/dialogManager";
-import { capitalizeWords } from "@/lib/textFormat";
-import {
-  INVOICE_STATUS_THEME,
-  getInvoiceAmount,
-  getInvoiceFailureReason,
-  getInvoiceStatus,
-  getInvoiceTitle,
-} from "@/lib/invoiceDisplay";
+import { getInvoiceAmount, getInvoiceFailureReason, getInvoiceStatus } from "@/lib/invoiceDisplay";
+import { requestExpandTransition } from "@/lib/pageTransition";
+import { setSelectedInvoice } from "@/store/invoice/invoiceSlice";
 import type { InvoiceRecord } from "@/store/invoice/invoiceSlice";
 
-function greetingFor(name: string): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return `Good morning, ${name}`;
-  if (hour < 18) return `Good afternoon, ${name}`;
-  return `Good evening, ${name}`;
+// This session's own last successful fetch, not a backend-tracked sync
+// cadence (no such field exists yet) — "just now" right after mount/Sync
+// now, ticking forward via the caller's re-render.
+function timeAgo(ms: number): string {
+  const minutes = Math.floor((Date.now() - ms) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-// Vertical scoreboard row — replaces the old side-by-side SummaryCard grid
-// now that the stat column sits narrower, next to the dropzone. Same theme
-// classes and same live counts, just laid out horizontally per row instead
-// of stacked vertically per card.
-function StatRow({
-  count,
-  label,
-  href,
-  theme,
-}: {
-  count: number;
-  label: string;
-  href: string;
-  theme: "auto" | "manual" | "failed";
-}) {
-  const colorClass =
-    theme === "auto" ? "text-success" : theme === "manual" ? "text-warning" : "text-error";
-  return (
-    <Link
-      href={href}
-      className={`flex flex-1 items-center justify-between gap-[var(--space-sm)] rounded-lg p-[var(--space-md)] ${INVOICE_STATUS_THEME[theme].cardBgClass}`}
-    >
-      <span className={`text-body-sm font-semibold ${colorClass}`}>{label}</span>
-      <span className={`text-h1 font-bold ${colorClass}`}>{count}</span>
-    </Link>
-  );
-}
+const MAX_UPLOAD_FILES = 20;
+const WEEKLY_SCAN_WEEKS = 5;
 
 // Real dropzone matching the landing page's ScanVisual card style (dashed
 // border, centered icon-in-circle, generous padding) — visual language
 // only, none of that component's fake demo content. Both drag-and-drop and
-// click-to-browse funnel into the same `onFileSelected`, which the parent
+// click-to-browse funnel into the same `onFilesSelected`, which the parent
 // wires to the exact scanInvoice upload path the old small button used —
-// no parallel upload logic.
+// no parallel upload logic, just called once per file.
 function InvoiceDropzone({
   uploading,
-  onFileSelected,
+  progressLabel,
+  onFilesSelected,
 }: {
   uploading: boolean;
-  onFileSelected: (file: File) => void;
+  progressLabel?: string;
+  onFilesSelected: (files: File[]) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -100,21 +80,21 @@ function InvoiceDropzone({
     event.preventDefault();
     dragDepth.current = 0;
     setDragActive(false);
-    const file = event.dataTransfer.files?.[0];
-    if (file) onFileSelected(file);
+    const files = Array.from(event.dataTransfer.files ?? []);
+    if (files.length > 0) onFilesSelected(files);
   };
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (file) onFileSelected(file);
+    if (files.length > 0) onFilesSelected(files);
   };
 
   return (
     <div
       role="button"
       tabIndex={0}
-      aria-label="Upload invoice — drag and drop or click to browse"
+      aria-label="Upload invoices — drag and drop or click to browse, up to 20 at a time"
       onClick={openPicker}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -126,77 +106,140 @@ function InvoiceDropzone({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`flex min-h-[280px] flex-1 cursor-pointer flex-col items-center justify-center gap-[var(--space-sm)] rounded-xl border-2 border-dashed p-[var(--space-xl)] text-center transition-colors ${
-        dragActive ? "border-primary bg-primary/10" : "border-primary/40 bg-background-soft hover:bg-primary/5"
+      className={`flex min-h-[280px] flex-1 cursor-pointer flex-col items-center justify-center gap-[var(--space-sm)] rounded-lg border-2 border-dashed p-[var(--space-xl)] text-center transition-colors ${
+        dragActive ? "border-primary-500 bg-primary-100" : "border-primary-300 bg-background-soft hover:border-primary-500 hover:bg-primary-100"
       } ${uploading ? "pointer-events-none opacity-70" : ""}`}
     >
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*,.pdf"
+        multiple
         className="hidden"
         disabled={uploading}
         onChange={handleChange}
       />
-      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-sm">
+      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-100 shadow-sm">
         {uploading ? <Spinner size="md" /> : <Upload size={26} strokeWidth={2} className="text-primary" />}
       </span>
       <p className="text-body font-bold text-trust-navy">
-        {uploading ? "Uploading…" : "Drag & drop your invoice"}
+        {uploading ? progressLabel || "Uploading…" : "Drag & drop your invoices"}
       </p>
       <p className="text-body-sm text-text-secondary">
-        {uploading ? "This won't take long." : "or click to browse — PDF or photo"}
+        {uploading ? "This won't take long." : `or click to browse — PDF or photo, up to ${MAX_UPLOAD_FILES} at a time`}
       </p>
     </div>
   );
 }
 
-function InvoiceRow({ invoice }: { invoice: InvoiceRecord }) {
-  const status = getInvoiceStatus(invoice.postedStatus);
-  const theme = INVOICE_STATUS_THEME[status];
-  const reason = getInvoiceFailureReason(invoice);
+// Independent of INVOICE_STATUS_THEME (auto/manual/pending/processing/failed)
+// — this table collapses auto+manual into one "Posted" pill, matching the
+// simpler three-bucket view this specific table is going for. Posted reuses
+// the same dark-green primary tokens as the rest of the app's auto-posted
+// styling per the earlier color-unification pass.
+const RECENT_STATUS_STYLE = {
+  posted: { label: "Posted", dot: "bg-primary-600", text: "text-primary-700", bg: "bg-primary-50" },
+  pending: { label: "Pending", dot: "bg-warning", text: "text-warning", bg: "bg-warning/10" },
+  processing: { label: "Processing", dot: "bg-warning", text: "text-warning", bg: "bg-warning/10" },
+  failed: { label: "Failed", dot: "bg-error", text: "text-error", bg: "bg-error/10" },
+} as const;
 
-  if (status === "processing") {
-    return (
-      <div className={`mb-[var(--space-sm)] rounded-lg p-[var(--space-md)] ${theme.cardBgClass}`}>
-        <div className="flex items-center justify-between gap-[var(--space-sm)]">
-          <span className="flex-1 truncate font-bold text-text-primary">
-            {invoice.file?.originalName || "Invoice"}
-          </span>
-          <span className="text-body-sm font-bold text-warning">Processing</span>
-        </div>
-        <div className="mt-[var(--space-sm)] flex items-center gap-[var(--space-xs)]">
-          <span
-            aria-hidden
-            className="h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary"
-          />
-          <span className="text-body-sm text-text-secondary">Invoice is being processed…</span>
-        </div>
-      </div>
-    );
-  }
+function recentStatusKey(status: ReturnType<typeof getInvoiceStatus>): keyof typeof RECENT_STATUS_STYLE {
+  if (status === "auto" || status === "manual") return "posted";
+  if (status === "processing") return "processing";
+  if (status === "failed") return "failed";
+  return "pending";
+}
+
+// "Yesterday" instead of "1 day ago" — matches how people actually talk
+// about a date that recent, unlike the plain "N ago" used for sync times.
+function receivedLabel(dateStr?: string): string {
+  if (!dateStr) return "—";
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "—";
+  const hours = Math.floor((Date.now() - date.getTime()) / 3600000);
+  if (hours < 1) return "Just now";
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "Yesterday";
+  return `${days} days ago`;
+}
+
+function RecentInvoiceRow({
+  invoice,
+  selected,
+  onToggleSelect,
+  onOpen,
+}: {
+  invoice: InvoiceRecord;
+  selected: boolean;
+  onToggleSelect: () => void;
+  onOpen: () => void;
+}) {
+  const statusKey = recentStatusKey(getInvoiceStatus(invoice.postedStatus));
+  const style = RECENT_STATUS_STYLE[statusKey];
+  const vendorName = invoice.extractedData?.vendorName || invoice.file?.originalName?.replace(/\.pdf$/i, "") || "Unknown Vendor";
+  const reference = invoice.extractedData?.invoiceNumber ? `#${invoice.extractedData.invoiceNumber}` : null;
+  const failureReason = statusKey === "failed" ? getInvoiceFailureReason(invoice) : "";
 
   return (
-    <div className={`mb-[var(--space-sm)] rounded-lg p-[var(--space-md)] ${theme.cardBgClass}`}>
-      <div className="flex items-center justify-between gap-[var(--space-sm)]">
-        <span className="flex-1 truncate font-bold text-text-primary">{getInvoiceTitle(invoice)}</span>
-        <span className={`text-body-sm font-bold uppercase ${theme.badgeClass.split(" ")[1]}`}>
-          {theme.label}
-        </span>
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+      className={`grid cursor-pointer grid-cols-[auto_auto_2fr_1fr_0.9fr_0.9fr_20px] items-center gap-[var(--space-sm)] rounded-lg px-[var(--space-sm)] py-[var(--space-sm)] ${
+        selected ? "bg-primary-50" : "hover:bg-background-alt"
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={selected}
+        onChange={onToggleSelect}
+        onClick={(event) => event.stopPropagation()}
+        aria-label={`Select ${vendorName}`}
+        className="h-4 w-4 shrink-0 accent-primary"
+      />
+      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-caption font-bold ${style.bg} ${style.text}`}>
+        {vendorName.slice(0, 2).toUpperCase()}
+      </span>
+      <div className="min-w-0">
+        <p className="truncate font-bold text-text-primary">{vendorName}</p>
+        {failureReason ? (
+          <p className="truncate text-caption text-error">{failureReason}</p>
+        ) : reference ? (
+          <p className="truncate text-caption text-text-secondary">{reference}</p>
+        ) : null}
       </div>
-      <div className="mt-[var(--space-sm)] flex items-center gap-[var(--space-xs)]">
-        <span className="h-2.5 w-2.5 rounded-sm bg-text-secondary" />
-        <span className="text-body-sm text-text-secondary">{getInvoiceAmount(invoice)}</span>
-      </div>
-      {reason && <p className="mt-[var(--space-xs)] text-caption font-semibold text-error">{reason}</p>}
+      <span className="text-caption text-text-secondary">{receivedLabel(invoice.createdAt)}</span>
+      <span className={`inline-flex w-fit items-center gap-[6px] rounded-pill px-[var(--space-sm)] py-[2px] text-caption font-bold ${style.bg} ${style.text}`}>
+        <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+        {style.label}
+      </span>
+      <span className="text-right font-bold text-text-primary">{getInvoiceAmount(invoice)}</span>
+      <ChevronRight size={18} strokeWidth={2} className="shrink-0 text-text-secondary" />
     </div>
   );
 }
 
 export function DashboardContent() {
   const dispatch = useAppDispatch();
+  const router = useRouter();
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [connectingQB, setConnectingQB] = useState(false);
+  const [syncingQB, setSyncingQB] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
+  const [, setSyncLabelTick] = useState(0);
+  const [recentTab, setRecentTab] = useState<"all" | "pending" | "failed">("all");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [rejectingBulk, setRejectingBulk] = useState(false);
+  const recentCardRef = useRef<HTMLDivElement>(null);
 
   const user = useAppSelector((state) => state.auth.user);
   const {
@@ -210,12 +253,30 @@ export function DashboardContent() {
   } = useAppSelector((state) => state.invoice);
   const { connected, statusLoading, qbConnectionId } = useAppSelector((state) => state.quickBooks);
 
-  const name = capitalizeWords(user?.data?.user?.firstName || user?.data?.user?.email?.split("@")[0] || "there");
+  // "Last synced" is relative time, so re-render once a minute to keep it
+  // from reading "just now" long after it's stopped being true.
+  useEffect(() => {
+    const interval = setInterval(() => setSyncLabelTick((t) => t + 1), 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   const accessToken: string | undefined = user?.data?.accessToken;
 
-  const syncInvoices = useCallback(() => {
-    dispatch(getInvoices());
+  const syncInvoices = useCallback(async () => {
+    await dispatch(getInvoices());
+    setLastSyncedAt(Date.now());
   }, [dispatch]);
+
+  const handleSyncNow = async () => {
+    if (!accessToken || !qbConnectionId || syncingQB) return;
+    setSyncingQB(true);
+    try {
+      await dispatch(getQuickBooksStatus({ accessToken, qbConnectionId }));
+      await syncInvoices();
+    } finally {
+      setSyncingQB(false);
+    }
+  };
 
   const handleConnectQuickBooks = async () => {
     if (!accessToken || connectingQB) return;
@@ -237,27 +298,28 @@ export function DashboardContent() {
     }
   };
 
+  // Only needs to run once, on mount — this populates the org switcher list,
+  // not per-entity business data.
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      // getInvoices() is scoped by whatever qbConnectionId is currently in
-      // the store (via the X-QB-Id header — see lib/api.ts's interceptor),
-      // and the backend 400s outright if that header is missing. Right
-      // after a fresh login that id is deliberately blank (the login-time
-      // purge resets it so a previous session's value can't leak in), so
-      // firing this before getMyQBConnections has had a chance to populate
-      // the real one made every first load fail until a manual retry.
-      if (accessToken) {
-        await dispatch(getMyQBConnections({ accessToken }));
-      }
-      if (!cancelled) syncInvoices();
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // Only ever needs to run once, on mount.
+    if (accessToken) dispatch(getMyQBConnections({ accessToken }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // getInvoices() is scoped by whatever qbConnectionId is currently in the
+  // store (via the X-QB-Id header — see lib/api.ts's interceptor), and the
+  // backend 400s outright if that header is missing. Right after a fresh
+  // login that id is deliberately blank (the login-time purge resets it so a
+  // previous session's value can't leak in) until getMyQBConnections above
+  // populates the real one, so this is guarded on qbConnectionId being set
+  // rather than firing unconditionally on mount. Depending on qbConnectionId
+  // itself (not just mount) is also what makes switching companies in the
+  // top bar refresh this page's invoices instead of leaving the previous
+  // entity's data on screen until a manual reload.
+  useEffect(() => {
+    if (!qbConnectionId) return;
+    syncInvoices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qbConnectionId]);
 
   // Mirrors DashboardScreen's 3s poll while any invoice is still processing.
   useEffect(() => {
@@ -270,38 +332,164 @@ export function DashboardContent() {
   const pendingText =
     pendingInvoices.length === 1 ? "1 invoice needs your review" : `${pendingInvoices.length} invoices need your review`;
 
-  const recentInvoices = invoices.slice(0, 5);
+  // Which array feeds the table depends on the tab — "Pending"/"Failed" show
+  // the actual pending/failed invoices (not just whichever of the 5 most
+  // recent overall happen to match), since those tabs would otherwise often
+  // render empty.
+  const recentTabInvoices = useMemo(() => {
+    const source = recentTab === "pending" ? pendingInvoices : recentTab === "failed" ? failedInvoices : invoices;
+    return source.slice(0, 5);
+  }, [recentTab, invoices, pendingInvoices, failedInvoices]);
+
+  // Pre-seed selectedInvoice before navigating, same as InvoiceListContent's
+  // handleOpenInvoice — the detail page renders whatever's already in
+  // selectedInvoice while its own getInvoiceDetails fetch is in flight, so
+  // skipping this would flash whatever invoice was last viewed instead.
+  const handleOpenInvoice = (invoice: InvoiceRecord) => {
+    dispatch(setSelectedInvoice(invoice));
+    router.push(`/invoices/${invoice._id}`);
+  };
+
+  // Kicks off the "Recent card grows into the full Invoices page" animation
+  // (see ExpandTransitionOverlay, mounted in AppShell) — the rect must be
+  // captured now, synchronously, since this element unmounts as soon as the
+  // navigation below commits.
+  const handleViewAllInvoices = () => {
+    if (recentCardRef.current) requestExpandTransition(recentCardRef.current);
+    router.push("/invoices");
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectedInvoices = useMemo(
+    () => invoices.filter((invoice) => selectedIds.has(invoice._id)),
+    [invoices, selectedIds],
+  );
+
+  // Blank instead of a blended total when currencies differ — adding raw
+  // numbers across currencies would be a meaningless (and misleading) sum.
+  const selectedTotalLabel = useMemo(() => {
+    if (selectedInvoices.length === 0) return "";
+    const currencies = new Set(selectedInvoices.map((invoice) => invoice.extractedData?.currency || ""));
+    if (currencies.size > 1) return "mixed currencies";
+    const total = selectedInvoices.reduce((sum, invoice) => sum + (invoice.extractedData?.totalAmount || 0), 0);
+    return `${[...currencies][0]} ${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
+  }, [selectedInvoices]);
+
+  // Only "Reject" is real here — bulk "Approve & post" would need a resolved
+  // vendor + reviewed line items per invoice (that's the whole reason /review
+  // exists), and there's no "assign to a person" concept anywhere in this
+  // app yet. Rather than fake either, they're left out of this bar for now.
+  const handleBulkReject = async () => {
+    if (selectedInvoices.length === 0 || rejectingBulk) return;
+    setRejectingBulk(true);
+    try {
+      let failures = 0;
+      for (const invoice of selectedInvoices) {
+        const result = await dispatch(rejectInvoice({ invoiceId: invoice._id }));
+        if (!rejectInvoice.fulfilled.match(result)) {
+          failures += 1;
+          const payload = result.payload;
+          const vendorName = invoice.extractedData?.vendorName || "Invoice";
+          showToast(`${vendorName}: ${typeof payload === "string" ? payload : "Could not reject"}`, "error");
+        }
+      }
+      const succeeded = selectedInvoices.length - failures;
+      if (succeeded > 0) {
+        showToast(`Rejected ${succeeded} invoice${succeeded === 1 ? "" : "s"}.`, "success");
+      }
+      setSelectedIds(new Set());
+    } finally {
+      setRejectingBulk(false);
+    }
+  };
+
+  // Weekly scan volume — bucketed by when each invoice was actually scanned
+  // (createdAt), not its own invoice date, since this chart is about upload
+  // activity. Rolling 7-day windows ending today rather than calendar weeks,
+  // so "this week" always means "the last 7 days" regardless of what day it is.
+  const weeklyScans = useMemo(() => {
+    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const buckets = Array.from({ length: WEEKLY_SCAN_WEEKS }, (_, i) => ({
+      count: 0,
+      weekStart: new Date(now - (WEEKLY_SCAN_WEEKS - i) * msPerWeek),
+    }));
+
+    for (const invoice of invoices) {
+      if (!invoice.createdAt) continue;
+      const scannedAt = new Date(invoice.createdAt).getTime();
+      if (Number.isNaN(scannedAt)) continue;
+
+      const age = now - scannedAt;
+      if (age < 0 || age >= WEEKLY_SCAN_WEEKS * msPerWeek) continue;
+
+      const bucketFromNewest = Math.floor(age / msPerWeek);
+      buckets[WEEKLY_SCAN_WEEKS - 1 - bucketFromNewest].count += 1;
+    }
+
+    return {
+      buckets,
+      total: buckets.reduce((sum, bucket) => sum + bucket.count, 0),
+      max: Math.max(...buckets.map((bucket) => bucket.count), 1),
+    };
+  }, [invoices]);
 
   // Single upload path for every entry point (click-to-browse, drag-and-drop) —
   // both call this, neither duplicates it. Keeps the FormData/scanInvoice call
   // exactly as it was before the dropzone existed (see scanInvoice's own
-  // comment on the RN-FormData bug this fixed once already).
-  const uploadFile = useCallback(
-    async (file: File) => {
+  // comment on the RN-FormData bug this fixed once already). Multiple files
+  // are uploaded one scanInvoice call at a time — the backend accepts one
+  // invoice per request — so a failure partway through still leaves every
+  // file before it posted.
+  const uploadFiles = useCallback(
+    async (files: File[]) => {
       if (!qbConnectionId) {
         showToast("Please connect a QuickBooks account before scanning invoices.", "error");
         return;
       }
 
+      const selected = files.slice(0, MAX_UPLOAD_FILES);
+      if (files.length > MAX_UPLOAD_FILES) {
+        showToast(`You can upload up to ${MAX_UPLOAD_FILES} invoices at a time. Only the first ${MAX_UPLOAD_FILES} were selected.`, "error");
+      }
+
       setUploading(true);
+      let failures = 0;
       try {
-        const result = await dispatch(scanInvoice({ file, qbId: qbConnectionId }));
-        if (scanInvoice.fulfilled.match(result)) {
+        for (let i = 0; i < selected.length; i++) {
+          setUploadProgress({ current: i + 1, total: selected.length });
+          const result = await dispatch(scanInvoice({ file: selected[i], qbId: qbConnectionId }));
+          if (!scanInvoice.fulfilled.match(result)) {
+            failures += 1;
+            const payload = result.payload;
+            showToast(
+              `${selected[i].name}: ${typeof payload === "string" ? payload : "Invoice scan failed"}`,
+              "error",
+            );
+          }
+        }
+        if (failures < selected.length) {
           setTimeout(syncInvoices, 1500);
-        } else {
-          const payload = result.payload;
-          showToast(typeof payload === "string" ? payload : "Invoice scan failed", "error");
         }
       } finally {
         setUploading(false);
+        setUploadProgress(null);
       }
     },
     [dispatch, qbConnectionId, syncInvoices],
   );
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-[var(--space-md)] p-[var(--space-lg)]">
-      <h1 className="text-h3 font-bold text-trust-navy">{greetingFor(name)}</h1>
+    <div className="mx-auto grid max-w-6xl grid-cols-1 gap-[var(--space-lg)] p-[var(--space-lg)] lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
+    <div className="flex flex-col gap-[var(--space-md)]">
 
       {!statusLoading && !connected && (
         <button
@@ -322,22 +510,23 @@ export function DashboardContent() {
 
       <Link
         href="/invoices/pending"
-        className="flex items-center justify-between rounded-lg border border-[#CBEDE7] bg-background-soft p-[var(--space-md)]"
+        className="flex items-center gap-[var(--space-md)] rounded-lg bg-primary-900 p-[var(--space-lg)] text-white shadow-md"
       >
-        <div className="flex items-center gap-[var(--space-sm)]">
-          <span className="flex h-12 w-12 items-center justify-center rounded-md bg-primary text-white">
-            <Clock size={22} strokeWidth={2} />
-          </span>
-          <div>
-            <p className="font-bold text-trust-navy">Pending Review</p>
-            <p className="mt-[var(--space-xs)] text-body-sm font-medium text-text-secondary">{pendingText}</p>
-          </div>
+        {/* Icon fill and count badge use dark text on their bright teal
+            backgrounds for the same contrast reason as the sidebar's active
+            pill — see DESIGN_ASSUMPTIONS.md D2.3. */}
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-primary-500">
+          <Clock size={22} strokeWidth={2} className="text-text-primary" />
+        </span>
+        <div className="min-w-0">
+          <p className="font-bold">Pending Review</p>
+          <p className="mt-[var(--space-xs)] text-body-sm font-medium text-primary-200">{pendingText}</p>
         </div>
-        <div className="flex items-center gap-[var(--space-xs)]">
-          <span className="flex h-7 min-w-7 items-center justify-center rounded-pill bg-primary px-[var(--space-xs)] text-body-sm font-bold text-white">
+        <div className="ml-auto flex items-center gap-[var(--space-sm)]">
+          <span className="flex h-7 min-w-7 items-center justify-center rounded-pill bg-primary-400 px-[var(--space-xs)] text-body-sm font-bold text-primary-900">
             {pendingInvoices.length}
           </span>
-          <ArrowRight size={18} strokeWidth={2} className="shrink-0 text-primary" />
+          <ArrowRight size={18} strokeWidth={2} className="shrink-0 text-white" />
         </div>
       </Link>
 
@@ -348,7 +537,11 @@ export function DashboardContent() {
         legible as a single number + label each.
       */}
       <div className="flex flex-col gap-[var(--space-md)] md:flex-row">
-        <InvoiceDropzone uploading={uploading} onFileSelected={uploadFile} />
+        <InvoiceDropzone
+          uploading={uploading}
+          progressLabel={uploadProgress ? `Uploading ${uploadProgress.current} of ${uploadProgress.total}…` : undefined}
+          onFilesSelected={uploadFiles}
+        />
         <div className="flex flex-col gap-[var(--space-sm)] md:w-64">
           <StatRow count={autoPostedInvoices.length} label="Auto-posted" href="/invoices?type=auto" theme="auto" />
           <StatRow
@@ -361,36 +554,183 @@ export function DashboardContent() {
         </div>
       </div>
 
-      <div className="mt-[var(--space-md)] flex items-center justify-between">
-        <h2 className="text-h3 font-bold text-text-primary">Recent</h2>
-        {invoiceLoading && recentInvoices.length > 0 && <Spinner size="sm" />}
+      <div ref={recentCardRef} className="mt-[var(--space-md)] rounded-lg border border-border bg-white p-[var(--space-lg)]">
+        <div className="flex flex-wrap items-center justify-between gap-[var(--space-sm)]">
+          <div className="flex items-center gap-[var(--space-sm)]">
+            <h2 className="text-h3 font-bold text-text-primary">Recent</h2>
+            {invoiceLoading && recentTabInvoices.length > 0 && <Spinner size="sm" />}
+          </div>
+          <div className="flex flex-wrap items-center gap-[var(--space-sm)]">
+            <div className="flex gap-[var(--space-xs)]">
+              {(["all", "pending", "failed"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setRecentTab(tab)}
+                  className={`rounded-pill border px-[var(--space-md)] py-[var(--space-xs)] text-body-sm font-semibold ${
+                    recentTab === tab
+                      ? "border-primary-500 bg-primary-50 text-primary-700"
+                      : "border-border text-text-secondary hover:bg-background-alt"
+                  }`}
+                >
+                  {tab === "all" ? "All" : tab === "pending" ? "Pending" : "Failed"}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="flex items-center gap-[var(--space-xs)] rounded-pill border border-border px-[var(--space-md)] py-[var(--space-xs)] text-body-sm font-semibold text-text-secondary hover:bg-background-alt"
+            >
+              <Filter size={14} strokeWidth={2.25} />
+              Filter
+            </button>
+            <button
+              type="button"
+              onClick={handleViewAllInvoices}
+              className="flex items-center gap-[var(--space-xs)] rounded-pill bg-primary-50 px-[var(--space-md)] py-[var(--space-xs)] text-body-sm font-semibold text-primary-700 hover:bg-primary-100"
+            >
+              View all
+              <ArrowRight size={14} strokeWidth={2.25} />
+            </button>
+          </div>
+        </div>
+
+        {selectedIds.size > 0 && (
+          <div className="mt-[var(--space-md)] flex flex-wrap items-center justify-between gap-[var(--space-sm)] rounded-lg bg-primary-50 px-[var(--space-md)] py-[var(--space-sm)]">
+            <div className="flex items-center gap-[var(--space-sm)]">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary-700 text-white">
+                <Check size={14} strokeWidth={3} />
+              </span>
+              <span className="text-body-sm font-semibold text-primary-800">
+                {selectedIds.size} selected{selectedTotalLabel ? ` · ${selectedTotalLabel}` : ""}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleBulkReject}
+              disabled={rejectingBulk}
+              className="rounded-pill px-[var(--space-md)] py-[var(--space-xs)] text-body-sm font-bold text-error hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {rejectingBulk ? "Rejecting…" : "Reject"}
+            </button>
+          </div>
+        )}
+
+        <div className="mt-[var(--space-md)] grid grid-cols-[auto_auto_2fr_1fr_0.9fr_0.9fr_20px] gap-[var(--space-sm)] border-b border-border px-[var(--space-sm)] pb-[var(--space-sm)] text-caption font-bold uppercase tracking-wide text-text-secondary">
+          <span />
+          <span />
+          <span>Vendor / Reference</span>
+          <span>Received</span>
+          <span>Status</span>
+          <span className="text-right">Amount</span>
+          <span />
+        </div>
+
+        {invoiceLoading && recentTabInvoices.length === 0 && <SkeletonListRows count={3} className="mt-[var(--space-sm)]" />}
+
+        {/* Show the error whenever the fetch failed, regardless of whether
+            recentTabInvoices happens to be non-empty — a failed fetch means
+            whatever's in state is not this session's confirmed data, and
+            masking that behind stale data is exactly how the cross-account
+            invoice leak went unnoticed. Don't render the (possibly stale)
+            list alongside it. */}
+        {!invoiceLoading && invoiceError && (
+          <ErrorState message="Couldn't load recent invoices." onRetry={syncInvoices} />
+        )}
+
+        {!invoiceLoading && !invoiceError && recentTabInvoices.length === 0 && (
+          <div className="flex flex-col items-center py-[var(--space-lg)] text-center">
+            <p className="font-bold text-text-primary">No invoices here</p>
+            <p className="mt-[var(--space-xs)] text-body-sm text-text-secondary">
+              {recentTab === "all" ? "Scanned and posted invoices will appear here." : `No ${recentTab} invoices right now.`}
+            </p>
+          </div>
+        )}
+
+        {!invoiceError &&
+          recentTabInvoices.map((invoice) => (
+            <RecentInvoiceRow
+              key={invoice._id}
+              invoice={invoice}
+              selected={selectedIds.has(invoice._id)}
+              onToggleSelect={() => toggleSelected(invoice._id)}
+              onOpen={() => handleOpenInvoice(invoice)}
+            />
+          ))}
       </div>
+    </div>
 
-      {invoiceLoading && recentInvoices.length === 0 && <SkeletonListRows count={3} />}
-
-      {/* Show the error whenever the fetch failed, regardless of whether
-          recentInvoices happens to be non-empty — a failed fetch means
-          whatever's in state is not this session's confirmed data, and
-          masking that behind stale data is exactly how the cross-account
-          invoice leak went unnoticed. Don't render the (possibly stale)
-          list alongside it. */}
-      {!invoiceLoading && invoiceError && (
-        <ErrorState message="Couldn't load recent invoices." onRetry={syncInvoices} />
-      )}
-
-      {!invoiceLoading && !invoiceError && recentInvoices.length === 0 && (
-        <Card className="flex flex-col items-center py-[var(--space-lg)] text-center">
-          <p className="font-bold text-text-primary">No invoices yet</p>
-          <p className="mt-[var(--space-xs)] text-body-sm text-text-secondary">
-            Scanned and posted invoices will appear here.
+    <aside className="flex flex-col gap-[var(--space-md)]">
+      {connected && (
+        <Card>
+          <div className="flex items-center gap-[var(--space-sm)]">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#2ca01c] text-[11px] font-bold text-white">
+              qb
+            </span>
+            <h4 className="text-body font-bold text-text-primary">QuickBooks</h4>
+            <span className="ml-auto inline-flex shrink-0 items-center gap-[var(--space-xs)] rounded-pill bg-primary-100 px-[var(--space-sm)] py-[2px] text-caption font-bold text-primary-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary-500" />
+              Synced
+            </span>
+          </div>
+          <p className="mt-[var(--space-sm)] text-caption text-text-secondary">
+            {lastSyncedAt ? `Last synced ${timeAgo(lastSyncedAt)}` : "Not synced yet this session."}
           </p>
+          <button
+            type="button"
+            onClick={handleSyncNow}
+            disabled={syncingQB}
+            className="mt-[var(--space-md)] inline-flex items-center gap-[var(--space-xs)] rounded-pill border border-border px-[var(--space-md)] py-[var(--space-xs)] text-body-sm font-bold text-text-primary hover:bg-background-alt disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw size={14} strokeWidth={2.25} className={syncingQB ? "animate-spin" : ""} />
+            {syncingQB ? "Syncing…" : "Sync now"}
+          </button>
         </Card>
       )}
 
-      {!invoiceError &&
-        recentInvoices.map((invoice) => (
-          <InvoiceRow key={invoice._id} invoice={invoice} />
-        ))}
+      <TopVendorsCard invoices={invoices} />
+
+      {weeklyScans.total > 0 && (
+        <div className="rounded-lg border border-border bg-white p-[var(--space-lg)]">
+          <div className="flex items-end justify-between gap-[var(--space-sm)]">
+            <div>
+              <h4 className="text-body font-bold text-text-primary">Weekly scans</h4>
+              <p className="text-caption text-text-secondary">Invoices scanned, last {WEEKLY_SCAN_WEEKS} weeks</p>
+            </div>
+            <span className="text-h3 font-bold text-text-primary">{weeklyScans.total}</span>
+          </div>
+          <div className="mt-[var(--space-md)] flex h-20 items-end gap-[6px]">
+            {weeklyScans.buckets.map((bucket, i) => {
+              const isRecent = i >= weeklyScans.buckets.length - 2;
+              const pct = bucket.count > 0 ? Math.max(Math.round((bucket.count / weeklyScans.max) * 100), 10) : 0;
+              return (
+                // Full-height light track so every week reads as its own bar
+                // slot even at a count of 0, not just whichever weeks happen
+                // to have scans — otherwise a mostly-empty history looks like
+                // one bar floating with nothing beside it.
+                <div
+                  key={i}
+                  className="flex h-full flex-1 items-end rounded-t-sm bg-primary-50"
+                  title={`${bucket.count} scanned`}
+                >
+                  <div
+                    className={`w-full rounded-t-sm ${isRecent ? "bg-primary" : "bg-primary-200"}`}
+                    style={{ height: `${pct}%` }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-[var(--space-xs)] flex gap-[6px]">
+            {weeklyScans.buckets.map((bucket, i) => (
+              <span key={i} className="flex-1 text-center text-[10px] text-text-secondary">
+                {bucket.weekStart.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </aside>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
+import { useRouter, useSearchParams } from "next/navigation";
 import { Ban, Pencil, Plus, RotateCcw, Store, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -60,6 +61,8 @@ const EMPTY_FORM: VendorFormState = {
 
 export function VendorsContent() {
   const dispatch = useAppDispatch();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const accessToken = useAppSelector((state) => state.auth.user?.data?.accessToken);
   const qbConnectionId = useAppSelector((state) => state.quickBooks.qbConnectionId);
   const vendors = useAppSelector((state) => state.quickBooks.vendors);
@@ -166,6 +169,22 @@ export function VendorsContent() {
     setSheetVisible(true);
   };
 
+  // Lets the sidebar's "Create → Vendor" shortcut land straight in create
+  // mode via /vendors?create=true, instead of just the plain list. Waits for
+  // loadingConnections to resolve so canManageVendors reflects the real role
+  // before deciding whether to open it; runs at most once per page load.
+  const autoOpenedCreateRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenedCreateRef.current) return;
+    if (searchParams.get("create") !== "true") return;
+    if (loadingConnections) return;
+    if (!canManageVendors) return;
+    autoOpenedCreateRef.current = true;
+    openCreateSheet();
+    router.replace("/vendors");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, loadingConnections, canManageVendors]);
+
   const openEditSheet = (vendor: Vendor) => {
     setEditingVendor(vendor);
     setForm({
@@ -210,7 +229,6 @@ export function VendorsContent() {
             accessToken,
             vendorId: editingVendor._id,
             displayName: trimmedName,
-            currency: form.currency,
             glAccountId: form.glAccountId,
             taxCodeId: form.taxCodeId,
             email: form.email.trim(),
@@ -435,7 +453,7 @@ export function VendorsContent() {
                           onClick={() => handleDeactivate(vendor)}
                           disabled={isDeactivating}
                           aria-label={`Deactivate ${vendor.displayName}`}
-                          className="flex h-8 w-8 items-center justify-center rounded-md bg-error/10 text-error disabled:opacity-60"
+                          className="flex h-8 w-8 items-center justify-center rounded-md bg-error/10 text-error disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {isDeactivating ? "…" : <Ban size={16} strokeWidth={2} />}
                         </button>
@@ -446,7 +464,7 @@ export function VendorsContent() {
                         onClick={() => handleReactivate(vendor)}
                         disabled={isReactivating}
                         aria-label={`Reactivate ${vendor.displayName}`}
-                        className="flex h-8 items-center gap-[var(--space-xs)] rounded-md bg-primary/10 px-[var(--space-sm)] text-caption font-bold text-primary disabled:opacity-60"
+                        className="flex h-8 items-center gap-[var(--space-xs)] rounded-md bg-primary/10 px-[var(--space-sm)] text-caption font-bold text-primary disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {isReactivating ? "…" : <RotateCcw size={14} strokeWidth={2.25} />}
                         Reactivate
@@ -461,9 +479,9 @@ export function VendorsContent() {
       </div>
 
       {sheetVisible && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={closeSheet}>
+        <div className="fixed inset-0 z-50 flex cursor-pointer items-end justify-center bg-black/40 sm:items-center" onClick={closeSheet}>
           <div
-            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-[var(--space-lg)] sm:rounded-2xl"
+            className="max-h-[90vh] w-full max-w-md cursor-auto overflow-y-auto rounded-t-2xl bg-white p-[var(--space-lg)] sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-[var(--space-md)] flex items-center justify-between">
@@ -487,8 +505,8 @@ export function VendorsContent() {
                 <select
                   value={form.currency}
                   onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
-                  disabled={saving}
-                  className="mt-[var(--space-xs)] h-[50px] w-full rounded-md border border-border bg-white px-[var(--space-md)] text-body focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  disabled={saving || !!editingVendor}
+                  className="mt-[var(--space-xs)] h-[50px] w-full rounded-md border border-border bg-white px-[var(--space-md)] text-body focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:bg-background-alt disabled:text-text-secondary"
                 >
                   {CURRENCY_OPTIONS.map((code) => (
                     <option key={code} value={code}>
@@ -496,6 +514,11 @@ export function VendorsContent() {
                     </option>
                   ))}
                 </select>
+                {editingVendor && (
+                  <p className="mt-[var(--space-xs)] text-body-sm text-text-secondary">
+                    Currency can&apos;t be changed after a vendor is created.
+                  </p>
+                )}
               </div>
 
               <div>

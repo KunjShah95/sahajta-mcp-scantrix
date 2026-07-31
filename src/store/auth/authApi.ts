@@ -2,6 +2,7 @@ import { createAsyncThunk } from "@reduxjs/toolkit";
 import { PURGE } from "redux-persist";
 
 import api from "../../lib/api";
+import { RootState } from "..";
 
 import {
   saveAccessToken,
@@ -434,6 +435,142 @@ export const logoutUser = createAsyncThunk(
 
 
 // ================================
+// FORGOT PASSWORD
+// ================================
+// NOTE(backend gap): Scantrix_API has no forgot/reset-password route today
+// (confirmed against src/routes/auth.routes.js — only register/verify-
+// register/resend-register-otp/login/google/apple/refresh/logout/
+// set-password/change-password exist, and the last two require an active
+// session). This thunk assumes a contract mirroring the register/OTP flow
+// that already exists: POST /auth/forgot-password { email } sends a reset
+// OTP to that email if an account exists. Will 404 until the backend adds
+// it — see conversation history for why this was built ahead of the
+// backend.
+
+interface ForgotPasswordPayload {
+  email: string;
+}
+
+export const forgotPassword = createAsyncThunk(
+  "auth/forgotPassword",
+
+  async (
+    data: ForgotPasswordPayload,
+    thunkAPI
+  ) => {
+    try {
+      console.log(
+        "========== FORGOT PASSWORD API REQUEST =========="
+      );
+
+      console.log(
+        "POST /auth/forgot-password"
+      );
+
+      console.log(
+        JSON.stringify(data, null, 2)
+      );
+
+      const response = await api.post(
+        "/auth/forgot-password",
+        data
+      );
+
+      console.log(
+        "========== FORGOT PASSWORD API SUCCESS =========="
+      );
+
+      console.log(
+        JSON.stringify(response.data, null, 2)
+      );
+
+      return response.data;
+    } catch (error: any) {
+      console.log(
+        "========== FORGOT PASSWORD API ERROR =========="
+      );
+
+      console.log(error);
+
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        "Could not send reset code";
+
+      return thunkAPI.rejectWithValue(errorMessage);
+    }
+  }
+);
+
+
+
+// ================================
+// RESET PASSWORD
+// ================================
+// NOTE(backend gap): same caveat as forgotPassword above. Assumed contract:
+// POST /auth/reset-password { email, otp, newPassword } verifies the OTP
+// and sets the new password in one step — no separate verify-then-reset
+// round trip, since the OTP is only useful together with the new password
+// the user is submitting anyway.
+
+interface ResetPasswordPayload {
+  email: string;
+  otp: string;
+  newPassword: string;
+}
+
+export const resetPassword = createAsyncThunk(
+  "auth/resetPassword",
+
+  async (
+    data: ResetPasswordPayload,
+    thunkAPI
+  ) => {
+    try {
+      console.log(
+        "========== RESET PASSWORD API REQUEST =========="
+      );
+
+      console.log(
+        "POST /auth/reset-password"
+      );
+
+      const response = await api.post(
+        "/auth/reset-password",
+        data
+      );
+
+      console.log(
+        "========== RESET PASSWORD API SUCCESS =========="
+      );
+
+      console.log(
+        JSON.stringify(response.data, null, 2)
+      );
+
+      return response.data;
+    } catch (error: any) {
+      console.log(
+        "========== RESET PASSWORD API ERROR =========="
+      );
+
+      console.log(error);
+
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        "Could not reset password";
+
+      return thunkAPI.rejectWithValue(errorMessage);
+    }
+  }
+);
+
+
+
+// ================================
 // PICK PROFILE IMAGE
 // ================================
 // TODO(web-port): expo-image-picker has no web equivalent and is not
@@ -507,6 +644,100 @@ export const updateProfileIcon =
       }
     }
   );
+
+
+
+// ================================
+// UPDATE USER PROFILE
+// ================================
+// NOTE(bug fix): EditProfileContent used to only call Firebase's
+// updateProfile()/Firestore setDoc() for the name field — it never touched
+// the real backend user record, so a saved name never showed up anywhere
+// else in the app (sidebar, profile page) since those all read
+// state.auth.user.data.user, which this fixes by actually calling it.
+// Backend contract: PATCH /users/:id, allowedFields =
+// ["firstName", "lastName", "phone", "icon", "onBoardingCompleted"] (see
+// Scantrix_API's user.controller.js/updateUser) — only the fields present
+// in the body get updated, so partial updates (e.g. phone only) are fine.
+
+interface UpdateUserProfilePayload {
+  userId: string;
+  accessToken: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+}
+
+export const updateUserProfile = createAsyncThunk(
+  "auth/updateUserProfile",
+
+  async (
+    data: UpdateUserProfilePayload,
+    thunkAPI
+  ) => {
+    try {
+      const { userId, accessToken, ...fields } = data;
+
+      console.log(
+        "========== UPDATE USER PROFILE API REQUEST =========="
+      );
+
+      console.log(
+        JSON.stringify(fields, null, 2)
+      );
+
+      const response = await api.patch(
+        `/users/${userId}`,
+        fields,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      );
+
+      console.log(
+        "========== UPDATE USER PROFILE API SUCCESS =========="
+      );
+
+      console.log(
+        JSON.stringify(response.data, null, 2)
+      );
+
+      // Keep localStorage in sync — AuthGate's restoreUser() reads straight
+      // from there on every fresh page load, not from this thunk's return
+      // value, so without this a refresh would revert the name/phone back
+      // to whatever was saved at login.
+      const state = thunkAPI.getState() as RootState;
+      const currentUser = state.auth.user;
+      const updatedFields = response.data?.data;
+      if (currentUser?.data?.user && updatedFields) {
+        await saveUser({
+          ...currentUser,
+          data: {
+            ...currentUser.data,
+            user: { ...currentUser.data.user, ...updatedFields },
+          },
+        });
+      }
+
+      return response.data;
+    } catch (error: any) {
+      console.log(
+        "========== UPDATE USER PROFILE API ERROR =========="
+      );
+
+      console.log(error);
+
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Could not update profile";
+
+      return thunkAPI.rejectWithValue(errorMessage);
+    }
+  }
+);
 
 
 
@@ -681,6 +912,102 @@ export const appleLogin = createAsyncThunk(
       return thunkAPI.rejectWithValue(
         errorMessage
       );
+    }
+  }
+);
+
+
+// ================================
+// MICROSOFT LOGIN
+// ================================
+// NOTE: this endpoint does not exist on the backend yet — MicrosoftSignInButton
+// stays in its "Coming Soon" state until NEXT_PUBLIC_MICROSOFT_CLIENT_ID is
+// set and this endpoint is implemented. Contract this assumes, mirroring
+// googleLogin/appleLogin: POST /auth/microsoft with { idToken: <MSAL ID
+// token (JWT)> }, expected to respond with the same { data: { accessToken,
+// refreshToken, ...user } } shape as /auth/google. The token is a standard
+// OIDC ID token from Microsoft's "common" authority (works for both Azure AD
+// work/school accounts and personal Outlook.com/Hotmail accounts) — the
+// backend should verify it against Microsoft's JWKS
+// (https://login.microsoftonline.com/common/discovery/v2.0/keys), same idea
+// as verifying Google's ID token. No separate name/email fields are needed
+// from the client since those are already claims on the idToken itself.
+
+interface MicrosoftLoginPayload {
+  idToken: string; // Microsoft/Azure AD ID token from @azure/msal-browser's loginPopup()
+}
+
+export const microsoftLogin = createAsyncThunk(
+  "auth/microsoftLogin",
+
+  async (
+    data: MicrosoftLoginPayload,
+    thunkAPI
+  ) => {
+    try {
+      console.log(
+        "========== MICROSOFT LOGIN API REQUEST =========="
+      );
+
+      console.log(
+        "POST /auth/microsoft"
+      );
+
+      console.log(
+        JSON.stringify(data, null, 2)
+      );
+
+      const response = await api.post("/auth/microsoft", data);
+
+      console.log(
+        "========== MICROSOFT LOGIN API SUCCESS =========="
+      );
+
+      console.log(
+        JSON.stringify(response.data, null, 2)
+      );
+
+      // Defensively reset any QB session data left over from a previous
+      // user on this browser before this session saves its own tokens or
+      // any QB-scoped fetch can fire.
+      await purgePersistedState(thunkAPI.dispatch);
+
+      const accessToken =
+        response.data?.data?.accessToken;
+
+      const refreshToken =
+        response.data?.data?.refreshToken;
+
+      // Save FULL response — same pattern as loginUser/googleLogin
+      const user = response.data;
+
+      if (accessToken) {
+        await saveAccessToken(accessToken);
+      }
+
+      if (refreshToken) {
+        await saveRefreshToken(refreshToken);
+      }
+
+      if (user) {
+        await saveUser(user);
+      }
+
+      return response.data;
+    } catch (error: any) {
+      console.log(
+        "========== MICROSOFT LOGIN API ERROR =========="
+      );
+
+      console.log(error);
+
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        "Microsoft login failed";
+
+      return thunkAPI.rejectWithValue(errorMessage);
     }
   }
 );

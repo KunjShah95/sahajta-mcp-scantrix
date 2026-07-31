@@ -2,158 +2,39 @@
 
 import { ArrowRight } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import { Card } from "@/components/ui/Card";
-import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import {
-  connectQuickBooks,
-  disconnectQuickBooks,
-  getMyQBConnections,
-  getQuickBooksStatus,
-} from "@/store/quickBooks/quickBooksApi";
-import { confirmDialog, showToast } from "@/lib/dialogManager";
-
-interface QBConnection {
-  _id: string;
-  name: string;
-  realmId: string;
-  role: string;
-  createdAt: string;
-}
+import { showToast } from "@/lib/dialogManager";
+import { useQuickBooksConnections } from "@/store/quickBooks/useQuickBooksConnections";
 
 export function QuickBooksConnectContent() {
-  const dispatch = useAppDispatch();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const accessToken = useAppSelector((state) => state.auth.user?.data?.accessToken);
-  const qbConnectionId = useAppSelector((state) => state.quickBooks.qbConnectionId);
 
-  const [connections, setConnections] = useState<QBConnection[]>([]);
-  const [checkingStatus, setCheckingStatus] = useState(true);
-  const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
-  const [reconnectingId, setReconnectingId] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(false);
-
-  const checkStatus = useCallback(async () => {
-    if (!accessToken) {
-      setCheckingStatus(false);
-      return;
-    }
-    setCheckingStatus(true);
-    const result = await dispatch(getMyQBConnections({ accessToken }));
-    if (getMyQBConnections.fulfilled.match(result)) {
-      const list: QBConnection[] = result.payload?.data?.connections ?? [];
-      setConnections(list);
-      const first = list[0];
-      if (first?._id) {
-        await dispatch(getQuickBooksStatus({ accessToken, qbConnectionId: first._id }));
-      }
-    }
-    setCheckingStatus(false);
-  }, [accessToken, dispatch]);
-
-  useEffect(() => {
-    checkStatus();
-    // Web equivalent of mobile's AppState-foreground listener: re-check
-    // status whenever the user comes back to this tab (e.g. after
-    // completing the QuickBooks OAuth redirect in this same tab, or
-    // returning from another tab).
-    const onFocus = () => checkStatus();
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [checkStatus]);
+  const {
+    connections,
+    checkingStatus,
+    connecting,
+    disconnectingId,
+    reconnectingId,
+    activeConnectionId,
+    handleSwitch,
+    handleConnect,
+    handleReconnect,
+    handleDisconnect,
+  } = useQuickBooksConnections("/quickbooks");
 
   // Backend's QB OAuth callback redirects errors back here as ?error=<code>
-  // (success carries no query param — checkStatus() above already re-fetches
-  // the connection list, which is enough to reflect a successful connect).
+  // (success carries no query param — the hook's own checkStatus already
+  // re-fetches the connection list, which is enough to reflect a successful
+  // connect).
   useEffect(() => {
     const error = searchParams.get("error");
     if (!error) return;
     showToast(error, "error");
     router.replace("/quickbooks");
   }, [searchParams, router]);
-
-  const handleSwitch = async (connection: QBConnection) => {
-    if (connection._id === qbConnectionId) return;
-    if (!accessToken) return;
-    const confirmed = await confirmDialog({
-      title: "Switch active account?",
-      message: `Switch active account to ${connection.name}?`,
-      confirmLabel: "Switch",
-    });
-    if (!confirmed) return;
-    await dispatch(getQuickBooksStatus({ accessToken, qbConnectionId: connection._id }));
-  };
-
-  const handleConnect = async () => {
-    if (!accessToken || connecting) return;
-    setConnecting(true);
-    try {
-      const redirectAfter = `${window.location.origin}/quickbooks`;
-      const result = await dispatch(connectQuickBooks({ accessToken, redirectAfter }));
-      if (connectQuickBooks.fulfilled.match(result)) {
-        const authUrl = result.payload?.data?.authUrl;
-        if (authUrl) {
-          window.location.href = authUrl;
-          return;
-        }
-        showToast("Could not start QuickBooks connection. Please try again.", "error");
-      } else {
-        showToast(typeof result.payload === "string" ? result.payload : "Could not start QuickBooks connection.", "error");
-      }
-    } finally {
-      setConnecting(false);
-    }
-  };
-
-  // Re-authorizes the SAME connection (refreshes its tokens) — the fix for a
-  // malformed/expired token that's currently blocking both disconnect and
-  // scanning on that connection. Owner/admin only, mirrored from the backend
-  // check in connectQuickBooks (?qbConnectionId=... path).
-  const handleReconnect = async (connection: QBConnection) => {
-    if (!accessToken || reconnectingId) return;
-    setReconnectingId(connection._id);
-    try {
-      const redirectAfter = `${window.location.origin}/quickbooks`;
-      const result = await dispatch(connectQuickBooks({ accessToken, redirectAfter, qbConnectionId: connection._id }));
-      if (connectQuickBooks.fulfilled.match(result)) {
-        const authUrl = result.payload?.data?.authUrl;
-        if (authUrl) {
-          window.location.href = authUrl;
-          return;
-        }
-        showToast("Could not start reconnect. Please try again.", "error");
-      } else {
-        showToast(typeof result.payload === "string" ? result.payload : "Could not start reconnect.", "error");
-      }
-    } finally {
-      setReconnectingId(null);
-    }
-  };
-
-  const handleDisconnect = async (connection: QBConnection) => {
-    if (!accessToken) return;
-    const confirmed = await confirmDialog({
-      title: "Disconnect QuickBooks account?",
-      message: `Disconnect "${connection.name}"? This cannot be undone.`,
-      confirmLabel: "Disconnect",
-      tone: "destructive",
-    });
-    if (!confirmed) return;
-    setDisconnectingId(connection._id);
-    try {
-      const result = await dispatch(disconnectQuickBooks({ accessToken, qbConnectionId: connection._id }));
-      if (disconnectQuickBooks.fulfilled.match(result)) {
-        setConnections((prev) => prev.filter((c) => c._id !== connection._id));
-        await checkStatus();
-      } else {
-        showToast(typeof result.payload === "string" ? result.payload : "Unable to disconnect.", "error");
-      }
-    } finally {
-      setDisconnectingId(null);
-    }
-  };
 
   return (
     <div className="mx-auto max-w-2xl p-[var(--space-lg)]">
@@ -173,7 +54,7 @@ export function QuickBooksConnectContent() {
           )}
 
           {connections.map((connection) => {
-            const isActive = connection._id === qbConnectionId;
+            const isActive = connection._id === activeConnectionId;
             const date = new Date(connection.createdAt).toLocaleDateString("en-US", {
               month: "short",
               day: "numeric",

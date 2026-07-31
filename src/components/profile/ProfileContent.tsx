@@ -15,7 +15,7 @@ import {
 import { ReactNode, useState } from "react";
 
 import { confirmDialog, showToast } from "@/lib/dialogManager";
-import { capitalizeWords } from "@/lib/textFormat";
+import { capitalizeWords, normalizePhotoURL } from "@/lib/textFormat";
 import { useAppSelector } from "@/store/hooks";
 import { useLogout } from "@/store/useLogout";
 
@@ -24,13 +24,6 @@ import { useLogout } from "@/store/useLogout";
 const TERMS_URL = "https://scantrix-uploads.s3.ap-south-1.amazonaws.com/invoices/6a00877a03676409687bac34_1781529818953.pdf";
 const PRIVACY_URL = "https://scantrix-uploads.s3.ap-south-1.amazonaws.com/invoices/6a00877a03676409687bac34_1781529819012.pdf";
 const SUPPORT_EMAIL = "support@scantrix.ai";
-
-function normalizePhotoURL(value: unknown): string {
-  if (typeof value !== "string") return "";
-  const trimmed = value.trim();
-  if (!trimmed || trimmed === "null" || trimmed === "undefined") return "";
-  return trimmed;
-}
 
 function SettingsRow({ href, icon, iconBg, label }: { href: string; icon: ReactNode; iconBg: string; label: string }) {
   return (

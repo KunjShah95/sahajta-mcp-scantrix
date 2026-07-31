@@ -51,12 +51,19 @@ export interface ConfidenceBreakdown {
   scoreDeductions?: Record<string, boolean>;
 }
 
+export interface PopulatedUserRef {
+  _id?: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+}
+
 export interface QuickBooksData {
   billUrl?: string | null;
   vendorId?: string;
   billId?: string;
   postedAt?: string;
-  postedBy?: string;
+  postedBy?: string | PopulatedUserRef;
 }
 
 export interface VendorData {
@@ -77,13 +84,14 @@ export interface FileData {
 export interface StatusHistoryItem {
   postedStatus?: string;
   changedAt?: string;
-  changedBy?: string;
+  changedBy?: string | PopulatedUserRef;
   reason?: string;
 }
 
 export interface InvoiceRecord {
   _id: string;
   userId?: string;
+  uploadedBy?: string | PopulatedUserRef;
   batchId?: string;
   postedStatus?: string;
   confidenceScore?: number;
