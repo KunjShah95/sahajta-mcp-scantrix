@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 
 import { VendorsContent } from "@/components/vendors/VendorsContent";
@@ -7,5 +8,9 @@ export const metadata: Metadata = {
 };
 
 export default function VendorsPage() {
-  return <VendorsContent />;
+  return (
+    <Suspense fallback={null}>
+      <VendorsContent />
+    </Suspense>
+  );
 }

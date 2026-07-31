@@ -1,4 +1,4 @@
-import { siGoogledrive, siQuickbooks, siZoho } from "simple-icons";
+import { siGoogledrive, siQuickbooks, siSage, siXero, siZoho } from "simple-icons";
 
 // Licensed brand marks (CC0-1.0, simple-icons — built specifically for
 // representing third-party brands/integrations, see DESIGN_ASSUMPTIONS.md
@@ -9,14 +9,17 @@ const BRANDS = {
   quickbooks: siQuickbooks,
   "google-drive": siGoogledrive,
   zoho: siZoho,
+  sage: siSage,
+  xero: siXero,
 } as const;
 
 export type BrandName = keyof typeof BRANDS;
 
-// Tally (Tally Solutions / TallyPrime) has no entry in simple-icons or any
-// other legitimately-licensed brand-mark source found during D1.1 research
-// — never scrape or hand-approximate a trademarked logo, so it intentionally
-// has no case here. Callers render it as a plain wordmark instead (see
+// Tally (Tally Solutions / TallyPrime) and FreshBooks both have no entry in
+// simple-icons or any other legitimately-licensed brand-mark source found
+// during D1.1 research (and re-checked when FreshBooks was added) — never
+// scrape or hand-approximate a trademarked logo, so neither has a case here.
+// Callers render them as a plain generic icon instead (see
 // AccountingSoftwaresContent.tsx).
 export function BrandIcon({
   name,

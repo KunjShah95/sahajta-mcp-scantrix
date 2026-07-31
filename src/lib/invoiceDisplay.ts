@@ -6,7 +6,7 @@
 
 export type InvoiceStatus = "auto" | "manual" | "pending" | "processing" | "failed";
 
-interface InvoiceStatusTheme {
+export interface InvoiceStatusTheme {
   label: string;
   badgeClass: string;
   cardBgClass: string;
@@ -56,6 +56,22 @@ export const INVOICE_STATUS_THEME: Record<InvoiceStatus, InvoiceStatusTheme> = {
     accentTextClass: "text-[#E74949]",
   },
 };
+
+// Backend now populates changedBy/uploadedBy/postedBy as User refs
+// (firstName/lastName/email); older cached data or a raw ObjectId string
+// can still show up, so callers must tolerate both shapes.
+export interface PopulatedUserRef {
+  _id?: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+}
+
+export function getUserDisplayName(user?: string | PopulatedUserRef | null): string {
+  if (!user || typeof user === "string") return "";
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  return name || user.email || "";
+}
 
 export function getInvoiceStatus(status?: string): InvoiceStatus {
   if (status === "auto" || status === "manual" || status === "pending" || status === "processing" || status === "failed") {

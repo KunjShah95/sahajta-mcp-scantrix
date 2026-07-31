@@ -7,15 +7,9 @@ import { ChangeEvent, useMemo, useRef, useState } from "react";
 
 import { auth, db } from "@/lib/firebase/config";
 import { showToast } from "@/lib/dialogManager";
+import { normalizePhotoURL } from "@/lib/textFormat";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { updateProfileIcon } from "@/store/auth/authApi";
-
-function normalizePhotoURL(value: unknown): string {
-  if (typeof value !== "string") return "";
-  const trimmed = value.trim();
-  if (!trimmed || trimmed === "null" || trimmed === "undefined") return "";
-  return trimmed;
-}
+import { updateProfileIcon, updateUserProfile } from "@/store/auth/authApi";
 
 export function EditProfileContent() {
   const dispatch = useAppDispatch();
@@ -26,16 +20,21 @@ export function EditProfileContent() {
   const apiUser = reduxUser?.data?.user;
   const accessToken: string | undefined = reduxUser?.data?.accessToken;
 
-  const [name, setName] = useState(apiUser?.firstName || auth.currentUser?.displayName || "");
+  const [firstName, setFirstName] = useState(apiUser?.firstName || "");
+  const [lastName, setLastName] = useState(apiUser?.lastName || "");
+  const [phone, setPhone] = useState(apiUser?.phone || "");
   const [email] = useState(apiUser?.email || auth.currentUser?.email || "");
   const [photoURL, setPhotoURL] = useState(normalizePhotoURL(apiUser?.icon || auth.currentUser?.photoURL || ""));
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
 
-  const initials = useMemo(() => (name.trim() || email.trim() || "U").charAt(0).toUpperCase(), [name, email]);
+  const initials = useMemo(
+    () => (firstName.trim() || email.trim() || "U").charAt(0).toUpperCase(),
+    [firstName, email],
+  );
   const hasPhoto = !!normalizePhotoURL(photoURL) && !imageLoadFailed;
-  const canSave = !isSaving && !isUploadingPhoto;
+  const canSave = !isSaving && !isUploadingPhoto && firstName.trim().length > 0;
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -66,7 +65,7 @@ export function EditProfileContent() {
       setPhotoURL(finalImage);
       setImageLoadFailed(false);
       if (auth.currentUser) {
-        await updateProfile(auth.currentUser, { photoURL: finalImage });
+        await updateProfile(auth.currentUser, { photoURL: finalImage }).catch(() => {});
       }
       showToast("Profile photo updated successfully.", "success");
     } finally {
@@ -77,26 +76,56 @@ export function EditProfileContent() {
   const handleRemovePhoto = () => setPhotoURL("");
 
   const handleSaveProfile = async () => {
+    const userId = apiUser?._id;
+    if (!userId || !accessToken) {
+      showToast("User ID or access token not found", "error");
+      return;
+    }
+
+    const trimmedFirstName = firstName.trim();
+    if (!trimmedFirstName) {
+      showToast("First name is required", "error");
+      return;
+    }
+    const trimmedLastName = lastName.trim();
+    const trimmedPhone = phone.trim();
+
     setIsSaving(true);
     try {
-      const trimmedName = name.trim();
-      const finalName = trimmedName || email.split("@")[0] || "User";
-      const finalPhotoURL = normalizePhotoURL(photoURL);
+      const result = await dispatch(
+        updateUserProfile({
+          userId,
+          accessToken,
+          firstName: trimmedFirstName,
+          lastName: trimmedLastName,
+          phone: trimmedPhone,
+        }),
+      );
 
+      if (!updateUserProfile.fulfilled.match(result)) {
+        const payload = result.payload;
+        showToast(typeof payload === "string" ? payload : "Could not update profile.", "error");
+        return;
+      }
+
+      // Best-effort only — Firebase Auth/Firestore aren't the source of
+      // truth for this data (the backend call above is), so a failure here
+      // shouldn't mask the real save that already succeeded.
+      const finalPhotoURL = normalizePhotoURL(photoURL);
+      const displayName = `${trimmedFirstName} ${trimmedLastName}`.trim();
       if (auth.currentUser) {
-        await updateProfile(auth.currentUser, { displayName: finalName, photoURL: finalPhotoURL || null });
+        await updateProfile(auth.currentUser, { displayName, photoURL: finalPhotoURL || null }).catch(() => {});
       }
       if (auth.currentUser?.uid) {
         await setDoc(
           doc(db, "users", auth.currentUser.uid),
-          { uid: auth.currentUser.uid, email, displayName: finalName, photoURL: finalPhotoURL, updatedAt: serverTimestamp() },
+          { uid: auth.currentUser.uid, email, displayName, photoURL: finalPhotoURL, updatedAt: serverTimestamp() },
           { merge: true },
-        );
+        ).catch(() => {});
       }
+
       showToast("Your profile has been updated.", "success");
       router.back();
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "Something went wrong while updating your profile.", "error");
     } finally {
       setIsSaving(false);
     }
@@ -152,11 +181,35 @@ export function EditProfileContent() {
       <div className="mt-[var(--space-md)] rounded-2xl bg-white p-[var(--space-lg)] shadow-sm">
         <h2 className="mb-[var(--space-md)] text-h3 font-bold text-text-primary">Basic Info</h2>
 
-        <label className="text-body-sm font-semibold text-text-primary">Name</label>
+        <div className="grid grid-cols-1 gap-[var(--space-md)] sm:grid-cols-2">
+          <div>
+            <label className="text-body-sm font-semibold text-text-primary">First name</label>
+            <input
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="First name"
+              disabled={isSaving || isUploadingPhoto}
+              className="mt-[var(--space-xs)] h-12 w-full rounded-md border border-border px-[var(--space-md)] text-body text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+          </div>
+          <div>
+            <label className="text-body-sm font-semibold text-text-primary">Last name</label>
+            <input
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Last name"
+              disabled={isSaving || isUploadingPhoto}
+              className="mt-[var(--space-xs)] h-12 w-full rounded-md border border-border px-[var(--space-md)] text-body text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+          </div>
+        </div>
+
+        <label className="mt-[var(--space-md)] block text-body-sm font-semibold text-text-primary">Phone</label>
         <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Enter your name"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="Enter your phone number"
+          type="tel"
           disabled={isSaving || isUploadingPhoto}
           className="mb-[var(--space-md)] mt-[var(--space-xs)] h-12 w-full rounded-md border border-border px-[var(--space-md)] text-body text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
         />

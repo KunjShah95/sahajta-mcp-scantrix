@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 
 import { GLTaxCodeContent } from "@/components/glTaxCode/GLTaxCodeContent";
@@ -7,5 +8,9 @@ export const metadata: Metadata = {
 };
 
 export default function GLTaxCodePage() {
-  return <GLTaxCodeContent />;
+  return (
+    <Suspense fallback={null}>
+      <GLTaxCodeContent />
+    </Suspense>
+  );
 }

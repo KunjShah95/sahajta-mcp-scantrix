@@ -12,7 +12,7 @@ import { Spinner } from "@/components/ui/Spinner";
 // Routes reachable regardless of auth state. /invite/accept and
 // /register/verify-otp both have their own internal auth-aware logic
 // (see their page components) — they are not simply "logged-out only".
-const PUBLIC_ROUTES = ["/login", "/register", "/register/verify-otp", "/invite/accept"];
+const PUBLIC_ROUTES = ["/login", "/register", "/register/verify-otp", "/invite/accept", "/forgot-password"];
 
 const AUTH_ONLY_REDIRECT_ROUTES = ["/login", "/register"];
 

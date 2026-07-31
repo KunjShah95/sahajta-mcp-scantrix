@@ -16,6 +16,7 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 
 import { GoogleSignInButton } from "./GoogleSignInButton";
 import { AppleSignInButton } from "./AppleSignInButton";
+import { MicrosoftSignInButton } from "./MicrosoftSignInButton";
 
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
@@ -181,6 +182,11 @@ export function LoginForm() {
                   {passwordError}
                 </p>
               )}
+              <div className="mt-[var(--space-xs)] text-right">
+                <Link href="/forgot-password" className="text-caption font-semibold text-primary">
+                  Forgot password?
+                </Link>
+              </div>
             </div>
 
             {formError && (
@@ -200,7 +206,8 @@ export function LoginForm() {
             </div>
 
             <GoogleSignInButton onSuccess={goToDashboard} onError={setFormError} />
-            <AppleSignInButton />
+            <MicrosoftSignInButton onSuccess={goToDashboard} onError={setFormError} />
+            <AppleSignInButton onSuccess={goToDashboard} onError={setFormError} />
           </form>
         </Card>
       </div>

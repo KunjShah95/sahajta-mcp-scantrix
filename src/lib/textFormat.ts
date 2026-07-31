@@ -7,3 +7,14 @@
 export function capitalizeWords(value: string): string {
   return value.replace(/\b\w/g, (char) => char.toUpperCase());
 }
+
+// The API's `icon` field (and Firebase's photoURL fallback) can come back as
+// the literal strings "null"/"undefined" rather than an actual null/absent
+// value — treat those the same as empty so callers don't try to render them
+// as an <img src>.
+export function normalizePhotoURL(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "null" || trimmed === "undefined") return "";
+  return trimmed;
+}

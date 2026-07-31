@@ -7,8 +7,12 @@ import {
   loginUser,
   logoutUser,
   updateProfileIcon,
+  updateUserProfile,
   googleLogin,
   appleLogin,
+  microsoftLogin,
+  forgotPassword,
+  resetPassword,
 } from "./authApi";
 
 interface AuthState {
@@ -218,6 +222,29 @@ const authSlice = createSlice({
       )
 
       // =========================
+      // UPDATE USER PROFILE
+      // =========================
+
+      .addCase(updateUserProfile.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+
+      .addCase(updateUserProfile.fulfilled, (state, action) => {
+        state.loading = false;
+
+        const updatedUser = action.payload?.data;
+        if (state.user?.data?.user && updatedUser) {
+          state.user.data.user = { ...state.user.data.user, ...updatedUser };
+        }
+      })
+
+      .addCase(updateUserProfile.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+
+      // =========================
       // LOGOUT
       // =========================
 
@@ -243,6 +270,50 @@ const authSlice = createSlice({
         (state, action) => {
           state.loading = false;
 
+          state.error = action.payload;
+        }
+      )
+
+      // =========================
+      // FORGOT PASSWORD
+      // =========================
+
+      .addCase(forgotPassword.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+
+      .addCase(forgotPassword.fulfilled, (state) => {
+        state.loading = false;
+        state.error = null;
+      })
+
+      .addCase(
+        forgotPassword.rejected,
+        (state, action) => {
+          state.loading = false;
+          state.error = action.payload;
+        }
+      )
+
+      // =========================
+      // RESET PASSWORD
+      // =========================
+
+      .addCase(resetPassword.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+
+      .addCase(resetPassword.fulfilled, (state) => {
+        state.loading = false;
+        state.error = null;
+      })
+
+      .addCase(
+        resetPassword.rejected,
+        (state, action) => {
+          state.loading = false;
           state.error = action.payload;
         }
       )
@@ -291,6 +362,31 @@ const authSlice = createSlice({
 
 .addCase(
   appleLogin.rejected,
+  (state, action) => {
+    state.loading = false;
+    state.error = action.payload;
+    state.isAuthenticated = false;
+  }
+)
+
+// =========================
+// MICROSOFT LOGIN
+// =========================
+.addCase(microsoftLogin.pending, (state) => {
+  state.loading = true;
+  state.error = null;
+})
+.addCase(
+  microsoftLogin.fulfilled,
+  (state, action) => {
+    state.loading = false;
+    // Same structure as loginUser/googleLogin — UI depends on response.data
+    state.user = action.payload;
+    state.isAuthenticated = true;
+  }
+)
+.addCase(
+  microsoftLogin.rejected,
   (state, action) => {
     state.loading = false;
     state.error = action.payload;

@@ -1,7 +1,8 @@
 "use client";
 
+import { useRouter, useSearchParams } from "next/navigation";
 import { Ban, Pencil, Plus, RotateCcw, Store, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -60,6 +61,8 @@ const EMPTY_FORM: VendorFormState = {
 
 export function VendorsContent() {
   const dispatch = useAppDispatch();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const accessToken = useAppSelector((state) => state.auth.user?.data?.accessToken);
   const qbConnectionId = useAppSelector((state) => state.quickBooks.qbConnectionId);
   const vendors = useAppSelector((state) => state.quickBooks.vendors);
@@ -165,6 +168,22 @@ export function VendorsContent() {
     setFormError("");
     setSheetVisible(true);
   };
+
+  // Lets the sidebar's "Create → Vendor" shortcut land straight in create
+  // mode via /vendors?create=true, instead of just the plain list. Waits for
+  // loadingConnections to resolve so canManageVendors reflects the real role
+  // before deciding whether to open it; runs at most once per page load.
+  const autoOpenedCreateRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenedCreateRef.current) return;
+    if (searchParams.get("create") !== "true") return;
+    if (loadingConnections) return;
+    if (!canManageVendors) return;
+    autoOpenedCreateRef.current = true;
+    openCreateSheet();
+    router.replace("/vendors");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, loadingConnections, canManageVendors]);
 
   const openEditSheet = (vendor: Vendor) => {
     setEditingVendor(vendor);

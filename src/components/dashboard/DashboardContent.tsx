@@ -10,11 +10,13 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { SkeletonListRows } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
 import { StatRow } from "@/components/invoices/StatRow";
+import { TopVendorsCard } from "@/components/invoices/TopVendorsCard";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { getInvoices, rejectInvoice, scanInvoice } from "@/store/invoice/invoiceApi";
 import { connectQuickBooks, getMyQBConnections, getQuickBooksStatus } from "@/store/quickBooks/quickBooksApi";
 import { showToast } from "@/lib/dialogManager";
 import { getInvoiceAmount, getInvoiceFailureReason, getInvoiceStatus } from "@/lib/invoiceDisplay";
+import { requestExpandTransition } from "@/lib/pageTransition";
 import { setSelectedInvoice } from "@/store/invoice/invoiceSlice";
 import type { InvoiceRecord } from "@/store/invoice/invoiceSlice";
 
@@ -237,6 +239,7 @@ export function DashboardContent() {
   const [recentTab, setRecentTab] = useState<"all" | "pending" | "failed">("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [rejectingBulk, setRejectingBulk] = useState(false);
+  const recentCardRef = useRef<HTMLDivElement>(null);
 
   const user = useAppSelector((state) => state.auth.user);
   const {
@@ -347,6 +350,15 @@ export function DashboardContent() {
     router.push(`/invoices/${invoice._id}`);
   };
 
+  // Kicks off the "Recent card grows into the full Invoices page" animation
+  // (see ExpandTransitionOverlay, mounted in AppShell) — the rect must be
+  // captured now, synchronously, since this element unmounts as soon as the
+  // navigation below commits.
+  const handleViewAllInvoices = () => {
+    if (recentCardRef.current) requestExpandTransition(recentCardRef.current);
+    router.push("/invoices");
+  };
+
   const toggleSelected = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -398,37 +410,6 @@ export function DashboardContent() {
       setRejectingBulk(false);
     }
   };
-
-  // Real spend-by-vendor computed from this month's fetched invoices — no
-  // backend endpoint for this exists yet, so it's derived client-side from
-  // the same `invoices` list the rest of the page already uses.
-  const topVendors = useMemo(() => {
-    const monthStart = new Date();
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
-
-    const totals = new Map<string, { total: number; currency: string }>();
-    for (const invoice of invoices) {
-      const dateStr = invoice.extractedData?.invoiceDate || invoice.createdAt;
-      if (!dateStr) continue;
-      const invoiceDate = new Date(dateStr);
-      if (Number.isNaN(invoiceDate.getTime()) || invoiceDate < monthStart) continue;
-
-      const vendor = invoice.extractedData?.vendorName?.trim();
-      if (!vendor) continue;
-
-      const amount = invoice.extractedData?.totalAmount || 0;
-      const existing = totals.get(vendor);
-      if (existing) existing.total += amount;
-      else totals.set(vendor, { total: amount, currency: invoice.extractedData?.currency || "" });
-    }
-
-    return [...totals.entries()]
-      .map(([vendor, data]) => ({ vendor, ...data }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 4);
-  }, [invoices]);
-  const topVendorMax = topVendors[0]?.total || 0;
 
   // Weekly scan volume — bucketed by when each invoice was actually scanned
   // (createdAt), not its own invoice date, since this chart is about upload
@@ -573,7 +554,7 @@ export function DashboardContent() {
         </div>
       </div>
 
-      <div className="mt-[var(--space-md)] rounded-lg border border-border bg-white p-[var(--space-lg)]">
+      <div ref={recentCardRef} className="mt-[var(--space-md)] rounded-lg border border-border bg-white p-[var(--space-lg)]">
         <div className="flex flex-wrap items-center justify-between gap-[var(--space-sm)]">
           <div className="flex items-center gap-[var(--space-sm)]">
             <h2 className="text-h3 font-bold text-text-primary">Recent</h2>
@@ -602,6 +583,14 @@ export function DashboardContent() {
             >
               <Filter size={14} strokeWidth={2.25} />
               Filter
+            </button>
+            <button
+              type="button"
+              onClick={handleViewAllInvoices}
+              className="flex items-center gap-[var(--space-xs)] rounded-pill bg-primary-50 px-[var(--space-md)] py-[var(--space-xs)] text-body-sm font-semibold text-primary-700 hover:bg-primary-100"
+            >
+              View all
+              <ArrowRight size={14} strokeWidth={2.25} />
             </button>
           </div>
         </div>
@@ -699,29 +688,7 @@ export function DashboardContent() {
         </Card>
       )}
 
-      {topVendors.length > 0 && (
-        <div className="rounded-lg bg-background-soft p-[var(--space-lg)]">
-          <h4 className="text-body font-bold text-text-primary">Top vendors this month</h4>
-          <div className="mt-[var(--space-md)] flex flex-col gap-[var(--space-sm)]">
-            {topVendors.map(({ vendor, total, currency }) => {
-              const pct = topVendorMax > 0 ? Math.max(Math.round((total / topVendorMax) * 100), 6) : 6;
-              return (
-                <div key={vendor}>
-                  <div className="flex items-center justify-between gap-[var(--space-sm)] text-body-sm">
-                    <span className="truncate text-text-primary">{vendor}</span>
-                    <span className="shrink-0 font-bold text-text-primary">
-                      {`${currency} ${total.toLocaleString(undefined, { maximumFractionDigits: 0 })}`.trim()}
-                    </span>
-                  </div>
-                  <div className="mt-[var(--space-xs)] h-2 rounded-pill bg-white">
-                    <div className="h-2 rounded-pill bg-primary" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      <TopVendorsCard invoices={invoices} />
 
       {weeklyScans.total > 0 && (
         <div className="rounded-lg border border-border bg-white p-[var(--space-lg)]">
