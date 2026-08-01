@@ -33,3 +33,23 @@ export class SessionStore {
         await rm(this.filePath, { force: true });
     }
 }
+/**
+ * In-memory session for the remote (multi-user) server: each request builds a
+ * client seeded from the caller's OAuth token, so nothing is persisted to disk.
+ */
+export class MemorySessionStore extends SessionStore {
+    data;
+    constructor(initial = {}) {
+        super("");
+        this.data = { ...initial };
+    }
+    load() {
+        return { ...this.data };
+    }
+    async save(data) {
+        this.data = { ...this.data, ...data };
+    }
+    async clear() {
+        this.data = {};
+    }
+}

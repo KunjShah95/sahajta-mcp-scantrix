@@ -11,6 +11,7 @@ const testConfig: Config = {
   webUrl: "https://web.test",
   port: 8000,
   http: false,
+  remote: false,
   configFilePath: "does/not/matter.json",
 };
 

@@ -9,6 +9,7 @@ const testConfig = {
     webUrl: "https://web.test",
     port: 8000,
     http: false,
+    remote: false,
     configFilePath: "does/not/matter.json",
 };
 test("requireConfirm rejects without confirm:true and passes with it", () => {

@@ -6,6 +6,7 @@ const makeConfig = (overrides = {}) => ({
     webUrl: "https://web.test",
     port: 0,
     http: true,
+    remote: false,
     configFilePath: "does/not/matter.json",
     ...overrides,
 });

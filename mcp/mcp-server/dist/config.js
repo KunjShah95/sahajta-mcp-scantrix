@@ -5,11 +5,16 @@ const DEFAULT_PORT = 8000;
 const DEFAULT_CONFIG_PATH = ".savetrix-mcp/config.json";
 export const parseArgs = (argv) => {
     let http = false;
+    let remote = false;
     let port;
     let configFilePath = DEFAULT_CONFIG_PATH;
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i];
         if (arg === "--http") {
+            http = true;
+        }
+        else if (arg === "--remote") {
+            remote = true;
             http = true;
         }
         else if (arg === "--port") {
@@ -24,7 +29,7 @@ export const parseArgs = (argv) => {
             configFilePath = argv[++i] || DEFAULT_CONFIG_PATH;
         }
     }
-    return { http, port, configFilePath };
+    return { http, remote, port, configFilePath };
 };
 const readConfigFile = (path) => {
     if (!existsSync(path))
@@ -52,10 +57,13 @@ export const loadConfig = (argv) => {
         port: args.port ??
             (envStr("SAVETRIX_PORT") ? Number(envStr("SAVETRIX_PORT")) : DEFAULT_PORT),
         http: args.http,
+        remote: args.remote,
         email,
         password,
         qbConnectionId,
         mcpApiKey: envStr("SAVETRIX_MCP_API_KEY"),
         configFilePath: args.configFilePath,
+        publicUrl: envStr("SAVETRIX_PUBLIC_URL")?.replace(/\/$/, ""),
+        tokenSecret: envStr("SAVETRIX_TOKEN_SECRET"),
     };
 };

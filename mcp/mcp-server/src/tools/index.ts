@@ -76,13 +76,11 @@ const withClient =
     }
   };
 
-export const buildServer = (config: Config): McpServer => {
-  const client = createClient(config);
+export const registerSavetrixTools = (
+  server: McpServer,
+  client: SavetrixClient,
+): void => {
   const run = withClient(client);
-  const server = new McpServer({
-    name: "savetrix-mcp-server",
-    version: "1.0.0",
-  });
 
   // ── Onboarding ────────────────────────────────────────────────────────
   server.registerTool("savetrix_get_started", {
@@ -475,5 +473,13 @@ export const buildServer = (config: Config): McpServer => {
     return subscriptionClient.choosePlan(c, a);
   }));
 
+};
+
+export const buildServer = (config: Config): McpServer => {
+  const server = new McpServer({
+    name: "savetrix-mcp-server",
+    version: "1.0.0",
+  });
+  registerSavetrixTools(server, createClient(config));
   return server;
 };

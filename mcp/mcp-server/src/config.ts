@@ -5,11 +5,16 @@ export interface Config {
   webUrl: string;
   port: number;
   http: boolean;
+  remote: boolean;
   email?: string;
   password?: string;
   qbConnectionId?: string;
   mcpApiKey?: string;
   configFilePath: string;
+  /** Public HTTPS base URL of the deployed connector (OAuth issuer). */
+  publicUrl?: string;
+  /** Secret used to encrypt OAuth tokens/codes (>=32 chars). */
+  tokenSecret?: string;
 }
 
 const DEFAULT_API_URL = "https://api.savetrix.com/api";
@@ -28,17 +33,22 @@ interface ConfigFile {
 
 export interface CliArgs {
   http: boolean;
+  remote: boolean;
   port?: number;
   configFilePath: string;
 }
 
 export const parseArgs = (argv: string[]): CliArgs => {
   let http = false;
+  let remote = false;
   let port: number | undefined;
   let configFilePath = DEFAULT_CONFIG_PATH;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--http") {
+      http = true;
+    } else if (arg === "--remote") {
+      remote = true;
       http = true;
     } else if (arg === "--port") {
       const raw = argv[++i];
@@ -51,7 +61,7 @@ export const parseArgs = (argv: string[]): CliArgs => {
       configFilePath = argv[++i] || DEFAULT_CONFIG_PATH;
     }
   }
-  return { http, port, configFilePath };
+  return { http, remote, port, configFilePath };
 };
 
 const readConfigFile = (path: string): ConfigFile => {
@@ -84,10 +94,13 @@ export const loadConfig = (argv: string[]): Config => {
       args.port ??
       (envStr("SAVETRIX_PORT") ? Number(envStr("SAVETRIX_PORT")) : DEFAULT_PORT),
     http: args.http,
+    remote: args.remote,
     email,
     password,
     qbConnectionId,
     mcpApiKey: envStr("SAVETRIX_MCP_API_KEY"),
     configFilePath: args.configFilePath,
+    publicUrl: envStr("SAVETRIX_PUBLIC_URL")?.replace(/\/$/, ""),
+    tokenSecret: envStr("SAVETRIX_TOKEN_SECRET"),
   };
 };

@@ -1,5 +1,5 @@
 import axios from "axios";
-import { SessionStore } from "../session.js";
+import { SessionStore, MemorySessionStore } from "../session.js";
 export class SavetrixClient {
     api;
     session;
@@ -141,3 +141,18 @@ export const createClient = (config) => new SavetrixClient({
     session: new SessionStore(config.configFilePath),
     qbOverride: config.qbConnectionId,
 });
+/**
+ * Build a client for a single remote request, seeded with the Savetrix tokens
+ * carried inside the caller's verified OAuth access token. Uses an in-memory
+ * session so nothing touches disk (safe for serverless / multi-user).
+ */
+export const createClientForTokens = (config, tokens) => {
+    const client = new SavetrixClient({
+        baseURL: config.apiUrl,
+        webUrl: config.webUrl,
+        session: new MemorySessionStore(tokens),
+        qbOverride: config.qbConnectionId,
+    });
+    client.setTokens(tokens.accessToken, tokens.refreshToken);
+    return client;
+};
