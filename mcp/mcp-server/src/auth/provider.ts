@@ -10,7 +10,7 @@ import type {
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { Config } from "../config.js";
-import { createClient } from "../client/savetrixClient.js";
+import { createClientForLogin } from "../client/savetrixClient.js";
 import { encryptToken, decryptToken } from "./tokens.js";
 
 const CLIENT_TTL = 60 * 60 * 24 * 365; // 1 year
@@ -136,7 +136,7 @@ export class SavetrixOAuthProvider implements OAuthServerProvider {
     email: string,
     password: string,
   ): Promise<string> {
-    const client = createClient(this.config);
+    const client = createClientForLogin(this.config);
     const payload = await client.login(email, password);
     const data = (payload as any)?.data ?? {};
     const session: SavetrixSession = {

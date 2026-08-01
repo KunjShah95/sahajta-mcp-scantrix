@@ -180,6 +180,20 @@ export const createClient = (config: Config): SavetrixClient =>
   });
 
 /**
+ * Build a client for a one-off login that must not touch disk (e.g. the
+ * remote/OAuth /login handler, which runs on serverless with a read-only
+ * filesystem outside /tmp). The returned tokens are captured by the caller
+ * directly; nothing needs to be persisted here.
+ */
+export const createClientForLogin = (config: Config): SavetrixClient =>
+  new SavetrixClient({
+    baseURL: config.apiUrl,
+    webUrl: config.webUrl,
+    session: new MemorySessionStore(),
+    qbOverride: config.qbConnectionId,
+  });
+
+/**
  * Build a client for a single remote request, seeded with the Savetrix tokens
  * carried inside the caller's verified OAuth access token. Uses an in-memory
  * session so nothing touches disk (safe for serverless / multi-user).

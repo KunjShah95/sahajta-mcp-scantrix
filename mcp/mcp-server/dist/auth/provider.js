@@ -1,4 +1,4 @@
-import { createClient } from "../client/savetrixClient.js";
+import { createClientForLogin } from "../client/savetrixClient.js";
 import { encryptToken, decryptToken } from "./tokens.js";
 const CLIENT_TTL = 60 * 60 * 24 * 365; // 1 year
 const CODE_TTL = 60 * 5; // 5 minutes
@@ -69,7 +69,7 @@ export class SavetrixOAuthProvider {
     }
     /** Validate Savetrix credentials, then return an authorization code. */
     async issueAuthorizationCode(req, email, password) {
-        const client = createClient(this.config);
+        const client = createClientForLogin(this.config);
         const payload = await client.login(email, password);
         const data = payload?.data ?? {};
         const session = {
