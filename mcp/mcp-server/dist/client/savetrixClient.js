@@ -91,9 +91,14 @@ export class SavetrixClient {
         try {
             const res = await this.api.get("/qb-connections");
             const connections = res.data?.data?.connections;
-            const first = Array.isArray(connections) ? connections[0] : undefined;
-            if (first?._id) {
-                this.activeQbId = first._id;
+            const list = Array.isArray(connections) ? connections : [];
+            // Accounts can carry multiple QB connections (e.g. reconnected several
+            // times); only one has status "active" at a time. Fall back to the
+            // first entry only if none is marked active, so behavior degrades
+            // gracefully instead of breaking on an unexpected response shape.
+            const chosen = list.find((c) => c?.status === "active") ?? list[0];
+            if (chosen?._id) {
+                this.activeQbId = chosen._id;
                 return this.activeQbId;
             }
         }

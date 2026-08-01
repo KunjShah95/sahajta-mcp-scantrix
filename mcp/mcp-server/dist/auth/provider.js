@@ -77,6 +77,7 @@ export class SavetrixOAuthProvider {
             st_rt: data.refreshToken,
             userId: data.user?._id,
             email: data.user?.email ?? email,
+            user: payload,
         };
         const code = {
             ...session,
@@ -101,6 +102,7 @@ export class SavetrixOAuthProvider {
             st_rt: code.st_rt,
             userId: code.userId,
             email: code.email,
+            user: code.user,
             client_id: client.client_id,
             resource: code.resource,
         });
@@ -125,6 +127,7 @@ export class SavetrixOAuthProvider {
                 st_rt: session.st_rt,
                 userId: session.userId,
                 email: session.email,
+                user: session.user,
             },
         };
     }

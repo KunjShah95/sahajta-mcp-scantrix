@@ -103,6 +103,7 @@ export const createRemoteApp = (config) => {
         const client = createClientForTokens(config, {
             accessToken: extra.st_at,
             refreshToken: extra.st_rt,
+            user: extra.user,
         });
         const server = new McpServer({ name: "savetrix-mcp-server", version: "1.0.0" });
         registerSavetrixTools(server, client);

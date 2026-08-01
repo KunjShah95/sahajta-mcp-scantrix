@@ -25,6 +25,7 @@ export interface SavetrixSession {
   st_rt: string; // Savetrix refresh token
   userId?: string;
   email?: string;
+  user?: unknown; // full raw /auth/login response payload, for savetrix_account_info
 }
 
 interface CodePayload extends SavetrixSession {
@@ -144,6 +145,7 @@ export class SavetrixOAuthProvider implements OAuthServerProvider {
       st_rt: data.refreshToken,
       userId: data.user?._id,
       email: data.user?.email ?? email,
+      user: payload,
     };
     const code: CodePayload = {
       ...session,
@@ -184,6 +186,7 @@ export class SavetrixOAuthProvider implements OAuthServerProvider {
       st_rt: code.st_rt,
       userId: code.userId,
       email: code.email,
+      user: code.user,
       client_id: client.client_id,
       resource: code.resource,
     });
@@ -220,6 +223,7 @@ export class SavetrixOAuthProvider implements OAuthServerProvider {
         st_rt: session.st_rt,
         userId: session.userId,
         email: session.email,
+        user: session.user,
       },
     };
   }

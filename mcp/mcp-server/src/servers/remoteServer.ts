@@ -113,7 +113,7 @@ export const createRemoteApp = (config: Config): express.Express => {
   });
 
   const handleMcp = async (req: Request, res: Response): Promise<void> => {
-    const extra = (req.auth?.extra ?? {}) as { st_at?: string; st_rt?: string };
+    const extra = (req.auth?.extra ?? {}) as { st_at?: string; st_rt?: string; user?: unknown };
     if (!extra.st_at || !extra.st_rt) {
       res.status(401).json({ error: "invalid_token" });
       return;
@@ -121,6 +121,7 @@ export const createRemoteApp = (config: Config): express.Express => {
     const client = createClientForTokens(config, {
       accessToken: extra.st_at,
       refreshToken: extra.st_rt,
+      user: extra.user,
     });
     const server = new McpServer({ name: "savetrix-mcp-server", version: "1.0.0" });
     registerSavetrixTools(server, client);
