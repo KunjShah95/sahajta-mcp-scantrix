@@ -46,15 +46,22 @@ function buildVendorTotals(
 // — widen to all-time totals instead of showing a sparse list, as long as
 // doing so actually surfaces more vendors.
 export function computeTopVendors(invoices: InvoiceRecord[]): TopVendorsResult {
+  // Only spend that actually posted (auto or manual) counts as real vendor
+  // spend — pending/processing isn't confirmed yet and failed never posted,
+  // so neither belongs in a "top vendors" total.
+  const postedInvoices = invoices.filter(
+    (invoice) => invoice.postedStatus === "auto" || invoice.postedStatus === "manual",
+  );
+
   const monthStart = new Date();
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
 
-  let totals = buildVendorTotals(invoices, monthStart);
+  let totals = buildVendorTotals(postedInvoices, monthStart);
   let scopedToMonth = true;
 
   if (totals.size < MIN_TOP_VENDORS) {
-    const allTimeTotals = buildVendorTotals(invoices, null);
+    const allTimeTotals = buildVendorTotals(postedInvoices, null);
     if (allTimeTotals.size > totals.size) {
       totals = allTimeTotals;
       scopedToMonth = false;

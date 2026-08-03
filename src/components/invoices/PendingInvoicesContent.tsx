@@ -86,7 +86,7 @@ export function PendingInvoicesContent() {
         <button
           type="button"
           onClick={refetch}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-white lg:h-9 lg:w-9"
           aria-label="Refresh"
         >
           <RefreshCw size={18} strokeWidth={2} />

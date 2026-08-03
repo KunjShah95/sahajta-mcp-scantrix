@@ -46,7 +46,7 @@ export function LandingNav() {
             <Wordmark />
           </a>
 
-          <div className="hidden items-center gap-8 md:flex">
+          <div className="hidden items-center gap-8 lg:flex">
             {LINKS.map((link) => (
               <a
                 key={link.href}
@@ -58,7 +58,7 @@ export function LandingNav() {
             ))}
           </div>
 
-          <div className="hidden items-center gap-2 md:flex">
+          <div className="hidden items-center gap-2 lg:flex">
             <Link
               href="/login"
               className="rounded-lg px-3.5 py-2 text-[14px] font-semibold text-trust-navy transition-colors hover:bg-background-alt"
@@ -78,7 +78,7 @@ export function LandingNav() {
             onClick={() => setOpen((v) => !v)}
             aria-label={open ? "Close menu" : "Open menu"}
             aria-expanded={open}
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-trust-navy hover:bg-background-alt md:hidden"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-trust-navy hover:bg-background-alt lg:hidden"
           >
             {open ? <X size={22} /> : <Menu size={22} />}
           </button>
@@ -87,7 +87,7 @@ export function LandingNav() {
 
       {/* Mobile sheet */}
       {open && (
-        <div className="border-b border-border bg-white px-5 pb-6 pt-2 shadow-lg md:hidden">
+        <div className="border-b border-border bg-white px-5 pb-6 pt-2 shadow-lg lg:hidden">
           <div className="flex flex-col">
             {LINKS.map((link) => (
               <a

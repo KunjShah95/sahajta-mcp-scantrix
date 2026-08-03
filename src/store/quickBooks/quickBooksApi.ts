@@ -106,6 +106,42 @@ export const getQuickBooksStatus = createAsyncThunk(
 );
 
 // ================================
+// UPDATE SETTINGS (auto-post / line-item-wise entry)
+// ================================
+interface UpdateQuickBooksSettingsPayload {
+  accessToken: string;
+  autoPostEnabled?: boolean;
+  lineItemWiseEnabled?: boolean;
+}
+
+export const updateQuickBooksSettings = createAsyncThunk(
+  "quickbooks/updateSettings",
+  async (data: UpdateQuickBooksSettingsPayload, thunkAPI) => {
+    const state = thunkAPI.getState() as RootState;
+    const qbConnectionId = state.quickBooks.qbConnectionId;
+    const body: Record<string, boolean> = {};
+    if (data.autoPostEnabled !== undefined) body.autoPostEnabled = data.autoPostEnabled;
+    if (data.lineItemWiseEnabled !== undefined) body.lineItemWiseEnabled = data.lineItemWiseEnabled;
+    try {
+      console.log("========== UPDATE QB SETTINGS REQUEST ==========");
+      const response = await api.patch("/quickbooks/settings", body, {
+        headers: {
+          Authorization: `Bearer ${data.accessToken}`,
+          ...(qbConnectionId ? { "X-QB-Id": qbConnectionId } : {}),
+        },
+      });
+      console.log("========== UPDATE QB SETTINGS SUCCESS ==========");
+      console.log(JSON.stringify(response.data, null, 2));
+      return response.data;
+    } catch (error: any) {
+      console.log("========== UPDATE QB SETTINGS ERROR ==========");
+      const message = error?.response?.data?.message || error?.message || "Failed to update QuickBooks settings";
+      return thunkAPI.rejectWithValue(message);
+    }
+  },
+);
+
+// ================================
 // DISCONNECT QUICKBOOKS
 // ================================
 interface DisconnectQuickBooksPayload {
@@ -427,6 +463,41 @@ export const fetchQuickBooksVendors = createAsyncThunk(
 );
 
 // ================================
+// SYNC VENDORS (pull latest from QuickBooks)
+// ================================
+interface SyncVendorsPayload {
+  accessToken: string;
+}
+
+export const syncQuickBooksVendors = createAsyncThunk(
+  "quickbooks/syncVendors",
+  async (data: SyncVendorsPayload, thunkAPI) => {
+    const state = thunkAPI.getState() as RootState;
+    const qbConnectionId = state.quickBooks.qbConnectionId;
+    try {
+      console.log("========== SYNC VENDORS REQUEST ==========");
+      const response = await api.post(
+        "/quickbooks/vendors/sync",
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${data.accessToken}`,
+            ...(qbConnectionId ? { "X-QB-Id": qbConnectionId } : {}),
+          },
+        },
+      );
+      console.log("========== SYNC VENDORS SUCCESS ==========");
+      console.log(JSON.stringify(response.data, null, 2));
+      return response.data;
+    } catch (error: any) {
+      console.log("========== SYNC VENDORS ERROR ==========");
+      const message = error?.response?.data?.message || error?.message || "Failed to sync vendors from QuickBooks";
+      return thunkAPI.rejectWithValue({ message, statusCode: error?.response?.data?.statusCode });
+    }
+  },
+);
+
+// ================================
 // GL ACCOUNTS
 // ================================
 interface FetchAccountsPayload {
@@ -500,6 +571,42 @@ export const createQuickBooksAccount = createAsyncThunk(
 );
 
 // ================================
+// SYNC GL ACCOUNTS (pull latest from QuickBooks)
+// ================================
+interface SyncAccountsPayload {
+  accessToken: string;
+}
+
+export const syncQuickBooksAccounts = createAsyncThunk(
+  "quickbooks/syncAccounts",
+  async (data: SyncAccountsPayload, thunkAPI) => {
+    const state = thunkAPI.getState() as RootState;
+    const qbConnectionId = state.quickBooks.qbConnectionId;
+    try {
+      console.log("========== SYNC GL ACCOUNTS REQUEST ==========");
+      const response = await api.post(
+        "/quickbooks/accounts/sync",
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${data.accessToken}`,
+            ...(qbConnectionId ? { "X-QB-Id": qbConnectionId } : {}),
+          },
+        },
+      );
+      console.log("========== SYNC GL ACCOUNTS SUCCESS ==========");
+      console.log(JSON.stringify(response.data, null, 2));
+      return response.data;
+    } catch (error: any) {
+      console.log("========== SYNC GL ACCOUNTS ERROR ==========");
+      const message =
+        error?.response?.data?.message || error?.message || "Failed to sync GL accounts from QuickBooks";
+      return thunkAPI.rejectWithValue({ message, statusCode: error?.response?.data?.statusCode });
+    }
+  },
+);
+
+// ================================
 // TAX CODES
 // ================================
 interface FetchTaxCodesPayload {
@@ -539,6 +646,41 @@ export const fetchQuickBooksTaxCodes = createAsyncThunk(
         error?.message ||
         "Failed to fetch tax codes";
       return thunkAPI.rejectWithValue(message);
+    }
+  },
+);
+
+// ================================
+// SYNC TAX CODES (pull latest from QuickBooks)
+// ================================
+interface SyncTaxCodesPayload {
+  accessToken: string;
+}
+
+export const syncQuickBooksTaxCodes = createAsyncThunk(
+  "quickbooks/syncTaxCodes",
+  async (data: SyncTaxCodesPayload, thunkAPI) => {
+    const state = thunkAPI.getState() as RootState;
+    const qbConnectionId = state.quickBooks.qbConnectionId;
+    try {
+      console.log("========== SYNC TAX CODES REQUEST ==========");
+      const response = await api.post(
+        "/quickbooks/taxcodes/sync",
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${data.accessToken}`,
+            ...(qbConnectionId ? { "X-QB-Id": qbConnectionId } : {}),
+          },
+        },
+      );
+      console.log("========== SYNC TAX CODES SUCCESS ==========");
+      console.log(JSON.stringify(response.data, null, 2));
+      return response.data;
+    } catch (error: any) {
+      console.log("========== SYNC TAX CODES ERROR ==========");
+      const message = error?.response?.data?.message || error?.message || "Failed to sync tax codes from QuickBooks";
+      return thunkAPI.rejectWithValue({ message, statusCode: error?.response?.data?.statusCode });
     }
   },
 );

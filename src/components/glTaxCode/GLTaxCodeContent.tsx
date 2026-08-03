@@ -79,7 +79,11 @@ export function GLTaxCodeContent() {
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const activeConnection = connections.find((c) => c._id === qbConnectionId) || connections[0];
+  // With exactly one connected company there's nothing to choose, so use it
+  // directly. With 2+, only use a match for an id the user actually
+  // selected — the top-bar switcher starts blank when multiple companies are
+  // connected, and this page shouldn't silently pick one on its own.
+  const activeConnection = connections.length === 1 ? connections[0] : connections.find((c) => c._id === qbConnectionId);
   const currentRole = activeConnection?.role || "";
   // Mirrors PERMISSIONS.REVIEW_EDIT_GL on the backend.
   const canManage = currentRole !== "" && currentRole !== "contributor";
@@ -206,8 +210,12 @@ export function GLTaxCodeContent() {
       <div className="mx-auto max-w-2xl p-[var(--space-lg)]">
         <EmptyState
           icon={<Landmark size={28} strokeWidth={1.75} />}
-          title="No company connected"
-          description="Connect a QuickBooks company before managing GL accounts and tax codes."
+          title={connections.length > 0 ? "Select a company" : "No company connected"}
+          description={
+            connections.length > 0
+              ? "Choose a company from the switcher up top to manage its GL accounts and tax codes."
+              : "Connect a QuickBooks company before managing GL accounts and tax codes."
+          }
         />
       </div>
     );
@@ -215,15 +223,15 @@ export function GLTaxCodeContent() {
 
   return (
     <div className="mx-auto max-w-3xl p-[var(--space-lg)]">
-      <div className="flex items-center justify-between gap-[var(--space-md)]">
-        <div>
+      <div className="flex flex-col gap-[var(--space-md)] lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
           <h1 className="text-h2 font-bold text-trust-navy">GL Account &amp; TaxCode</h1>
           <p className="mt-[var(--space-xs)] text-body-sm text-text-secondary">
             Manage GL accounts and view tax codes for {activeConnection.name}.
           </p>
         </div>
         {canManage && activeTab === "accounts" && (
-          <Button onClick={openCreateSheet} size="sm" className="shrink-0">
+          <Button onClick={openCreateSheet} size="sm" className="lg:shrink-0 lg:self-start">
             <Plus size={16} strokeWidth={2.5} />
             Add GL Account
           </Button>
@@ -241,7 +249,7 @@ export function GLTaxCodeContent() {
           type="button"
           onClick={() => setActiveTab("accounts")}
           aria-current={activeTab === "accounts" ? "page" : undefined}
-          className={`flex-1 rounded-md px-[var(--space-sm)] py-[var(--space-xs)] text-body-sm font-semibold ${
+          className={`flex-1 rounded-md px-[var(--space-sm)] py-[var(--space-sm)] text-body-sm font-semibold lg:py-[var(--space-xs)] ${
             activeTab === "accounts" ? "bg-white text-primary shadow-sm" : "text-text-secondary"
           }`}
         >
@@ -251,7 +259,7 @@ export function GLTaxCodeContent() {
           type="button"
           onClick={() => setActiveTab("taxCodes")}
           aria-current={activeTab === "taxCodes" ? "page" : undefined}
-          className={`flex-1 rounded-md px-[var(--space-sm)] py-[var(--space-xs)] text-body-sm font-semibold ${
+          className={`flex-1 rounded-md px-[var(--space-sm)] py-[var(--space-sm)] text-body-sm font-semibold lg:py-[var(--space-xs)] ${
             activeTab === "taxCodes" ? "bg-white text-primary shadow-sm" : "text-text-secondary"
           }`}
         >
@@ -333,7 +341,12 @@ export function GLTaxCodeContent() {
           >
             <div className="mb-[var(--space-md)] flex items-center justify-between">
               <h2 className="text-h3 font-bold text-text-primary">Add GL Account</h2>
-              <button type="button" onClick={closeSheet} aria-label="Close" className="text-text-secondary">
+              <button
+                type="button"
+                onClick={closeSheet}
+                aria-label="Close"
+                className="-m-[var(--space-sm)] p-[var(--space-sm)] text-text-secondary lg:m-0 lg:p-0"
+              >
                 <X size={20} strokeWidth={2.25} />
               </button>
             </div>

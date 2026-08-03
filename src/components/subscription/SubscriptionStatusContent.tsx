@@ -61,12 +61,12 @@ export function SubscriptionStatusContent() {
       <h1 className="text-h2 font-bold text-trust-navy">Subscription</h1>
 
       <div className="mt-[var(--space-lg)] rounded-xl border border-border bg-white p-[var(--space-md)]">
-        <div className="flex items-start justify-between">
-          <div>
+        <div className="flex flex-wrap items-start justify-between gap-[var(--space-sm)]">
+          <div className="min-w-0">
             <p className="text-caption text-text-secondary">Current plan</p>
-            <p className="mt-[var(--space-xs)] text-h1 font-bold text-trust-navy">{subscription.planName}</p>
+            <p className="mt-[var(--space-xs)] break-words text-h1 font-bold text-trust-navy">{subscription.planName}</p>
           </div>
-          <span className={`flex items-center gap-[var(--space-xs)] rounded-pill px-[var(--space-sm)] py-[var(--space-xs)] ${statusMeta.className}`}>
+          <span className={`flex shrink-0 items-center gap-[var(--space-xs)] rounded-pill px-[var(--space-sm)] py-[var(--space-xs)] ${statusMeta.className}`}>
             <span className="h-1.5 w-1.5 rounded-full bg-current" />
             <span className="text-caption font-bold">{statusMeta.label}</span>
           </span>
@@ -109,14 +109,14 @@ export function SubscriptionStatusContent() {
             {subscription.slots.map((slot) => (
               <div
                 key={slot.qbConnectionId}
-                className="flex items-center justify-between rounded-lg border border-border bg-white px-[var(--space-md)] py-[var(--space-sm)]"
+                className="flex flex-wrap items-center justify-between gap-[var(--space-sm)] rounded-lg border border-border bg-white px-[var(--space-md)] py-[var(--space-sm)]"
               >
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-text-primary">{slot.name}</p>
                   <p className="text-caption text-text-secondary">Realm ID: {slot.realmId}</p>
                 </div>
                 {slot.locked && (
-                  <span className="flex items-center gap-1 rounded-pill bg-warning/10 px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold text-warning">
+                  <span className="flex shrink-0 items-center gap-1 rounded-pill bg-warning/10 px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold text-warning">
                     <Lock size={12} strokeWidth={2.5} />
                     Locked until {formatDate(slot.unlockAt)}
                   </span>

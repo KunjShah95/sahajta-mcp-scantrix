@@ -23,13 +23,13 @@ import vendorReducer from "./vendor/vendorSlice";
 import quickBooksReducer from "./quickBooks/quickBooksSlice";
 import subscriptionReducer from "./subscription/subscriptionSlice";
 
-// Only persist the 3 QB fields we need across restarts.
+// Only persist the QB fields we need across restarts.
 // auth/invoice/vendor are untouched — auth already uses its own
 // storage (saveUser) so no change needed there.
 const quickBooksPersistConfig = {
   key: "quickBooks",
   storage: persistStorage,
-  whitelist: ["connected", "realmId", "qbConnectionId"],
+  whitelist: ["connected", "realmId", "qbConnectionId", "hasExplicitSelection"],
 };
 
 const rootReducer = combineReducers({

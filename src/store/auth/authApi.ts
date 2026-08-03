@@ -437,15 +437,11 @@ export const logoutUser = createAsyncThunk(
 // ================================
 // FORGOT PASSWORD
 // ================================
-// NOTE(backend gap): Scantrix_API has no forgot/reset-password route today
-// (confirmed against src/routes/auth.routes.js — only register/verify-
-// register/resend-register-otp/login/google/apple/refresh/logout/
-// set-password/change-password exist, and the last two require an active
-// session). This thunk assumes a contract mirroring the register/OTP flow
-// that already exists: POST /auth/forgot-password { email } sends a reset
-// OTP to that email if an account exists. Will 404 until the backend adds
-// it — see conversation history for why this was built ahead of the
-// backend.
+// Backend contract (src/routes/auth.routes.js + auth.controller.js):
+// POST /auth/forgot-password { email } sends a 6-digit OTP (10-min expiry,
+// 60s resend cooldown) to that email if an active account exists for it —
+// including Google/Apple-only accounts with no password yet, since
+// resetPassword doubles as a way to add a password to an OAuth account.
 
 interface ForgotPasswordPayload {
   email: string;
@@ -508,11 +504,11 @@ export const forgotPassword = createAsyncThunk(
 // ================================
 // RESET PASSWORD
 // ================================
-// NOTE(backend gap): same caveat as forgotPassword above. Assumed contract:
-// POST /auth/reset-password { email, otp, newPassword } verifies the OTP
-// and sets the new password in one step — no separate verify-then-reset
-// round trip, since the OTP is only useful together with the new password
-// the user is submitting anyway.
+// Backend contract: POST /auth/reset-password { email, otp, newPassword }
+// verifies the OTP and sets the new password in one step — no separate
+// verify-then-reset round trip. On success the backend logs the user in
+// immediately, returning the same { user, accessToken, refreshToken } shape
+// as /auth/login, so this saves tokens/user the same way loginUser does.
 
 interface ResetPasswordPayload {
   email: string;
@@ -548,6 +544,30 @@ export const resetPassword = createAsyncThunk(
       console.log(
         JSON.stringify(response.data, null, 2)
       );
+
+      // Defensively reset any QB session data left over from a previous
+      // user on this browser before this session saves its own tokens or
+      // any QB-scoped fetch can fire. Same reasoning as loginUser.
+      await purgePersistedState(thunkAPI.dispatch);
+
+      const accessToken = response.data?.data?.accessToken;
+      const refreshToken = response.data?.data?.refreshToken;
+
+      // Save FULL response — same pattern as loginUser, because app UI
+      // uses: user.data.user
+      const user = response.data;
+
+      if (accessToken) {
+        await saveAccessToken(accessToken);
+      }
+
+      if (refreshToken) {
+        await saveRefreshToken(refreshToken);
+      }
+
+      if (user) {
+        await saveUser(user);
+      }
 
       return response.data;
     } catch (error: any) {

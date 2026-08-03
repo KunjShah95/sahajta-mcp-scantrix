@@ -27,16 +27,22 @@ import { OutcomeMixCard } from "@/components/invoices/OutcomeMixCard";
 import { TopVendorsCard } from "@/components/invoices/TopVendorsCard";
 
 type ListType = "auto" | "manual" | "failed";
-type StatusFilter = "all" | ListType;
-type ConfidenceFilter = "all" | "high" | "medium" | "low";
+// Separate from ListType (which only drives the 3 outcome stat tiles) so
+// adding "pending" here doesn't add a 4th tile — it's purely a filter/view
+// option, matching PendingInvoicesContent's own dedicated review flow.
+type StatusFilter = "all" | "pending" | ListType;
 
-const STATUS_ORDER: StatusFilter[] = ["all", "auto", "manual", "failed"];
+const STATUS_ORDER: StatusFilter[] = ["all", "pending", "auto", "manual", "failed"];
 const TAB_ORDER: ListType[] = ["auto", "manual", "failed"];
 
 const STATUS_META: Record<StatusFilter, { label: string; emptyMessage: string }> = {
   all: {
     label: "All",
     emptyMessage: "No invoices yet. Scanned invoices will appear here.",
+  },
+  pending: {
+    label: "Pending",
+    emptyMessage: "No pending invoices. Invoices awaiting review will appear here.",
   },
   auto: {
     label: "Auto-Posted",
@@ -52,12 +58,6 @@ const STATUS_META: Record<StatusFilter, { label: string; emptyMessage: string }>
   },
 };
 
-const CONFIDENCE_BANDS: Record<Exclude<ConfidenceFilter, "all">, { label: string; test: (score: number) => boolean }> = {
-  high: { label: "High (90%+)", test: (score) => score >= 90 },
-  medium: { label: "Medium (70–89%)", test: (score) => score >= 70 && score < 90 },
-  low: { label: "Low (<70%)", test: (score) => score < 70 },
-};
-
 const SORT_OPTIONS: { by: "date" | "amount"; dir: "asc" | "desc"; label: string }[] = [
   { by: "date", dir: "desc", label: "Newest first" },
   { by: "date", dir: "asc", label: "Oldest first" },
@@ -70,7 +70,7 @@ function isListType(value: string | null): value is ListType {
 }
 
 function isStatusFilter(value: string | null): value is StatusFilter {
-  return value === "all" || isListType(value);
+  return value === "all" || value === "pending" || isListType(value);
 }
 
 function invoiceTimestamp(invoice: InvoiceRecord): number {
@@ -154,7 +154,12 @@ function SelectedInvoiceCard({
     <div className="overflow-hidden rounded-lg border border-border bg-white">
       <div className="flex items-center justify-between gap-[var(--space-sm)] bg-primary-900 px-[var(--space-md)] py-[var(--space-sm)]">
         <span className="text-caption font-bold uppercase tracking-wide text-primary-200">Selected invoice</span>
-        <button type="button" onClick={onClose} aria-label="Close" className="text-primary-200 hover:text-white">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="-m-[var(--space-sm)] p-[var(--space-sm)] text-primary-200 hover:text-white"
+        >
           <X size={16} strokeWidth={2.5} />
         </button>
       </div>
@@ -274,8 +279,15 @@ export function InvoiceListContent() {
   const typeParam = searchParams.get("type");
   const statusFilter: StatusFilter = isStatusFilter(typeParam) ? typeParam : "all";
 
-  const { invoices: allInvoices, autoPostedInvoices, manualPostedInvoices, failedInvoices, loading, error } =
-    useAppSelector((state) => state.invoice);
+  const {
+    invoices: allInvoices,
+    autoPostedInvoices,
+    manualPostedInvoices,
+    pendingInvoices,
+    failedInvoices,
+    loading,
+    error,
+  } = useAppSelector((state) => state.invoice);
   const qbConnectionId = useAppSelector((state) => state.quickBooks.qbConnectionId);
   const glAccounts = useAppSelector((state) => state.quickBooks.accounts);
   const taxCodes = useAppSelector((state) => state.quickBooks.taxCodes);
@@ -284,7 +296,6 @@ export function InvoiceListContent() {
   const [sortIndex, setSortIndex] = useState(0);
   const [vendorFilter, setVendorFilter] = useState("all");
   const [currencyFilter, setCurrencyFilter] = useState("all");
-  const [confidenceFilter, setConfidenceFilter] = useState<ConfidenceFilter>("all");
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const sort = SORT_OPTIONS[sortIndex];
 
@@ -311,16 +322,17 @@ export function InvoiceListContent() {
   }, [statusFilter]);
 
   const combinedInvoices = useMemo(
-    () => [...autoPostedInvoices, ...manualPostedInvoices, ...failedInvoices],
-    [autoPostedInvoices, manualPostedInvoices, failedInvoices],
+    () => [...pendingInvoices, ...autoPostedInvoices, ...manualPostedInvoices, ...failedInvoices],
+    [pendingInvoices, autoPostedInvoices, manualPostedInvoices, failedInvoices],
   );
 
   const statusFilteredInvoices: InvoiceRecord[] = useMemo(() => {
     if (statusFilter === "all") return combinedInvoices;
+    if (statusFilter === "pending") return pendingInvoices;
     if (statusFilter === "auto") return autoPostedInvoices;
     if (statusFilter === "manual") return manualPostedInvoices;
     return failedInvoices;
-  }, [statusFilter, combinedInvoices, autoPostedInvoices, manualPostedInvoices, failedInvoices]);
+  }, [statusFilter, combinedInvoices, pendingInvoices, autoPostedInvoices, manualPostedInvoices, failedInvoices]);
 
   const vendorOptions = useMemo(() => {
     const names = new Set<string>();
@@ -349,10 +361,6 @@ export function InvoiceListContent() {
     if (currencyFilter !== "all") {
       list = list.filter((invoice) => invoice.extractedData?.currency === currencyFilter);
     }
-    if (confidenceFilter !== "all") {
-      const band = CONFIDENCE_BANDS[confidenceFilter];
-      list = list.filter((invoice) => invoice.confidenceScore != null && band.test(Number(invoice.confidenceScore)));
-    }
 
     const query = searchText.trim().toLowerCase();
     if (query) {
@@ -369,10 +377,17 @@ export function InvoiceListContent() {
       const bValue = sort.by === "amount" ? b.extractedData?.totalAmount || 0 : invoiceTimestamp(b);
       return sort.dir === "asc" ? aValue - bValue : bValue - aValue;
     });
-  }, [statusFilteredInvoices, vendorFilter, currencyFilter, confidenceFilter, searchText, sort]);
+  }, [statusFilteredInvoices, vendorFilter, currencyFilter, searchText, sort]);
 
+  // Pending invoices go straight to the editable review screen (matching
+  // PendingInvoicesContent's handleOpenInvoice) since a pending invoice has
+  // no posted data yet worth showing read-only.
   const handleOpenFullDetails = (invoice: InvoiceRecord) => {
     dispatch(setSelectedInvoice(invoice));
+    if (invoice.postedStatus === "pending") {
+      router.push(`/invoices/${invoice._id}/review`);
+      return;
+    }
     router.push(`/invoices/${invoice._id}${statusFilter !== "all" ? `?type=${statusFilter}` : ""}`);
   };
 
@@ -438,83 +453,80 @@ export function InvoiceListContent() {
 
           <div className="rounded-lg border border-border bg-white">
             {/* Filter bar */}
-            <div className="flex flex-wrap items-center gap-[var(--space-sm)] border-b border-border p-[var(--space-md)]">
-              <select
-                value={statusFilter}
-                onChange={(event) => router.replace(`/invoices?type=${event.target.value}`)}
-                className="rounded-pill border border-border bg-white px-[var(--space-md)] py-[var(--space-xs)] text-body-sm font-semibold text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/40"
-              >
-                {STATUS_ORDER.map((s) => (
-                  <option key={s} value={s}>
-                    Status: {STATUS_META[s].label}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={vendorFilter}
-                onChange={(event) => setVendorFilter(event.target.value)}
-                className="max-w-[160px] rounded-pill border border-border bg-white px-[var(--space-md)] py-[var(--space-xs)] text-body-sm font-semibold text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/40"
-              >
-                <option value="all">Vendor: All</option>
-                {vendorOptions.map((vendor) => (
-                  <option key={vendor} value={vendor}>
-                    {vendor}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={currencyFilter}
-                onChange={(event) => setCurrencyFilter(event.target.value)}
-                className="rounded-pill border border-border bg-white px-[var(--space-md)] py-[var(--space-xs)] text-body-sm font-semibold text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/40"
-              >
-                <option value="all">Currency: All</option>
-                {currencyOptions.map((currency) => (
-                  <option key={currency} value={currency}>
-                    {currency}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={confidenceFilter}
-                onChange={(event) => setConfidenceFilter(event.target.value as ConfidenceFilter)}
-                className="rounded-pill border border-border bg-white px-[var(--space-md)] py-[var(--space-xs)] text-body-sm font-semibold text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/40"
-              >
-                <option value="all">Confidence: All</option>
-                {(Object.keys(CONFIDENCE_BANDS) as Exclude<ConfidenceFilter, "all">[]).map((band) => (
-                  <option key={band} value={band}>
-                    {CONFIDENCE_BANDS[band].label}
-                  </option>
-                ))}
-              </select>
-
-              <div className="ml-auto flex flex-wrap items-center gap-[var(--space-sm)]">
-                <label className="flex items-center gap-[var(--space-xs)] rounded-pill bg-background-alt px-[var(--space-md)] py-[var(--space-xs)]">
+            <div className="flex flex-col gap-[var(--space-sm)] border-b border-border p-[var(--space-md)]">
+              {/* Row 1: search + sort */}
+              <div className="flex flex-wrap items-center gap-[var(--space-sm)]">
+                <label className="flex min-w-0 flex-1 items-center gap-[var(--space-xs)] rounded-pill bg-background-alt px-[var(--space-md)] py-[10px] lg:flex-none lg:w-72 lg:py-[var(--space-xs)]">
                   <Search size={14} strokeWidth={2.25} className="shrink-0 text-text-secondary" />
                   <input
                     type="text"
                     value={searchText}
                     onChange={(event) => setSearchText(event.target.value)}
                     placeholder="Search vendor, invoice #, amount"
-                    className="w-40 bg-transparent text-body-sm text-text-primary outline-none placeholder:text-text-secondary sm:w-56"
+                    className="w-full min-w-0 bg-transparent text-body-sm text-text-primary outline-none placeholder:text-text-secondary"
                   />
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setSortIndex((i) => (i + 1) % SORT_OPTIONS.length)}
-                  className="flex shrink-0 items-center gap-[var(--space-xs)] rounded-pill border border-border px-[var(--space-md)] py-[var(--space-xs)] text-body-sm font-semibold text-text-secondary hover:bg-background-alt"
+                <label className="flex shrink-0 items-center gap-[var(--space-xs)] rounded-pill border border-border px-[var(--space-md)] py-[10px] text-body-sm font-semibold text-text-secondary hover:bg-background-alt lg:ml-auto lg:py-[var(--space-xs)]">
+                  <ArrowUpDown size={14} strokeWidth={2.25} className="shrink-0" />
+                  <select
+                    value={sortIndex}
+                    onChange={(event) => setSortIndex(Number(event.target.value))}
+                    className="bg-transparent text-body-sm font-semibold text-text-secondary focus:outline-none"
+                  >
+                    {SORT_OPTIONS.map((option, index) => (
+                      <option key={option.label} value={index}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {/* Row 2: status, vendor, currency */}
+              <div className="flex flex-wrap items-center gap-[var(--space-sm)]">
+                <select
+                  value={statusFilter}
+                  onChange={(event) => router.replace(`/invoices?type=${event.target.value}`)}
+                  className="rounded-pill border border-border bg-white px-[var(--space-md)] py-[10px] text-body-sm font-semibold text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/40 lg:py-[var(--space-xs)]"
                 >
-                  <ArrowUpDown size={14} strokeWidth={2.25} />
-                  {sort.label}
-                </button>
+                  {STATUS_ORDER.map((s) => (
+                    <option key={s} value={s}>
+                      Status: {STATUS_META[s].label}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={vendorFilter}
+                  onChange={(event) => setVendorFilter(event.target.value)}
+                  className="max-w-[160px] rounded-pill border border-border bg-white px-[var(--space-md)] py-[10px] text-body-sm font-semibold text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/40 lg:py-[var(--space-xs)]"
+                >
+                  <option value="all">Vendor: All</option>
+                  {vendorOptions.map((vendor) => (
+                    <option key={vendor} value={vendor}>
+                      {vendor}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={currencyFilter}
+                  onChange={(event) => setCurrencyFilter(event.target.value)}
+                  className="rounded-pill border border-border bg-white px-[var(--space-md)] py-[10px] text-body-sm font-semibold text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/40 lg:py-[var(--space-xs)]"
+                >
+                  <option value="all">Currency: All</option>
+                  {currencyOptions.map((currency) => (
+                    <option key={currency} value={currency}>
+                      {currency}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
             {/* Table header */}
             {!loading && !error && statusFilteredInvoices.length > 0 && (
-              <div className="grid grid-cols-[40px_2fr_1fr_1fr_1fr_24px] gap-[var(--space-sm)] px-[var(--space-md)] pb-[var(--space-sm)] pt-[var(--space-md)] text-caption font-bold uppercase tracking-wide text-text-secondary">
+              <div className="hidden gap-[var(--space-sm)] px-[var(--space-md)] pb-[var(--space-sm)] pt-[var(--space-md)] text-caption font-bold uppercase tracking-wide text-text-secondary lg:grid lg:grid-cols-[40px_2fr_1fr_1fr_1fr_24px]">
                 <span />
                 <span>Vendor / Invoice</span>
                 <span>Received</span>
@@ -549,7 +561,6 @@ export function InvoiceListContent() {
                     setSearchText("");
                     setVendorFilter("all");
                     setCurrencyFilter("all");
-                    setConfidenceFilter("all");
                   }}
                   className="mt-[var(--space-sm)] text-body-sm font-semibold text-primary-700"
                 >
@@ -569,7 +580,7 @@ export function InvoiceListContent() {
                       key={invoice._id}
                       type="button"
                       onClick={() => setSelectedInvoiceId(invoice._id)}
-                      className={`grid w-full grid-cols-[40px_2fr_1fr_1fr_1fr_24px] items-center gap-[var(--space-sm)] border-b border-border px-[var(--space-md)] py-[var(--space-sm)] text-left last:border-b-0 ${
+                      className={`flex w-full items-start gap-[var(--space-sm)] border-b border-border px-[var(--space-md)] py-[var(--space-sm)] text-left last:border-b-0 lg:grid lg:grid-cols-[40px_2fr_1fr_1fr_1fr_24px] lg:items-center ${
                         isSelected ? "bg-primary-50" : "hover:bg-background-alt"
                       }`}
                     >
@@ -578,7 +589,7 @@ export function InvoiceListContent() {
                       >
                         {vendorInitials(invoice)}
                       </span>
-                      <span className="min-w-0">
+                      <span className="min-w-0 flex-1">
                         <span className="block truncate font-semibold text-text-primary">
                           {getInvoiceTitle(invoice)}
                         </span>
@@ -589,17 +600,38 @@ export function InvoiceListContent() {
                             {confidence} confidence
                           </span>
                         ) : null}
+                        {/* Card-style meta line for mobile — the desktop table
+                            columns below (date/badge/amount) are hidden here
+                            via lg:hidden and shown separately as grid cells
+                            at lg:+ so the desktop layout is unchanged. */}
+                        <span className="mt-[var(--space-xs)] flex flex-wrap items-center gap-x-[var(--space-sm)] gap-y-[2px] lg:hidden">
+                          <span
+                            className={`inline-flex w-fit items-center rounded-pill px-[var(--space-sm)] py-[2px] text-caption font-bold ${rowTheme.badgeClass}`}
+                          >
+                            {rowTheme.label}
+                          </span>
+                          <span className="text-caption text-text-secondary">{getInvoicePostedDate(invoice)}</span>
+                          <span className="ml-auto font-bold text-text-primary">{getInvoiceAmount(invoice)}</span>
+                        </span>
                       </span>
-                      <span className="text-body-sm text-text-secondary">{getInvoicePostedDate(invoice)}</span>
-                      <span>
+                      <span className="hidden text-body-sm text-text-secondary lg:block">
+                        {getInvoicePostedDate(invoice)}
+                      </span>
+                      <span className="hidden lg:block">
                         <span
                           className={`inline-flex w-fit items-center rounded-pill px-[var(--space-sm)] py-[2px] text-caption font-bold ${rowTheme.badgeClass}`}
                         >
                           {rowTheme.label}
                         </span>
                       </span>
-                      <span className="text-right font-bold text-text-primary">{getInvoiceAmount(invoice)}</span>
-                      <ChevronRight size={18} strokeWidth={2} className="shrink-0 justify-self-end text-text-secondary" />
+                      <span className="hidden text-right font-bold text-text-primary lg:block">
+                        {getInvoiceAmount(invoice)}
+                      </span>
+                      <ChevronRight
+                        size={18}
+                        strokeWidth={2}
+                        className="mt-[2px] shrink-0 justify-self-end text-text-secondary lg:mt-0"
+                      />
                     </button>
                   );
                 })}

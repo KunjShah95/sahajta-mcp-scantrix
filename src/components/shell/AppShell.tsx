@@ -14,10 +14,12 @@ import {
   Landmark,
   LayoutDashboard,
   LogOut,
+  Menu,
   Plus,
   Puzzle,
   Store,
   Users,
+  X,
 } from "lucide-react";
 import { ReactNode, useEffect, useRef, useState } from "react";
 
@@ -35,6 +37,8 @@ interface QBConnection {
   realmId: string;
   role: string;
   createdAt: string;
+  /** Backend derives this from isDeleted — absent on older cached data, treat as active. */
+  status?: "active" | "disconnected";
 }
 
 // QuickBooks connection management now lives entirely under Integrations
@@ -119,6 +123,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [connections, setConnections] = useState<QBConnection[]>([]);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const collapsed = !pinned;
   const switcherRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
@@ -166,6 +171,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   // toggled shut again.
   useEffect(() => {
     setSwitcherOpen(false);
+    setMobileNavOpen(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -179,6 +185,27 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [switcherOpen]);
 
+  // Escape closes the mobile drawer, same as the switcher dropdown above.
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileNavOpen(false);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [mobileNavOpen]);
+
+  // Prevent the page underneath from scrolling while the full-screen mobile
+  // drawer is open — otherwise touch-scrolling the drawer can drag the
+  // background content with it on some mobile browsers.
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileNavOpen]);
+
   const togglePinned = () => {
     setPinned((prev) => {
       const next = !prev;
@@ -187,7 +214,20 @@ export function AppShell({ children }: { children: ReactNode }) {
     });
   };
 
-  const activeConnection = connections.find((c) => c._id === qbConnectionId) || connections[0];
+  // The top-bar switcher is company-selection UI, not connection management —
+  // a disconnected QuickBooks company has nothing to switch to, so it's
+  // filtered out here. Disconnected accounts surface only in the dedicated
+  // "Disconnected accounts" panel on the Integrations page.
+  const connectedAccounts = connections.filter((c) => c.status !== "disconnected");
+  // With exactly one connected company there's nothing to choose, so show it
+  // directly. With 2+, only show a match for an id the user actually
+  // selected — leave the switcher reading "Select company" otherwise,
+  // instead of silently defaulting to the first one in the list.
+  const activeConnection =
+    connectedAccounts.length === 1 ? connectedAccounts[0] : connectedAccounts.find((c) => c._id === qbConnectionId);
+  // 2+ companies connected but none picked yet — draw the eye to the
+  // switcher instead of leaving it looking like any other idle control.
+  const needsEntitySelection = connectedAccounts.length > 1 && !activeConnection;
 
   const handleSwitch = async (connection: QBConnection) => {
     setSwitcherOpen(false);
@@ -199,9 +239,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const photoURL = normalizePhotoURL(user?.data?.user?.icon);
 
   return (
-    <div className="flex h-screen bg-background-alt">
+    <div className="flex h-dvh bg-background-alt">
       <aside
-        className={`flex h-screen shrink-0 flex-col border-r border-primary-800 bg-primary-900 transition-[width] duration-200 ease-in-out ${
+        className={`hidden h-dvh shrink-0 flex-col border-r border-primary-800 bg-primary-900 transition-[width] duration-200 ease-in-out lg:flex ${
           collapsed ? "w-16" : "w-64"
         }`}
       >
@@ -322,25 +362,39 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="grid h-16 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-[var(--space-md)] border-b border-border bg-white px-[var(--space-lg)]">
-          <div className="flex min-w-0 items-center">
-            {connections.length > 0 && (
-              <div ref={switcherRef} className="relative shrink-0">
+        <header className="grid h-16 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-[var(--space-sm)] border-b border-border bg-white px-[var(--space-md)] lg:gap-[var(--space-md)] lg:px-[var(--space-lg)]">
+          <div className="flex min-w-0 items-center gap-[var(--space-sm)]">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="Open menu"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-text-secondary hover:bg-background-alt lg:hidden"
+            >
+              <Menu size={20} strokeWidth={2} />
+            </button>
+            {connectedAccounts.length > 0 && (
+              <div ref={switcherRef} className="relative min-w-0">
                 <button
                   type="button"
                   onClick={() => setSwitcherOpen((v) => !v)}
                   aria-expanded={switcherOpen}
-                  className="flex items-center gap-[var(--space-sm)] rounded-md border border-border bg-background-soft px-[var(--space-sm)] py-[var(--space-xs)] text-left text-body-sm"
+                  className={`flex min-w-0 items-center gap-[var(--space-sm)] rounded-md border px-[var(--space-sm)] py-[var(--space-xs)] text-left text-body-sm ${
+                    needsEntitySelection
+                      ? "animate-pulse border-primary bg-primary-50 ring-2 ring-primary/50"
+                      : "border-border bg-background-soft"
+                  }`}
                 >
-                  <span className="truncate font-semibold text-text-primary">{activeConnection?.name ?? "Select company"}</span>
+                  <span className="min-w-0 truncate font-semibold text-text-primary">
+                    {activeConnection?.name ?? "Select your company"}
+                  </span>
                   <ChevronDown
                     size={16}
-                    className={`shrink-0 text-text-secondary transition-transform ${switcherOpen ? "rotate-180" : ""}`}
+                    className={`shrink-0 transition-transform ${needsEntitySelection ? "text-primary" : "text-text-secondary"} ${switcherOpen ? "rotate-180" : ""}`}
                   />
                 </button>
                 {switcherOpen && (
-                  <div className="absolute left-0 top-full z-10 mt-[var(--space-xs)] w-64 rounded-lg border border-border bg-white p-[var(--space-xs)] shadow-md">
-                    {connections.map((connection) => {
+                  <div className="absolute left-0 top-full z-10 mt-[var(--space-xs)] w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-white p-[var(--space-xs)] shadow-md">
+                    {connectedAccounts.map((connection) => {
                       const isActive = connection._id === qbConnectionId;
                       return (
                         <button
@@ -366,14 +420,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <h2
-            className={`truncate text-center text-h3 font-bold text-trust-navy transition-opacity duration-200 ${
+            className={`hidden truncate text-center text-h3 font-bold text-trust-navy transition-opacity duration-200 sm:block ${
               greetingFading ? "opacity-0" : "opacity-100"
             }`}
           >
             {greetingFor(name, greetingIndex)}
           </h2>
 
-          <div className="flex shrink-0 items-center justify-end gap-[var(--space-sm)]">
+          <div className="flex shrink-0 items-center justify-end gap-[var(--space-xs)] lg:gap-[var(--space-sm)]">
             <GlobalSearchBar />
 
             <button
@@ -389,6 +443,89 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto">{children}</main>
         <ExpandTransitionOverlay targetRef={mainRef} />
       </div>
+
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setMobileNavOpen(false)} />
+          <div
+            className="relative flex h-full w-72 max-w-[85vw] flex-col bg-primary-900 shadow-xl"
+            onClick={() => setMobileNavOpen(false)}
+          >
+            <div className="flex h-16 shrink-0 items-center justify-between px-[var(--space-lg)]">
+              <Link href="/dashboard" aria-label="Go to dashboard" className="flex min-w-0 items-center gap-[var(--space-sm)]">
+                <Image src="/scantrix-icon.png" alt="" width={32} height={32} className="h-8 w-8 shrink-0 rounded-md" />
+                <span className="truncate text-h3 font-bold text-white">Scantrix</span>
+              </Link>
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(false)}
+                aria-label="Close menu"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-primary-100 hover:bg-white/10 hover:text-white"
+              >
+                <X size={20} strokeWidth={2} />
+              </button>
+            </div>
+
+            {/* Create's hover flyout (see the desktop <aside> below) has no
+                touch equivalent — the two destinations are always-visible
+                links here instead. */}
+            <div className="shrink-0 px-[var(--space-sm)] pb-[var(--space-xs)]">
+              <p className="px-[var(--space-md)] pb-[var(--space-xs)] text-caption font-bold uppercase tracking-wide text-primary-200">
+                Create
+              </p>
+              <Link
+                href="/vendors?create=true"
+                className="flex items-center gap-[var(--space-sm)] rounded-md px-[var(--space-md)] py-[var(--space-sm)] text-body-sm font-semibold text-primary-100 hover:bg-white/10 hover:text-white"
+              >
+                <Plus size={16} strokeWidth={2} className="shrink-0" />
+                Vendor
+              </Link>
+              <Link
+                href="/gl-tax-codes?create=true"
+                className="flex items-center gap-[var(--space-sm)] rounded-md px-[var(--space-md)] py-[var(--space-sm)] text-body-sm font-semibold text-primary-100 hover:bg-white/10 hover:text-white"
+              >
+                <Plus size={16} strokeWidth={2} className="shrink-0" />
+                GL Account
+              </Link>
+            </div>
+
+            <nav className="flex flex-1 flex-col gap-[var(--space-xs)] overflow-y-auto px-[var(--space-sm)]">
+              {NAV_ITEMS.map((item) => (
+                <NavLink key={item.href} item={item} pathname={pathname} collapsed={false} />
+              ))}
+            </nav>
+
+            <div className="shrink-0 border-t border-primary-800 p-[var(--space-md)]">
+              <Link
+                href="/profile"
+                aria-label={name}
+                className={`mb-[var(--space-xs)] flex items-center gap-[var(--space-sm)] truncate rounded-md px-[var(--space-sm)] py-[var(--space-xs)] text-body-sm font-semibold ${
+                  pathname === "/profile" ? "bg-primary-500 text-text-primary" : "text-primary-100 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-400 text-caption font-bold text-primary-900">
+                  {photoURL ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={photoURL} alt={name} className="h-full w-full object-cover" />
+                  ) : (
+                    name.charAt(0).toUpperCase()
+                  )}
+                </span>
+                {name}
+              </Link>
+              <button
+                type="button"
+                onClick={logout}
+                aria-label="Logout"
+                className="flex w-full items-center gap-[var(--space-sm)] rounded-md px-[var(--space-sm)] py-[var(--space-xs)] text-left text-body-sm font-semibold text-primary-100 hover:bg-white/10 hover:text-white"
+              >
+                <LogOut size={16} strokeWidth={2} className="shrink-0" />
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
