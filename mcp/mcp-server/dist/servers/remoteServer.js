@@ -205,7 +205,20 @@ export const createRemoteApp = (config) => {
             res.status(401).json({ message: "This upload link has expired. Ask Claude for a new one." });
             return;
         }
-        const bytes = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+        // Normally express.raw() leaves a Buffer here. Some platforms (Vercel
+        // among them) may pre-read the request body before the Express app sees
+        // it, in which case req.body arrives already decoded — accept that too
+        // rather than reporting an empty upload.
+        let bytes;
+        if (Buffer.isBuffer(req.body)) {
+            bytes = req.body;
+        }
+        else if (typeof req.body === "string") {
+            bytes = Buffer.from(req.body, "binary");
+        }
+        else {
+            bytes = Buffer.alloc(0);
+        }
         if (bytes.length === 0) {
             res.status(400).json({ message: "No file data received." });
             return;
