@@ -6,7 +6,7 @@ connectors. A non-technical user just:
 1. Settings → Connectors → **Add custom connector**
 2. Pastes the connector URL
 3. Claude opens a **browser** → they sign in to Savetrix → approve
-4. Done — the 32 Savetrix tools are available, no config files.
+4. Done — the 33 Savetrix tools are available, no config files.
 
 It works because the server is a full **OAuth 2.1 authorization server** (MCP
 2025-06-18 auth spec) plus the MCP **Streamable HTTP** endpoint. Savetrix isn't
@@ -25,7 +25,56 @@ Savetrix and mints encrypted tokens wrapping that session. Everything is
 | `/token` | code → access/refresh token (PKCE) |
 | `/register` | dynamic client registration |
 | `/mcp` | the MCP endpoint (bearer-protected) |
+| `/upload` | ticketed browser invoice upload (see below) |
 | `/healthz` | health check |
+
+## Uploading invoices through a remote connector
+
+This is the one operation that cannot work the obvious way, and it is worth
+understanding before changing `savetrix_invoice_upload`.
+
+Claude connects to this server **from Anthropic's cloud**, not from the user's
+machine. So:
+
+- `filePath` can never work remotely. A path the user sees in chat (e.g.
+  `/mnt/user-data/uploads/bill.pdf`) lives in Claude's own sandbox and will
+  always fail here with `ENOENT`. `filePath` is for stdio/local installs only.
+- `fileBase64` cannot carry a real invoice. Claude's MCP client rejects large
+  string arguments *before the request reaches this server* — failures start
+  around 13–16 KB of string content, and base64 in connectors breaks near
+  ~11 K characters (≈8 KB of binary). A 200 KB PDF is ~270 KB of base64. The
+  cap is enforced explicitly in `resolveUploadSource()` so the failure is a
+  clear message instead of a truncated argument.
+
+The two paths that do work:
+
+1. **`fileUrl`** — a public https link. The server downloads the bytes itself.
+   Zero clicks. URLs pointing at loopback/private/link-local hosts are refused
+   so the connector can't be used to reach internal services.
+2. **Browser upload** — `savetrix_invoice_upload_link` (or calling
+   `savetrix_invoice_upload` with no arguments) returns a link to `/upload?t=…`.
+   The ticket is an encrypted JWT wrapping the caller's already-verified
+   Savetrix session, valid 30 minutes, so the page needs no second login. The
+   page POSTs the file as the **raw request body** (not multipart), which is why
+   no multipart parser dependency is needed.
+
+`savetrix_invoice_upload` also converts an `ENOENT` into the upload link rather
+than surfacing a raw filesystem error, since a sandbox path is the most common
+thing a model will try first.
+
+> **Size ceiling on Vercel:** a serverless function's request body is capped at
+> ~4.5 MB, so the upload page advertises 4 MB when `VERCEL` is set and the API's
+> full 20 MB otherwise. Raising this means moving uploads off the function
+> (direct-to-storage signed URL).
+
+### Why `invoiceUploadSchema` must stay a flat `z.object`
+
+A `z.union` there serializes to a **top-level `anyOf`**, which is illegal for a
+tool `input_schema` — Anthropic's API requires `type: "object"` at the root. The
+MCP SDK does not error on it; it silently emits `{"type":"object","properties":{}}`,
+i.e. a tool Claude sees as taking **no arguments at all**. That is precisely how
+remote uploads broke once already. `src/test/client.test.ts` asserts the emitted
+schema stays a flat object with real properties — keep that test.
 
 ## Deploy to Vercel
 
@@ -95,7 +144,7 @@ SAVETRIX_PORT=8791 node dist/index.js --remote
 ```
 
 Verified end-to-end locally: DCR → authorize → login (real Savetrix creds) →
-token → `initialize` → `tools/list` (32 tools) → `tools/call` returns data.
+token → `initialize` → `tools/list` (33 tools) → `tools/call` returns data.
 
 ## Notes
 

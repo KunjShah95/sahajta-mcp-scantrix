@@ -76,9 +76,40 @@ const withClient =
     }
   };
 
+export interface ToolHostCapabilities {
+  /**
+   * Mints a short-lived browser upload link. Only the remote connector can
+   * supply this (it needs the public URL + token secret); on a local/stdio
+   * install it is undefined and filePath is used instead.
+   */
+  createUploadLink?: () => Promise<string>;
+}
+
+/** Guidance shown whenever a remote upload needs a real transport. */
+const uploadHelp = async (host: ToolHostCapabilities): Promise<string> => {
+  if (!host.createUploadLink) {
+    return [
+      "## Can't read that file",
+      "This server is running locally, so pass an absolute **filePath** on this machine, or a public **fileUrl**.",
+    ].join("\n");
+  }
+  const link = await host.createUploadLink();
+  return [
+    "## Upload your invoice 📎",
+    "I can't read files from your computer — this connector runs on a server, not on your machine.",
+    "",
+    `👉 **[Click here to upload your invoice](${link})**`,
+    "",
+    "Pick the photo or PDF on that page. When it says *Uploaded ✓*, come back and ask me to list your invoices — I'll pick it up from there.",
+    "",
+    "_Already have the file at a public link? Give me the URL instead and I'll fetch it directly._",
+  ].join("\n");
+};
+
 export const registerSavetrixTools = (
   server: McpServer,
   client: SavetrixClient,
+  host: ToolHostCapabilities = {},
 ): void => {
   const run = withClient(client);
 
@@ -261,11 +292,39 @@ export const registerSavetrixTools = (
   server.registerTool("savetrix_invoice_upload", {
     title: "Upload invoice",
     description:
-      "Upload an invoice photo or PDF and have it scanned. For a local/stdio MCP server, pass filePath. " +
-      "For a remote MCP server that cannot access the chat client's filesystem, pass fileBase64 with fileName (and optional mimeType). " +
-      "Use exactly one input method; inline files must be 20 MB or smaller.",
+      "Upload an invoice photo or PDF and have it scanned. Pass exactly one source. " +
+      "Prefer fileUrl (a public https link the server downloads itself). " +
+      "filePath works only when this server runs on the same machine as the chat client — a remote connector cannot see your filesystem, " +
+      "so never pass a path from a chat sandbox (e.g. /mnt/user-data/...). " +
+      "fileBase64 is for tiny files only. " +
+      "If you have none of those, call this with no arguments (or use savetrix_invoice_upload_link) to get a browser upload link for the user.",
     inputSchema: S.invoiceUploadSchema,
-  }, run((c, a) => invoicesClient.uploadInvoice(c, a)));
+  }, async (a) => {
+    const hasSource = Boolean(a.fileUrl || a.filePath || a.fileBase64);
+    if (!hasSource) return md(await uploadHelp(host));
+    try {
+      return text(await invoicesClient.uploadInvoice(client, a));
+    } catch (error) {
+      const guide = await authGuidance(client, error);
+      if (guide) return md(guide);
+      // A path that only exists on the chat client's machine is the single most
+      // common failure here (ENOENT on /mnt/user-data/uploads/...). Hand back
+      // the upload link rather than a bare filesystem error.
+      const msg = error instanceof Error ? error.message : String(error);
+      if (/ENOENT|no such file|not a file/i.test(msg)) {
+        return md(await uploadHelp(host));
+      }
+      return text({ success: false, message: msg });
+    }
+  });
+
+  server.registerTool("savetrix_invoice_upload_link", {
+    title: "Get an invoice upload link",
+    description:
+      "Get a short-lived link the user can open in their browser to upload an invoice photo or PDF. " +
+      "Use this whenever the user has a file on their own device and this server is remote.",
+    inputSchema: S.confirmSchema.omit({ confirm: true }),
+  }, async () => md(await uploadHelp(host)));
 
   server.registerTool("savetrix_invoice_update", {
     title: "Update invoice details",

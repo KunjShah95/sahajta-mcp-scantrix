@@ -7,6 +7,17 @@ import { createClientForTokens } from "../client/savetrixClient.js";
 import { registerSavetrixTools } from "../tools/index.js";
 import { SavetrixOAuthProvider } from "../auth/provider.js";
 import { loginPage } from "../auth/loginPage.js";
+import { uploadPage } from "../auth/uploadPage.js";
+import { encryptToken, decryptToken } from "../auth/tokens.js";
+import { uploadInvoiceBytes, MAX_UPLOAD_BYTES } from "../client/invoices.js";
+/** How long a browser upload link stays valid — long enough to find the file. */
+const UPLOAD_TICKET_TTL = 60 * 30;
+/**
+ * Vercel caps a serverless function's request body at ~4.5 MB, so promising
+ * the API's full 20 MB there would just turn into an opaque 413. Advertise
+ * whichever ceiling actually applies.
+ */
+const maxBrowserUploadBytes = () => process.env.VERCEL ? 4 * 1024 * 1024 : MAX_UPLOAD_BYTES;
 /**
  * Builds the remote connector Express app: an OAuth 2.1 authorization server
  * (so Claude's "Add custom connector" browser flow works) plus the MCP
@@ -123,17 +134,32 @@ export const createRemoteApp = (config) => {
     });
     const handleMcp = async (req, res) => {
         const extra = (req.auth?.extra ?? {});
-        if (!extra.st_at || !extra.st_rt) {
+        const { st_at: accessToken, st_rt: refreshToken } = extra;
+        if (!accessToken || !refreshToken) {
             res.status(401).json({ error: "invalid_token" });
             return;
         }
         const client = createClientForTokens(config, {
-            accessToken: extra.st_at,
-            refreshToken: extra.st_rt,
+            accessToken,
+            refreshToken,
             user: extra.user,
         });
         const server = new McpServer({ name: "savetrix-mcp-server", version: "1.0.0" });
-        registerSavetrixTools(server, client);
+        registerSavetrixTools(server, client, {
+            // Claude reaches this server from Anthropic's cloud and can never read a
+            // file off the user's device, so the only reliable transport for a local
+            // file is a browser upload. Mint a ticket that carries this request's
+            // already-verified Savetrix session — the link needs no second login.
+            createUploadLink: async () => {
+                const ticket = await encryptToken(config.tokenSecret, "upload", {
+                    st_at: accessToken,
+                    st_rt: refreshToken,
+                    email: extra.email,
+                    user: extra.user,
+                }, UPLOAD_TICKET_TTL);
+                return `${config.publicUrl}/upload?t=${encodeURIComponent(ticket)}`;
+            },
+        });
         const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
         res.on("close", () => {
             void transport.close();
@@ -145,6 +171,81 @@ export const createRemoteApp = (config) => {
     app.post("/mcp", bearer, express.json(), handleMcp);
     app.get("/mcp", bearer, handleMcp);
     app.delete("/mcp", bearer, handleMcp);
+    // ── Browser invoice upload (ticketed; no OAuth round-trip) ──
+    const readTicket = (raw) => decryptToken(config.tokenSecret, "upload", String(raw ?? ""));
+    app.get("/upload", async (req, res) => {
+        const raw = String(req.query.t ?? "");
+        if (!raw) {
+            res.status(400).send("Missing upload ticket.");
+            return;
+        }
+        try {
+            const ticket = await readTicket(raw);
+            res.status(200).type("html").send(uploadPage({
+                ticket: raw,
+                webUrl: config.webUrl,
+                maxBytes: maxBrowserUploadBytes(),
+                email: ticket.email,
+            }));
+        }
+        catch {
+            res
+                .status(400)
+                .send("This upload link has expired. Ask Claude for a new upload link.");
+        }
+    });
+    // The page sends the file as the raw request body (not multipart) so no
+    // multipart parser dependency is needed here.
+    app.post("/upload", express.raw({ type: "*/*", limit: maxBrowserUploadBytes() }), async (req, res) => {
+        let ticket;
+        try {
+            ticket = await readTicket(req.query.t);
+        }
+        catch {
+            res.status(401).json({ message: "This upload link has expired. Ask Claude for a new one." });
+            return;
+        }
+        const bytes = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+        if (bytes.length === 0) {
+            res.status(400).json({ message: "No file data received." });
+            return;
+        }
+        let fileName = "invoice.pdf";
+        const headerName = req.get("x-file-name");
+        if (headerName) {
+            try {
+                fileName = decodeURIComponent(headerName);
+            }
+            catch {
+                fileName = headerName;
+            }
+        }
+        // Never let a client-supplied name escape into a path.
+        fileName = fileName.replace(/[/\\]/g, "_").slice(0, 200) || "invoice.pdf";
+        const contentType = (req.get("content-type") ?? "").split(";")[0].trim();
+        try {
+            const client = createClientForTokens(config, {
+                accessToken: ticket.st_at,
+                refreshToken: ticket.st_rt,
+                user: ticket.user,
+            });
+            const result = await uploadInvoiceBytes(client, {
+                bytes,
+                fileName,
+                mimeType: contentType || "application/octet-stream",
+            });
+            res.status(200).json({ ok: true, result });
+        }
+        catch (error) {
+            console.error("[savetrix-mcp] /upload error:", error instanceof Error ? error.message : error);
+            const status = error?.response?.status;
+            res.status(status === 401 ? 401 : 502).json({
+                message: status === 401
+                    ? "Your Scantrix session expired. Ask Claude for a new upload link."
+                    : "Scantrix could not accept that file. Please try again.",
+            });
+        }
+    });
     app.get("/healthz", (_req, res) => res.status(200).json({ ok: true }));
     return app;
 };

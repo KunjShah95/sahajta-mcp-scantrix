@@ -15,14 +15,33 @@ export const invoiceListSchema = z.object({
     status: z.enum(["pending", "manual", "auto", "failed"]).optional(),
 });
 export const invoiceIdSchema = z.object({ invoiceId: z.string().min(1) });
-export const invoiceUploadSchema = z.union([
-    z.object({ filePath: z.string().min(1) }),
-    z.object({
-        fileBase64: z.string().min(1),
-        fileName: z.string().min(1),
-        mimeType: z.string().min(1).optional(),
-    }),
-]);
+// MUST stay a flat z.object with every field optional. A z.union here
+// serializes to a top-level `anyOf`, which is illegal for an MCP/Anthropic
+// tool input_schema ("must have type 'object' and not have oneOf/anyOf/allOf
+// at the top level"). The SDK does not reject it — it silently emits
+// `{"type":"object","properties":{}}`, i.e. a tool Claude sees as taking NO
+// arguments at all. That is exactly how remote uploads broke. Which fields
+// are required depends on the source, so that is enforced at runtime in
+// resolveUploadSource() instead of in the schema.
+export const invoiceUploadSchema = z.object({
+    fileUrl: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("Public https:// URL of the invoice. The server downloads it — best option for a remote connector."),
+    filePath: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("Absolute path on the machine running the server. Local/stdio installs only; never valid for a remote connector."),
+    fileBase64: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("Base64 file bytes. Only for very small files (<8 KB); larger payloads are rejected by the MCP client before they reach the server."),
+    fileName: z.string().min(1).optional().describe("File name, e.g. invoice.pdf. Required with fileBase64."),
+    mimeType: z.string().min(1).optional().describe("Overrides the content type guessed from the file extension."),
+});
 export const lineItemSchema = z.object({
     description: z.string(),
     quantity: z.number(),

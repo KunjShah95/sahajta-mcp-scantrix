@@ -36,6 +36,7 @@ test("buildServer registers the full savetrix tool set", async () => {
         "savetrix_invoice_list",
         "savetrix_invoice_get",
         "savetrix_invoice_upload",
+        "savetrix_invoice_upload_link",
         "savetrix_invoice_update",
         "savetrix_invoice_post_to_qb",
         "savetrix_invoice_reject",

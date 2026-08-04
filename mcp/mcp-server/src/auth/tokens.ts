@@ -7,7 +7,14 @@ import { EncryptJWT, jwtDecrypt, type JWTPayload } from "jose";
 // wrapped Savetrix session is never exposed to the MCP client. This is what
 // lets the connector run on serverless (Vercel) with no session database.
 
-export type TokenType = "code" | "access" | "refresh" | "client" | "login_req";
+export type TokenType =
+  | "code"
+  | "access"
+  | "refresh"
+  | "client"
+  | "login_req"
+  /** Short-lived ticket that lets a browser POST one invoice file to /upload. */
+  | "upload";
 
 const keyCache = new Map<string, Uint8Array>();
 
