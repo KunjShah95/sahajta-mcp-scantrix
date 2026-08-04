@@ -17,6 +17,16 @@ export const createRemoteApp = (config) => {
         throw new Error("SAVETRIX_PUBLIC_URL must be set for the remote connector.");
     }
     const issuerUrl = new URL(config.publicUrl);
+    // The actual protected resource is /mcp, not the site root. Without this,
+    // mcpAuthRouter defaults resourceServerUrl to the issuer (site root), so
+    // the advertised protected-resource metadata says "resource: <root>" while
+    // clients are actually connecting to ".../mcp" — a mismatch that a
+    // resource-validating client (per RFC 9728 / the MCP authorization spec)
+    // can reject as "no MCP server found at the provided URL", even though
+    // the OAuth login itself succeeded. Confirmed against
+    // @modelcontextprotocol/sdk's own router.js: getOAuthProtectedResourceMetadataUrl's
+    // doc example is literally `.../mcp` -> `.../.well-known/oauth-protected-resource/mcp`.
+    const resourceUrl = new URL("/mcp", issuerUrl);
     const provider = new SavetrixOAuthProvider(config);
     const app = express();
     // One proxy hop (Vercel / most PaaS). Avoids the permissive-trust-proxy
@@ -27,6 +37,7 @@ export const createRemoteApp = (config) => {
     app.use(mcpAuthRouter({
         provider,
         issuerUrl,
+        resourceServerUrl: resourceUrl,
         scopesSupported: ["mcp"],
         resourceName: "Savetrix",
     }));
@@ -108,7 +119,7 @@ export const createRemoteApp = (config) => {
     const bearer = requireBearerAuth({
         verifier: provider,
         requiredScopes: ["mcp"],
-        resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(issuerUrl),
+        resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(resourceUrl),
     });
     const handleMcp = async (req, res) => {
         const extra = (req.auth?.extra ?? {});
