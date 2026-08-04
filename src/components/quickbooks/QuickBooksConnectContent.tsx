@@ -13,7 +13,7 @@ export function QuickBooksConnectContent() {
   const searchParams = useSearchParams();
 
   const {
-    connections,
+    activeConnections: connections,
     checkingStatus,
     connecting,
     disconnectingId,
@@ -61,15 +61,18 @@ export function QuickBooksConnectContent() {
               year: "numeric",
             });
             return (
-              <Card key={connection._id} className={`flex items-center justify-between ${isActive ? "border-primary" : ""}`}>
-                <div className="flex items-center gap-[var(--space-sm)]">
-                  <span className={`h-2.5 w-2.5 rounded-full ${isActive ? "bg-primary" : "bg-border"}`} />
-                  <div>
-                    <p className="font-bold text-text-primary">{connection.name}</p>
-                    <p className="text-caption text-text-secondary">Connected {date}</p>
+              <Card
+                key={connection._id}
+                className={`flex flex-col items-start gap-[var(--space-sm)] lg:flex-row lg:items-center lg:justify-between ${isActive ? "border-primary" : ""}`}
+              >
+                <div className="flex min-w-0 items-center gap-[var(--space-sm)]">
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${isActive ? "bg-primary" : "bg-border"}`} />
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-text-primary">{connection.name}</p>
+                    <p className="truncate text-caption text-text-secondary">Connected {date}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-[var(--space-sm)]">
+                <div className="flex flex-wrap items-center gap-[var(--space-sm)]">
                   {!isActive && (
                     <button
                       type="button"

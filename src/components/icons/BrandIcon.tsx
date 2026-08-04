@@ -1,4 +1,4 @@
-import { siGoogledrive, siQuickbooks, siSage, siXero, siZoho } from "simple-icons";
+import { siClaude, siGoogledrive, siQuickbooks, siSage, siXero, siZoho } from "simple-icons";
 
 // Licensed brand marks (CC0-1.0, simple-icons — built specifically for
 // representing third-party brands/integrations, see DESIGN_ASSUMPTIONS.md
@@ -11,6 +11,7 @@ const BRANDS = {
   zoho: siZoho,
   sage: siSage,
   xero: siXero,
+  claude: siClaude,
 } as const;
 
 export type BrandName = keyof typeof BRANDS;

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, UserX, X } from "lucide-react";
+import { ChevronRight, RefreshCw, UserX, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { confirmDialog, showToast } from "@/lib/dialogManager";
@@ -69,6 +69,7 @@ export function TeamMembersContent() {
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersError, setMembersError] = useState("");
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   const [sheetVisible, setSheetVisible] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -76,7 +77,11 @@ export function TeamMembersContent() {
   const [inviteRole, setInviteRole] = useState<QBMemberRole>("accountant");
   const [sending, setSending] = useState(false);
 
-  const activeConnection = connections.find((c) => c._id === qbConnectionId) || connections[0];
+  // With exactly one connected company there's nothing to choose, so use it
+  // directly. With 2+, only use a match for an id the user actually
+  // selected — the top-bar switcher starts blank when multiple companies are
+  // connected, and this page shouldn't silently pick one on its own.
+  const activeConnection = connections.length === 1 ? connections[0] : connections.find((c) => c._id === qbConnectionId);
   const currentRole = activeConnection?.role || "";
   const canInvite = currentRole === "owner" || currentRole === "admin";
   const availableRoles = INVITABLE_ROLES.filter((r) => currentRole === "owner" || r.key !== "admin");
@@ -151,6 +156,34 @@ export function TeamMembersContent() {
     }
   };
 
+  // Backend treats an invite POST to an already-pending email as a resend:
+  // it regenerates the token, re-sends the email, and enforces its own
+  // 60-second per-email cooldown (plus a 15-min/30-request cap on the whole
+  // endpoint) — so this just calls the same thunk again with that member's
+  // existing email/role rather than needing a dedicated resend endpoint.
+  const handleResendInvite = async (member: QBMember) => {
+    if (!accessToken || !activeConnection) return;
+    setResendingId(member._id);
+    try {
+      const result = await dispatch(
+        inviteQBMember({
+          accessToken,
+          qbId: activeConnection._id,
+          email: member.invitedEmail,
+          role: member.role as QBMemberRole,
+        }),
+      );
+      if (inviteQBMember.fulfilled.match(result)) {
+        showToast(`Invite resent to ${member.invitedEmail}.`, "success");
+      } else {
+        const payload = result.payload as { message?: string } | undefined;
+        showToast(payload?.message || "Could not resend invite. Please try again.", "error");
+      }
+    } finally {
+      setResendingId(null);
+    }
+  };
+
   const openInviteSheet = () => {
     setInviteEmail("");
     setInviteEmailError("");
@@ -200,13 +233,17 @@ export function TeamMembersContent() {
     return (
       <div className="mx-auto max-w-2xl p-[var(--space-lg)]">
         <Card className="flex flex-col items-center py-[var(--space-xl)] text-center">
-          <p className="font-bold text-text-primary">No company connected</p>
+          <p className="font-bold text-text-primary">{connections.length > 0 ? "Select a company" : "No company connected"}</p>
           <p className="mt-[var(--space-xs)] text-body-sm text-text-secondary">
-            Connect a QuickBooks company before inviting your team to collaborate on it.
+            {connections.length > 0
+              ? "Choose a company from the switcher up top to manage its team."
+              : "Connect a QuickBooks company before inviting your team to collaborate on it."}
           </p>
-          <Link href="/quickbooks">
-            <Button className="mt-[var(--space-md)]">Connect QuickBooks</Button>
-          </Link>
+          {connections.length === 0 && (
+            <Link href="/quickbooks">
+              <Button className="mt-[var(--space-md)]">Connect QuickBooks</Button>
+            </Link>
+          )}
         </Card>
       </div>
     );
@@ -219,12 +256,12 @@ export function TeamMembersContent() {
       <p className="mb-[var(--space-sm)] mt-[var(--space-lg)] text-caption font-bold uppercase tracking-wide text-text-secondary">
         Active company
       </p>
-      <Card className="flex items-center justify-between">
-        <div>
-          <p className="font-bold text-text-primary">{activeConnection.name}</p>
-          <p className="text-caption text-text-secondary">Realm ID: {activeConnection.realmId}</p>
+      <Card className="flex items-center justify-between gap-[var(--space-sm)]">
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-bold text-text-primary">{activeConnection.name}</p>
+          <p className="truncate text-caption text-text-secondary">Realm ID: {activeConnection.realmId}</p>
         </div>
-        <span className={`rounded-pill px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold ${(ROLE_META[currentRole] || ROLE_FALLBACK).className}`}>
+        <span className={`shrink-0 rounded-pill px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold ${(ROLE_META[currentRole] || ROLE_FALLBACK).className}`}>
           {(ROLE_META[currentRole] || ROLE_FALLBACK).label}
         </span>
       </Card>
@@ -234,8 +271,8 @@ export function TeamMembersContent() {
       </p>
       {canInvite ? (
         <button type="button" onClick={openInviteSheet} className="w-full text-left">
-          <Card className="flex items-center justify-between hover:bg-background-alt">
-            <div>
+          <Card className="flex items-center justify-between gap-[var(--space-sm)] hover:bg-background-alt">
+            <div className="min-w-0 flex-1">
               <p className="font-bold text-text-primary">Invite a team member</p>
               <p className="text-caption text-text-secondary">Send an email invite with a role for this company.</p>
             </div>
@@ -265,6 +302,7 @@ export function TeamMembersContent() {
             const pending = member.inviteStatus && member.inviteStatus !== "accepted";
             const removable = canRemoveRole(member.role);
             const isRemoving = removingId === member._id;
+            const isResending = resendingId === member._id;
             return (
               <Card key={member._id} className="flex items-center justify-between">
                 <div className="min-w-0 flex-1">
@@ -277,12 +315,25 @@ export function TeamMembersContent() {
                 <span className={`mr-[var(--space-sm)] rounded-pill px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold ${meta.className}`}>
                   {meta.label}
                 </span>
+                {pending && canInvite && (
+                  <button
+                    type="button"
+                    onClick={() => handleResendInvite(member)}
+                    disabled={isResending}
+                    aria-label={`Resend invite to ${member.invitedEmail}`}
+                    title="Resend invite"
+                    className="mr-[var(--space-xs)] flex h-10 shrink-0 items-center gap-1 rounded-md px-[var(--space-sm)] text-caption font-bold text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60 lg:h-8"
+                  >
+                    <RefreshCw size={14} strokeWidth={2.25} className={isResending ? "animate-spin" : ""} />
+                    Resend
+                  </button>
+                )}
                 {removable && (
                   <button
                     type="button"
                     onClick={() => handleRemoveMember(member)}
                     disabled={isRemoving}
-                    className="flex h-8 w-8 items-center justify-center rounded-md bg-error/10 text-error disabled:opacity-60"
+                    className="flex h-10 w-10 items-center justify-center rounded-md bg-error/10 text-error disabled:opacity-60 lg:h-8 lg:w-8"
                     aria-label={`Remove ${memberDisplayName(member)}`}
                   >
                     {isRemoving ? "…" : <UserX size={16} strokeWidth={2} />}
@@ -306,7 +357,7 @@ export function TeamMembersContent() {
                 type="button"
                 onClick={() => !sending && setSheetVisible(false)}
                 aria-label="Close"
-                className="text-text-secondary"
+                className="-m-2 flex h-10 w-10 items-center justify-center text-text-secondary lg:m-0 lg:h-5 lg:w-5"
               >
                 <X size={20} strokeWidth={2.25} />
               </button>

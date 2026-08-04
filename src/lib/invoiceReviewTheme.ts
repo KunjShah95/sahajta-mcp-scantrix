@@ -14,6 +14,10 @@ export interface ReviewTheme {
   buttonBg: string;
   statusText: string;
   actionText: string;
+  /** Section header background, matching InvoiceDetailTheme's equivalent tier. */
+  sectionHeaderBg: string;
+  /** Row divider color, matching InvoiceDetailTheme's equivalent tier. */
+  divider: string;
 }
 
 export function getReviewTheme(confidenceScore: number): ReviewTheme {
@@ -31,6 +35,8 @@ export function getReviewTheme(confidenceScore: number): ReviewTheme {
       buttonBg: "#24C3B5",
       statusText: "High confidence",
       actionText: "Post to QuickBooks",
+      sectionHeaderBg: "#EBF7F3",
+      divider: "#D4EFE3",
     };
   }
 
@@ -48,6 +54,8 @@ export function getReviewTheme(confidenceScore: number): ReviewTheme {
       buttonBg: "#FF7A1A",
       statusText: "Review required",
       actionText: "Review & Approve",
+      sectionHeaderBg: "#FBF2E3",
+      divider: "#F3D6A4",
     };
   }
 
@@ -64,5 +72,7 @@ export function getReviewTheme(confidenceScore: number): ReviewTheme {
     buttonBg: "#E74949",
     statusText: "Low confidence",
     actionText: "Post Manually",
+    sectionHeaderBg: "#FDEDEF",
+    divider: "#F3C8CD",
   };
 }

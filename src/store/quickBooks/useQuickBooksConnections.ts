@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { confirmDialog, showToast } from "@/lib/dialogManager";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -17,6 +17,9 @@ export interface QBConnection {
   realmId: string;
   role: string;
   createdAt: string;
+  updatedAt?: string;
+  /** Backend derives this from isDeleted — absent on older cached data, treat as active. */
+  status?: "active" | "disconnected";
 }
 
 // Shared between QuickBooksConnectContent (the dedicated /quickbooks page)
@@ -44,13 +47,20 @@ export function useQuickBooksConnections(redirectPath: string) {
     if (getMyQBConnections.fulfilled.match(result)) {
       const list: QBConnection[] = result.payload?.data?.connections ?? [];
       setConnections(list);
-      const first = list[0];
-      if (first?._id) {
-        await dispatch(getQuickBooksStatus({ accessToken, qbConnectionId: first._id }));
+      // Skip disconnected entries — the backend now returns them alongside
+      // active ones, and status-checking a disconnected connection 404s.
+      const active = list.filter((c) => c.status !== "disconnected");
+      // With exactly one choice there's nothing to pick, so check its status
+      // directly. With 2+, only refresh status for whichever one is already
+      // selected — never silently default to "the first one" here, that
+      // would undo the top-bar switcher's blank-until-chosen behavior.
+      const target = active.length === 1 ? active[0] : active.find((c) => c._id === activeConnectionId);
+      if (target?._id) {
+        await dispatch(getQuickBooksStatus({ accessToken, qbConnectionId: target._id }));
       }
     }
     setCheckingStatus(false);
-  }, [accessToken, dispatch]);
+  }, [accessToken, dispatch, activeConnectionId]);
 
   useEffect(() => {
     checkStatus();
@@ -146,8 +156,19 @@ export function useQuickBooksConnections(redirectPath: string) {
     }
   };
 
+  const activeConnections = useMemo(
+    () => connections.filter((c) => c.status !== "disconnected"),
+    [connections],
+  );
+  const disconnectedConnections = useMemo(
+    () => connections.filter((c) => c.status === "disconnected"),
+    [connections],
+  );
+
   return {
     connections,
+    activeConnections,
+    disconnectedConnections,
     checkingStatus,
     connecting,
     disconnectingId,

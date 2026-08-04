@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ChevronLeft, ZoomIn, ZoomOut } from "lucide-react";
+import { AlertTriangle, ChevronLeft, Pencil, Trash2, ZoomIn, ZoomOut } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { BrandIcon } from "@/components/icons/BrandIcon";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { getInvoiceDetails } from "@/store/invoice/invoiceApi";
+import { deleteInvoice, getInvoiceDetails } from "@/store/invoice/invoiceApi";
 import { fetchQuickBooksAccounts } from "@/store/quickBooks/quickBooksApi";
 import { Spinner } from "@/components/ui/Spinner";
-import { showToast } from "@/lib/dialogManager";
+import { confirmDialog, showToast } from "@/lib/dialogManager";
 import {
   INVOICE_DETAIL_THEME,
   formatDetailAmount,
@@ -58,11 +58,11 @@ function DetailRow({
       className="flex items-center justify-between gap-[var(--space-md)] px-[var(--space-md)] py-[var(--space-sm)]"
       style={!isLast ? { borderBottom: `1px solid ${dividerColor}` } : undefined}
     >
-      <span className="text-body-sm font-medium" style={{ color: labelColor }}>
+      <span className="shrink-0 text-body-sm font-medium" style={{ color: labelColor }}>
         {label}
       </span>
       <span
-        className={`text-right ${highlight ? "text-h3 font-black" : "text-body-sm font-bold text-text-primary"}`}
+        className={`min-w-0 flex-1 break-words text-right ${highlight ? "text-h3 font-black" : "text-body-sm font-bold text-text-primary"}`}
         style={highlight ? { color: highlightColor } : undefined}
       >
         {value}
@@ -81,6 +81,7 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
   const theme = INVOICE_DETAIL_THEME[type];
   const accessToken = useAppSelector((state) => state.auth.user?.data?.accessToken);
   const glAccounts = useAppSelector((state) => state.quickBooks.accounts);
+  const deleting = useAppSelector((state) => state.invoice.deleting);
 
   const [scanLoading, setScanLoading] = useState(true);
   const [scanZoom, setScanZoom] = useState(1);
@@ -128,6 +129,25 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
   const reasonDisplay = useMemo(() => translateInvoiceReason(latestStatus?.reason), [latestStatus]);
   const [showTechnicalReason, setShowTechnicalReason] = useState(false);
 
+  const handleDeleteInvoice = async () => {
+    const confirmed = await confirmDialog({
+      title: "Delete this invoice?",
+      message: "This will permanently delete the invoice and cannot be undone.",
+      confirmLabel: "Delete",
+      tone: "destructive",
+    });
+    if (!confirmed) return;
+
+    const result = await dispatch(deleteInvoice({ invoiceId }));
+    if (deleteInvoice.fulfilled.match(result)) {
+      showToast("Invoice deleted successfully.", "success");
+      router.push("/invoices?type=failed");
+    } else {
+      const payload = result.payload as { message?: string } | string | undefined;
+      showToast(typeof payload === "string" ? payload : payload?.message || "Failed to delete invoice.", "error");
+    }
+  };
+
   if (!invoiceObject) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background-soft">
@@ -162,7 +182,7 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
             type="button"
             onClick={() => router.back()}
             aria-label="Back"
-            className="inline-flex w-fit items-center gap-[var(--space-xs)] text-body-sm font-bold"
+            className="-my-[var(--space-sm)] inline-flex w-fit items-center gap-[var(--space-xs)] py-[var(--space-sm)] text-body-sm font-bold"
             style={{ color: theme.accentColor }}
           >
             <ChevronLeft size={20} strokeWidth={2.25} />
@@ -177,8 +197,8 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
         <div className="grid grid-cols-1 gap-[var(--space-lg)] lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
           <div className="flex flex-col gap-[var(--space-md)]">
             {/* Hero */}
-            <div className="rounded-2xl px-[var(--space-lg)] pb-[var(--space-lg)] pt-[var(--space-md)]" style={{ backgroundColor: theme.cardBg }}>
-              <div className="mb-[var(--space-xs)] flex items-center gap-[var(--space-sm)]">
+            <div className="relative rounded-2xl px-[var(--space-lg)] pb-[var(--space-lg)] pt-[var(--space-md)]" style={{ backgroundColor: theme.cardBg }}>
+              <div className="mb-[var(--space-xs)] flex flex-wrap items-center gap-[var(--space-sm)] pr-12">
                 <span className="rounded-pill bg-white/70 px-[var(--space-sm)] py-1 text-caption font-bold" style={{ color: theme.accentColor }}>
                   {theme.statusLabel}
                 </span>
@@ -188,6 +208,37 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
                   </span>
                 )}
               </div>
+
+              {/* Editing (auto/manual) syncs the changes back to the linked
+                  QuickBooks bill but keeps the invoice under its current
+                  status — the backend has no auto→manual transition on
+                  edit, only on first posting a pending invoice. Reuses the
+                  same editable-form screen a pending invoice is reviewed on
+                  (InvoiceReviewContent), rather than an inline edit mode
+                  here, so both edit flows look and behave identically. */}
+              {(type === "auto" || type === "manual") && (
+                <button
+                  type="button"
+                  onClick={() => router.push(`/invoices/${invoiceId}/review`)}
+                  aria-label="Edit invoice"
+                  className="absolute right-[var(--space-md)] top-[var(--space-md)] flex h-9 w-9 items-center justify-center rounded-full bg-white/75"
+                  style={{ color: theme.accentColor }}
+                >
+                  <Pencil size={16} strokeWidth={2.25} />
+                </button>
+              )}
+              {type === "failed" && (
+                <button
+                  type="button"
+                  onClick={handleDeleteInvoice}
+                  disabled={deleting}
+                  aria-label="Delete invoice"
+                  className="absolute right-[var(--space-md)] top-[var(--space-md)] flex h-9 w-9 items-center justify-center rounded-full bg-white/75 disabled:opacity-50"
+                  style={{ color: theme.accentColor }}
+                >
+                  <Trash2 size={16} strokeWidth={2.25} />
+                </button>
+              )}
 
               <p className="text-h2 font-extrabold" style={{ color: theme.labelColor }}>
                 {vendorName}
@@ -273,7 +324,7 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
             {itemDescriptions !== "—" && (
               <div className="overflow-hidden rounded-lg bg-white shadow-sm">
                 <SectionHeader title="Item Descriptions" bg={theme.sectionHeaderBg} color={theme.accentColor} />
-                <p className="whitespace-pre-line px-[var(--space-md)] py-[var(--space-md)] text-body-sm text-text-primary">
+                <p className="whitespace-pre-line break-words px-[var(--space-md)] py-[var(--space-md)] text-body-sm text-text-primary">
                   {itemDescriptions}
                 </p>
               </div>
@@ -360,13 +411,13 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
             {/* Scanned copy */}
             <div className="overflow-hidden rounded-lg bg-white shadow-sm">
               <div
-                className="flex items-center justify-between px-[var(--space-md)] py-[var(--space-sm)]"
+                className="flex flex-wrap items-center justify-between gap-x-[var(--space-md)] gap-y-[var(--space-xs)] px-[var(--space-md)] py-[var(--space-sm)]"
                 style={{ backgroundColor: theme.sectionHeaderBg }}
               >
                 <span className="text-caption font-bold uppercase tracking-wide" style={{ color: theme.accentColor }}>
                   Scanned Copy
                 </span>
-                <div className="flex items-center gap-[var(--space-md)]">
+                <div className="flex flex-wrap items-center gap-[var(--space-md)]">
                   {!isPdf && invoiceUrl && (
                     <div className="flex items-center gap-[var(--space-xs)]">
                       <button
@@ -374,7 +425,7 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
                         onClick={() => setScanZoom((z) => Math.max(SCAN_MIN_ZOOM, z - SCAN_ZOOM_STEP))}
                         disabled={scanZoom <= SCAN_MIN_ZOOM}
                         aria-label="Zoom out"
-                        className="disabled:opacity-40"
+                        className="-my-[var(--space-xs)] py-[var(--space-xs)] disabled:opacity-40"
                         style={{ color: theme.accentColor }}
                       >
                         <ZoomOut size={16} strokeWidth={2} />
@@ -387,7 +438,7 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
                         onClick={() => setScanZoom((z) => Math.min(SCAN_MAX_ZOOM, z + SCAN_ZOOM_STEP))}
                         disabled={scanZoom >= SCAN_MAX_ZOOM}
                         aria-label="Zoom in"
-                        className="disabled:opacity-40"
+                        className="-my-[var(--space-xs)] py-[var(--space-xs)] disabled:opacity-40"
                         style={{ color: theme.accentColor }}
                       >
                         <ZoomIn size={16} strokeWidth={2} />
@@ -395,12 +446,22 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
                     </div>
                   )}
                   {driveFileUrl && (
-                    <a href={driveFileUrl} target="_blank" rel="noopener noreferrer" aria-label="View in Google Drive">
+                    <a
+                      href={driveFileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="View in Google Drive"
+                      className="-my-[var(--space-sm)] inline-flex items-center py-[var(--space-sm)]"
+                    >
                       <BrandIcon name="google-drive" size={16} />
                     </a>
                   )}
                   {previewHref && (
-                    <Link href={previewHref} className="text-caption font-bold" style={{ color: theme.accentColor }}>
+                    <Link
+                      href={previewHref}
+                      className="-my-[var(--space-sm)] inline-flex items-center py-[var(--space-sm)] text-caption font-bold"
+                      style={{ color: theme.accentColor }}
+                    >
                       Open
                     </Link>
                   )}

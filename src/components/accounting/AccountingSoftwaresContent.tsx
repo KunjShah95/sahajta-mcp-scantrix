@@ -1,67 +1,144 @@
 "use client";
 
-import { ArrowRight, ChevronRight, Receipt, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Receipt, X } from "lucide-react";
 import { ReactNode, useCallback, useEffect, useState } from "react";
 
 import { BrandIcon } from "@/components/icons/BrandIcon";
 import { confirmDialog, showToast } from "@/lib/dialogManager";
 import { capitalizeWords } from "@/lib/textFormat";
-import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { useAppDispatch } from "@/store/hooks";
 import { connectGoogleDrive, getGoogleDriveStatus, disconnectGoogleDrive } from "@/store/googleDrive/googleDriveApi";
-import { useQuickBooksConnections } from "@/store/quickBooks/useQuickBooksConnections";
+import { useQuickBooksConnections, QBConnection } from "@/store/quickBooks/useQuickBooksConnections";
 
-function SoftwareCard({
+// The right-hand detail panel is a single slot shared by every "open a
+// detail view" row below — only one can be visible at a time, and swapping
+// which one is open never needs its own show/hide wiring.
+type DetailView = { type: "connection"; id: string } | { type: "drive" } | { type: "mcp" } | null;
+
+function ComingSoonCard({ icon, name, description }: { icon: ReactNode; name: string; description: string }) {
+  return (
+    <div className="rounded-lg bg-white p-[var(--space-md)] opacity-60 shadow-sm">
+      <div className="flex items-center gap-[var(--space-md)]">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-background-alt">
+          {icon}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-bold text-text-primary">{name}</p>
+          <p className="truncate text-caption text-text-secondary">{description}</p>
+        </div>
+        <span className="hidden shrink-0 rounded-pill bg-background-alt px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold text-text-secondary sm:block">
+          Coming Soon
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// A connected account (QuickBooks company, Google Drive) — always clickable,
+// opens its detail in the shared right-hand panel.
+function ConnectedRow({
   icon,
   name,
   description,
-  status,
-  statusClassName,
-  disabled,
-  active,
-  expandable,
+  badgeLabel,
+  badgeClassName,
+  tag,
+  selected,
   onClick,
 }: {
   icon: ReactNode;
   name: string;
   description: string;
-  status: string;
-  statusClassName: string;
-  disabled?: boolean;
-  active?: boolean;
-  expandable?: boolean;
-  onClick?: () => void;
+  badgeLabel: string;
+  badgeClassName: string;
+  tag?: string;
+  selected?: boolean;
+  onClick: () => void;
 }) {
-  const content = (
-    <div
-      className={`flex items-center gap-[var(--space-md)] rounded-lg bg-white p-[var(--space-md)] shadow-sm ${
-        disabled ? "opacity-60" : active ? "ring-2 ring-primary/40" : "hover:bg-background-alt"
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`block w-full rounded-lg bg-white p-[var(--space-md)] text-left shadow-sm ${
+        selected ? "ring-2 ring-primary/40" : "hover:bg-background-alt"
       }`}
     >
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-background-alt">
-        {icon}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="font-bold text-text-primary">{name}</p>
-        <p className="truncate text-caption text-text-secondary">{description}</p>
+      <div className="flex items-center gap-[var(--space-md)]">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-background-alt">
+          {icon}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-bold text-text-primary">{name}</p>
+          <p className="truncate text-caption text-text-secondary">{description}</p>
+          {tag && <p className="truncate text-caption font-semibold text-primary-700">{tag}</p>}
+        </div>
+        <span className={`hidden shrink-0 rounded-pill px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold sm:block ${badgeClassName}`}>
+          {badgeLabel}
+        </span>
+        <ChevronRight size={18} strokeWidth={2} className="shrink-0 text-text-secondary" />
       </div>
-      <span className={`shrink-0 rounded-pill px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold ${statusClassName}`}>
-        {status}
-      </span>
-      {expandable && (
-        <ChevronRight
-          size={18}
-          strokeWidth={2}
-          className={`shrink-0 text-text-secondary transition-transform ${active ? "rotate-90" : ""}`}
-        />
-      )}
+    </button>
+  );
+}
+
+// An integration not yet connected — the row itself isn't clickable, only
+// its action button is (either starts a connect flow directly, or opens a
+// setup guide in the shared detail panel).
+function AvailableRow({
+  icon,
+  name,
+  description,
+  actionLabel,
+  onAction,
+  actionDisabled,
+  variant = "primary",
+}: {
+  icon: ReactNode;
+  name: string;
+  description: string;
+  actionLabel: string;
+  onAction: () => void;
+  actionDisabled?: boolean;
+  variant?: "primary" | "outline";
+}) {
+  return (
+    <div className="rounded-lg bg-white p-[var(--space-md)] shadow-sm">
+      <div className="flex items-center gap-[var(--space-md)]">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-background-alt">
+          {icon}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-bold text-text-primary">{name}</p>
+          <p className="truncate text-caption text-text-secondary">{description}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onAction}
+          disabled={actionDisabled}
+          className={`shrink-0 rounded-pill px-[var(--space-md)] py-[var(--space-xs)] text-caption font-bold disabled:cursor-not-allowed disabled:opacity-60 ${
+            variant === "primary"
+              ? "bg-primary text-white hover:bg-primary-700"
+              : "border border-border text-text-primary hover:bg-background-alt"
+          }`}
+        >
+          {actionLabel}
+        </button>
+      </div>
     </div>
   );
+}
 
-  if (disabled) return content;
+function McpStep({ number, title, children }: { number: number; title: string; children: ReactNode }) {
   return (
-    <button type="button" onClick={onClick} className="block w-full text-left">
-      {content}
-    </button>
+    <div className="flex gap-[var(--space-sm)]">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-50 text-caption font-bold text-primary-700">
+        {number}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="font-bold text-text-primary">{title}</p>
+        <div className="mt-[var(--space-xs)]">{children}</div>
+      </div>
+    </div>
   );
 }
 
@@ -70,6 +147,23 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
     <div className="flex items-center justify-between gap-[var(--space-sm)] py-[var(--space-sm)]">
       <span className="shrink-0 text-body-sm text-text-secondary">{label}</span>
       <span className="min-w-0 truncate text-right text-body-sm font-semibold text-text-primary">{value}</span>
+    </div>
+  );
+}
+
+function DetailPanelShell({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-border bg-white p-[var(--space-lg)]">
+      <div className="flex items-start justify-between gap-[var(--space-sm)]">
+        <div className="min-w-0">
+          <p className="truncate font-bold text-text-primary">{title}</p>
+          <p className="text-caption text-text-secondary">{subtitle}</p>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close" className="shrink-0 text-text-secondary hover:text-text-primary">
+          <X size={18} strokeWidth={2} />
+        </button>
+      </div>
+      {children}
     </div>
   );
 }
@@ -83,7 +177,6 @@ function formatConnectedDate(value?: string | null): string {
 
 export function AccountingSoftwaresContent() {
   const dispatch = useAppDispatch();
-  const { connected, statusLoading } = useAppSelector((state) => state.quickBooks);
 
   const [driveConnected, setDriveConnected] = useState(false);
   const [driveStatusLoading, setDriveStatusLoading] = useState(true);
@@ -92,13 +185,19 @@ export function AccountingSoftwaresContent() {
   const [driveEmail, setDriveEmail] = useState<string | null>(null);
   const [driveConnectedAt, setDriveConnectedAt] = useState<string | null>(null);
   const [driveFolderUrl, setDriveFolderUrl] = useState<string | null>(null);
-  const [driveExpanded, setDriveExpanded] = useState(false);
 
-  const [qbExpanded, setQbExpanded] = useState(false);
-  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<DetailView>(null);
+  const [disconnectedExpanded, setDisconnectedExpanded] = useState(false);
+
+  // Not wired to a real backend yet — see .env.local.example. Until it's
+  // set, the setup guide below shows "Not available yet" placeholders
+  // instead of pretending a live server URL exists.
+  const mcpServerUrl = process.env.NEXT_PUBLIC_MCP_SERVER_URL || "";
 
   const {
     connections,
+    activeConnections,
+    disconnectedConnections,
     checkingStatus,
     connecting,
     disconnectingId,
@@ -110,7 +209,11 @@ export function AccountingSoftwaresContent() {
     handleDisconnect,
   } = useQuickBooksConnections("/accounting-software");
 
-  const selectedConnection = connections.find((c) => c._id === selectedConnectionId) || null;
+  const selectedConnection: QBConnection | null =
+    detail?.type === "connection" ? connections.find((c) => c._id === detail.id) || null : null;
+  const isSelectedDisconnected = selectedConnection?.status === "disconnected";
+
+  const closeDetail = () => setDetail(null);
 
   const checkDriveStatus = useCallback(async () => {
     setDriveStatusLoading(true);
@@ -151,7 +254,7 @@ export function AccountingSoftwaresContent() {
         setDriveEmail(null);
         setDriveConnectedAt(null);
         setDriveFolderUrl(null);
-        setDriveExpanded(false);
+        closeDetail();
       } else {
         const payload = result.payload as { message?: string } | undefined;
         showToast(payload?.message || "Could not disconnect. Please try again.", "error");
@@ -191,242 +294,232 @@ export function AccountingSoftwaresContent() {
     }
   };
 
-  // Opening either integration's panel closes the other's — only one side
-  // panel makes sense at a time given they share the same column.
-  const handleDriveClick = () => {
-    if (driveConnected) {
-      setQbExpanded(false);
-      setSelectedConnectionId(null);
-      setDriveExpanded((prev) => !prev);
-    } else {
-      handleDriveConnect();
-    }
+  // Placeholder — no MCP backend exists yet (see .env.local.example note on
+  // NEXT_PUBLIC_MCP_SERVER_URL). Follows the same disabled/"Coming Soon"
+  // toast precedent as ProfileContent's delete-account stub.
+  const handleGenerateMcpToken = () => {
+    showToast("Coming Soon: MCP access tokens will be available once the Scantrix MCP server is live.", "info");
   };
 
-  const handleQuickBooksClick = () => {
-    setDriveExpanded(false);
-    setQbExpanded((prev) => {
-      const next = !prev;
-      if (!next) setSelectedConnectionId(null);
-      return next;
-    });
+  const handleCopyMcpUrl = async () => {
+    if (!mcpServerUrl || typeof navigator === "undefined" || !navigator.clipboard) return;
+    await navigator.clipboard.writeText(mcpServerUrl);
+    showToast("Server URL copied.", "success");
   };
 
   const handleDisconnectSelected = async () => {
     if (!selectedConnection) return;
     const success = await handleDisconnect(selectedConnection);
-    if (success) setSelectedConnectionId(null);
+    if (success) closeDetail();
   };
 
-  const qbStatusLabel = statusLoading ? "Checking…" : connected ? "Connected" : "Not connected";
-  const qbStatusClass = connected ? "bg-success/10 text-success" : "bg-warning/10 text-warning";
+  const driveConnectActionLabel = driveConnecting ? "Connecting…" : driveStatusLoading ? "Checking…" : "Connect";
+  const qbConnectActionLabel = connecting
+    ? "Connecting…"
+    : checkingStatus
+      ? "Checking…"
+      : activeConnections.length > 0
+        ? "Add account"
+        : "Connect";
 
-  const driveStatusLabel = driveConnecting ? "Connecting…" : driveStatusLoading ? "Checking…" : driveConnected ? "Connected" : "Not connected";
-  const driveStatusClass =
-    driveConnecting || driveStatusLoading
-      ? "bg-warning/10 text-warning"
-      : driveConnected
-        ? "bg-[#0066DA]/10 text-[#0066DA]"
-        : "bg-background-alt text-text-secondary";
-
-  const anyPaneOpen = qbExpanded || driveExpanded;
+  const connectedCount = activeConnections.length + (driveConnected ? 1 : 0);
+  const showConnectedSection =
+    checkingStatus || activeConnections.length > 0 || driveConnected || disconnectedConnections.length > 0;
 
   return (
     <div className="mx-auto max-w-6xl p-[var(--space-lg)]">
-      <h1 className="text-h2 font-bold text-trust-navy">Connect your software</h1>
+      <h1 className="text-h2 font-bold text-trust-navy">Integrations</h1>
       <p className="mt-[var(--space-xs)] text-body-sm text-text-secondary">
-        Choose the accounting software you want to sync with Scantrix.
+        Connect the accounting software and tools you use with Scantrix.
       </p>
 
-      <div className="mt-[var(--space-lg)] flex flex-col items-start gap-[var(--space-lg)] lg:flex-row">
-        <div className={`w-full ${anyPaneOpen ? "lg:w-[360px] lg:shrink-0" : "max-w-2xl"}`}>
-          <p className="mb-[var(--space-sm)] text-caption font-bold uppercase tracking-wide text-text-secondary">
-            Available
-          </p>
-          <div className="flex flex-col gap-[var(--space-sm)]">
-            <SoftwareCard
-              icon={<BrandIcon name="quickbooks" size={28} />}
-              name="QuickBooks"
-              description="Sync vendors and post invoices automatically."
-              status={qbStatusLabel}
-              statusClassName={qbStatusClass}
-              onClick={handleQuickBooksClick}
-              active={qbExpanded}
-              expandable
-            />
-            <SoftwareCard
-              icon={<BrandIcon name="google-drive" size={28} />}
-              name="Google Drive"
-              description={
-                driveConnected
-                  ? "Posted invoices are copied to your Drive automatically."
-                  : "Connect to save a copy of every posted invoice to your Drive."
-              }
-              status={driveStatusLabel}
-              statusClassName={driveStatusClass}
-              onClick={handleDriveClick}
-              disabled={driveConnecting || driveStatusLoading}
-              active={driveExpanded}
-              expandable={driveConnected}
-            />
-          </div>
-
-          <p className="mb-[var(--space-sm)] mt-[var(--space-xl)] text-caption font-bold uppercase tracking-wide text-text-secondary">
-            Coming soon
-          </p>
-          <div className="flex flex-col gap-[var(--space-sm)]">
-            <SoftwareCard
-              icon={<BrandIcon name="sage" size={28} />}
-              name="Sage"
-              description="Sync Sage Business Cloud Accounting with Scantrix."
-              status="Coming Soon"
-              statusClassName="bg-background-alt text-text-secondary"
-              disabled
-            />
-            <SoftwareCard
-              icon={<BrandIcon name="xero" size={28} />}
-              name="Xero"
-              description="Automate invoice posting and reconciliation with Xero."
-              status="Coming Soon"
-              statusClassName="bg-background-alt text-text-secondary"
-              disabled
-            />
-            <SoftwareCard
-              icon={<Receipt size={26} strokeWidth={1.75} className="text-text-secondary" />}
-              name="FreshBooks"
-              description="Connect FreshBooks to sync bills and expenses."
-              status="Coming Soon"
-              statusClassName="bg-background-alt text-text-secondary"
-              disabled
-            />
-            <SoftwareCard
-              icon={<BrandIcon name="zoho" size={28} />}
-              name="Zoho Books"
-              description="Automate invoice posting and reconciliation with Zoho Books."
-              status="Coming Soon"
-              statusClassName="bg-background-alt text-text-secondary"
-              disabled
-            />
-          </div>
-        </div>
-
-        {qbExpanded && (
-          <div className="w-full lg:w-80 lg:shrink-0">
-            <div className="overflow-hidden rounded-lg border border-border bg-white">
-              <div className="flex items-center justify-between gap-[var(--space-sm)] border-b border-border p-[var(--space-md)]">
-                <div className="min-w-0">
-                  <p className="font-bold text-text-primary">Connected accounts</p>
-                  <p className="truncate text-caption text-text-secondary">QuickBooks companies linked to Scantrix</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleQuickBooksClick}
-                  aria-label="Close"
-                  className="shrink-0 text-text-secondary hover:text-text-primary"
-                >
-                  <X size={18} strokeWidth={2} />
-                </button>
+      <div className="mt-[var(--space-lg)] flex flex-col gap-[var(--space-lg)] lg:flex-row lg:items-start">
+        <div className={`w-full space-y-[var(--space-xl)] transition-[width] duration-300 ease-in-out ${detail ? "lg:w-3/4" : "lg:w-full"}`}>
+          {showConnectedSection && (
+            <div>
+              <div className="mb-[var(--space-sm)] flex items-center gap-[var(--space-sm)]">
+                <p className="text-caption font-bold uppercase tracking-wide text-text-secondary">Connected</p>
+                {!checkingStatus && (
+                  <span className="rounded-pill bg-primary-50 px-[var(--space-sm)] py-px text-caption font-bold text-primary-700">
+                    {connectedCount}
+                  </span>
+                )}
               </div>
-
-              <div className="flex flex-col gap-[var(--space-xs)] p-[var(--space-sm)]">
+              <div className="flex flex-col gap-[var(--space-sm)]">
                 {checkingStatus ? (
-                  <p className="p-[var(--space-md)] text-center text-body-sm text-text-secondary">Checking accounts…</p>
-                ) : connections.length === 0 ? (
-                  <p className="p-[var(--space-md)] text-center text-body-sm text-text-secondary">
-                    No QuickBooks accounts connected yet.
-                  </p>
+                  <div className="rounded-lg bg-white p-[var(--space-md)] shadow-sm">
+                    <p className="text-body-sm text-text-secondary">Checking accounts…</p>
+                  </div>
                 ) : (
-                  connections.map((connection) => {
+                  activeConnections.map((connection) => {
                     const isActive = connection._id === activeConnectionId;
-                    const isSelected = connection._id === selectedConnectionId;
-                    const canReconnect = connection.role === "owner" || connection.role === "admin";
+                    const isSelected = detail?.type === "connection" && detail.id === connection._id;
                     return (
-                      <div
+                      <ConnectedRow
                         key={connection._id}
-                        className={`rounded-md p-[var(--space-sm)] ${isSelected ? "bg-primary-50" : "hover:bg-background-alt"}`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => setSelectedConnectionId(connection._id)}
-                          className="flex w-full items-center gap-[var(--space-sm)] text-left"
-                        >
-                          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${isActive ? "bg-primary" : "bg-border"}`} />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate font-semibold text-text-primary">{connection.name}</span>
-                            {isActive && <span className="block text-caption text-primary-700">Active</span>}
-                          </span>
-                          <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-text-secondary" />
-                        </button>
-                        <div className="mt-[var(--space-xs)] flex items-center gap-[var(--space-md)] pl-[calc(0.625rem+var(--space-sm))]">
-                          {!isActive && (
-                            <button
-                              type="button"
-                              onClick={() => handleSwitch(connection)}
-                              className="text-caption font-semibold text-primary hover:underline"
-                            >
-                              Switch
-                            </button>
-                          )}
-                          {canReconnect && (
-                            <button
-                              type="button"
-                              onClick={() => handleReconnect(connection)}
-                              disabled={reconnectingId === connection._id}
-                              className="text-caption font-semibold text-primary hover:underline disabled:opacity-60"
-                            >
-                              {reconnectingId === connection._id ? "Reconnecting…" : "Reconnect"}
-                            </button>
-                          )}
-                        </div>
-                      </div>
+                        icon={<BrandIcon name="quickbooks" size={28} />}
+                        name={connection.name}
+                        description="QuickBooks Online"
+                        badgeLabel={isActive ? "Active" : "Connected"}
+                        badgeClassName={isActive ? "bg-success/10 text-success" : "bg-background-alt text-text-secondary"}
+                        selected={isSelected}
+                        onClick={() => setDetail({ type: "connection", id: connection._id })}
+                      />
                     );
                   })
                 )}
+                {driveConnected && (
+                  <ConnectedRow
+                    icon={<BrandIcon name="google-drive" size={28} />}
+                    name="Google Drive"
+                    description="Posted invoices are copied to your Drive automatically."
+                    badgeLabel="Connected"
+                    badgeClassName="bg-[#0066DA]/10 text-[#0066DA]"
+                    selected={detail?.type === "drive"}
+                    onClick={() => setDetail({ type: "drive" })}
+                  />
+                )}
               </div>
 
-              <div className="border-t border-border p-[var(--space-sm)]">
-                <button
-                  type="button"
-                  onClick={handleConnect}
-                  disabled={connecting}
-                  className="flex h-11 w-full items-center justify-center gap-[var(--space-xs)] rounded-md bg-primary font-bold text-white disabled:opacity-60"
-                >
-                  {connecting ? "Connecting…" : "Add Another Account"}
-                  <ArrowRight size={14} strokeWidth={2.25} />
-                </button>
-              </div>
+              {disconnectedConnections.length > 0 && (
+                <div className="mt-[var(--space-sm)] overflow-hidden rounded-lg border border-border bg-white">
+                  <button
+                    type="button"
+                    onClick={() => setDisconnectedExpanded((v) => !v)}
+                    aria-expanded={disconnectedExpanded}
+                    className="flex w-full items-center justify-between gap-[var(--space-sm)] p-[var(--space-md)] text-left"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-bold text-text-primary">Disconnected accounts</p>
+                      <p className="truncate text-caption text-text-secondary">
+                        {disconnectedConnections.length} previously connected
+                      </p>
+                    </div>
+                    <ChevronDown
+                      size={18}
+                      strokeWidth={2}
+                      className={`shrink-0 text-text-secondary transition-transform ${disconnectedExpanded ? "rotate-180" : ""}`}
+                    />
+                  </button>
+
+                  {disconnectedExpanded && (
+                    <div className="flex flex-col gap-[var(--space-xs)] border-t border-border p-[var(--space-sm)]">
+                      {disconnectedConnections.map((connection) => {
+                        const isSelected = detail?.type === "connection" && detail.id === connection._id;
+                        return (
+                          <div
+                            key={connection._id}
+                            className={`rounded-md p-[var(--space-sm)] opacity-60 ${isSelected ? "bg-primary-50" : "hover:bg-background-alt"}`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setDetail({ type: "connection", id: connection._id })}
+                              className="flex w-full items-center gap-[var(--space-sm)] text-left"
+                            >
+                              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-border" />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate font-semibold text-text-primary">{connection.name}</span>
+                                <span className="block text-caption text-text-secondary">Disconnected</span>
+                              </span>
+                              <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-text-secondary" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div>
+            <p className="mb-[var(--space-sm)] text-caption font-bold uppercase tracking-wide text-text-secondary">
+              Available to connect
+            </p>
+            <div className="flex flex-col gap-[var(--space-sm)]">
+              <AvailableRow
+                icon={<BrandIcon name="quickbooks" size={28} />}
+                name="QuickBooks"
+                description={
+                  activeConnections.length > 0
+                    ? "Connect another QuickBooks company to Scantrix."
+                    : "Sync vendors and post invoices automatically."
+                }
+                actionLabel={qbConnectActionLabel}
+                onAction={handleConnect}
+                actionDisabled={connecting}
+              />
+              {!driveConnected && (
+                <AvailableRow
+                  icon={<BrandIcon name="google-drive" size={28} />}
+                  name="Google Drive"
+                  description="Save a copy of every posted invoice to your Drive."
+                  actionLabel={driveConnectActionLabel}
+                  onAction={handleDriveConnect}
+                  actionDisabled={driveConnecting || driveStatusLoading}
+                />
+              )}
+              <AvailableRow
+                icon={<BrandIcon name="claude" size={28} />}
+                name="Claude MCP"
+                description="Ask Claude about your invoices and vendors from Scantrix."
+                actionLabel="Setup guide"
+                onAction={() => setDetail({ type: "mcp" })}
+                variant="outline"
+              />
             </div>
           </div>
-        )}
 
-        {selectedConnection && (
-          <div className="w-full lg:w-80 lg:shrink-0">
-            <div className="rounded-lg border border-border bg-white p-[var(--space-lg)]">
-              <div className="flex items-start justify-between gap-[var(--space-sm)]">
-                <div className="min-w-0">
-                  <p className="truncate font-bold text-text-primary">{selectedConnection.name}</p>
-                  <p className="text-caption text-text-secondary">
-                    {selectedConnection._id === activeConnectionId ? "Active connection" : "Inactive"}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedConnectionId(null)}
-                  aria-label="Close"
-                  className="shrink-0 text-text-secondary hover:text-text-primary"
-                >
-                  <X size={18} strokeWidth={2} />
-                </button>
-              </div>
+          <div>
+            <p className="mb-[var(--space-sm)] text-caption font-bold uppercase tracking-wide text-text-secondary">
+              Coming soon
+            </p>
+            <div className="flex flex-col gap-[var(--space-sm)]">
+              <ComingSoonCard icon={<BrandIcon name="sage" size={28} />} name="Sage" description="Sync Sage Business Cloud Accounting with Scantrix." />
+              <ComingSoonCard icon={<BrandIcon name="xero" size={28} />} name="Xero" description="Automate invoice posting and reconciliation with Xero." />
+              <ComingSoonCard
+                icon={<Receipt size={26} strokeWidth={1.75} className="text-text-secondary" />}
+                name="FreshBooks"
+                description="Connect FreshBooks to sync bills and expenses."
+              />
+              <ComingSoonCard icon={<BrandIcon name="zoho" size={28} />} name="Zoho Books" description="Automate invoice posting and reconciliation with Zoho Books." />
+            </div>
+          </div>
+        </div>
 
+        {/* Shared detail panel — always mounted so the width/slide transition
+            has something to animate between; content swaps based on `detail`. */}
+        <div
+          className={`w-full overflow-hidden transition-all duration-300 ease-in-out lg:shrink-0 ${
+            detail
+              ? "max-h-[1200px] opacity-100 lg:w-1/4 lg:translate-x-0"
+              : "pointer-events-none max-h-0 opacity-0 lg:w-0 lg:-translate-x-4"
+          }`}
+        >
+          {detail?.type === "connection" && selectedConnection && (
+            <DetailPanelShell
+              title={selectedConnection.name}
+              subtitle={
+                isSelectedDisconnected
+                  ? "Disconnected"
+                  : selectedConnection._id === activeConnectionId
+                    ? "Active connection"
+                    : "Inactive"
+              }
+              onClose={closeDetail}
+            >
               <div className="mt-[var(--space-md)] flex flex-col divide-y divide-border">
-                <DetailRow label="Connected on" value={formatConnectedDate(selectedConnection.createdAt)} />
+                <DetailRow
+                  label={isSelectedDisconnected ? "Disconnected on" : "Connected on"}
+                  value={formatConnectedDate(isSelectedDisconnected ? selectedConnection.updatedAt : selectedConnection.createdAt)}
+                />
                 <DetailRow label="Realm ID" value={selectedConnection.realmId} />
                 <DetailRow label="User type" value={capitalizeWords(selectedConnection.role)} />
               </div>
 
               <div className="mt-[var(--space-lg)] flex flex-col gap-[var(--space-sm)]">
-                {selectedConnection._id !== activeConnectionId && (
+                {!isSelectedDisconnected && selectedConnection._id !== activeConnectionId && (
                   <button
                     type="button"
                     onClick={() => handleSwitch(selectedConnection)}
@@ -445,37 +538,22 @@ export function AccountingSoftwaresContent() {
                     {reconnectingId === selectedConnection._id ? "Reconnecting…" : "Reconnect"}
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={handleDisconnectSelected}
-                  disabled={disconnectingId === selectedConnection._id}
-                  className="h-11 w-full rounded-md bg-error/10 font-bold text-error disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {disconnectingId === selectedConnection._id ? "Disconnecting…" : "Disconnect"}
-                </button>
+                {!isSelectedDisconnected && (
+                  <button
+                    type="button"
+                    onClick={handleDisconnectSelected}
+                    disabled={disconnectingId === selectedConnection._id}
+                    className="h-11 w-full rounded-md bg-error/10 font-bold text-error disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {disconnectingId === selectedConnection._id ? "Disconnecting…" : "Disconnect"}
+                  </button>
+                )}
               </div>
-            </div>
-          </div>
-        )}
+            </DetailPanelShell>
+          )}
 
-        {driveExpanded && driveConnected && (
-          <div className="w-full lg:w-80 lg:shrink-0">
-            <div className="rounded-lg border border-border bg-white p-[var(--space-lg)]">
-              <div className="flex items-start justify-between gap-[var(--space-sm)]">
-                <div className="min-w-0">
-                  <p className="truncate font-bold text-text-primary">Google Drive</p>
-                  <p className="text-caption text-text-secondary">Connected account details</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setDriveExpanded(false)}
-                  aria-label="Close"
-                  className="shrink-0 text-text-secondary hover:text-text-primary"
-                >
-                  <X size={18} strokeWidth={2} />
-                </button>
-              </div>
-
+          {detail?.type === "drive" && driveConnected && (
+            <DetailPanelShell title="Google Drive" subtitle="Connected account details" onClose={closeDetail}>
               <div className="mt-[var(--space-md)] flex flex-col divide-y divide-border">
                 <DetailRow label="Gmail account" value={driveEmail || "—"} />
                 <DetailRow label="Connected on" value={formatConnectedDate(driveConnectedAt)} />
@@ -483,12 +561,7 @@ export function AccountingSoftwaresContent() {
                   label="Drive folder"
                   value={
                     driveFolderUrl ? (
-                      <a
-                        href={driveFolderUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-semibold text-primary-700 hover:underline"
-                      >
+                      <a href={driveFolderUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary-700 hover:underline">
                         Open folder
                       </a>
                     ) : (
@@ -516,9 +589,86 @@ export function AccountingSoftwaresContent() {
                   {driveDisconnecting ? "Disconnecting…" : "Disconnect"}
                 </button>
               </div>
-            </div>
-          </div>
-        )}
+            </DetailPanelShell>
+          )}
+
+          {detail?.type === "mcp" && (
+            <DetailPanelShell title="Claude MCP" subtitle="Connect Scantrix to Claude via MCP" onClose={closeDetail}>
+              <div className="mt-[var(--space-md)] rounded-md border-l-4 border-warning bg-warning/10 px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-medium text-warning">
+                This connector isn't live yet — the steps below show what setup will look like once the Scantrix MCP server is available.
+              </div>
+
+              <div className="mt-[var(--space-lg)] flex flex-col gap-[var(--space-lg)]">
+                <McpStep number={1} title="Generate an access token">
+                  <p className="text-caption text-text-secondary">
+                    Scoped to this workspace — Claude uses it to authenticate requests.
+                  </p>
+                  <div className="mt-[var(--space-sm)] flex items-center gap-[var(--space-sm)]">
+                    <span className="flex-1 truncate rounded-md bg-background-soft px-[var(--space-sm)] py-[var(--space-xs)] font-mono text-caption text-text-secondary">
+                      •••• •••• •••• ••••
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleGenerateMcpToken}
+                      className="shrink-0 rounded-md border border-border px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold text-text-secondary hover:bg-background-alt"
+                    >
+                      Generate
+                    </button>
+                  </div>
+                </McpStep>
+
+                <McpStep number={2} title="Copy your server URL">
+                  <div className="flex items-center gap-[var(--space-sm)]">
+                    <span className="flex-1 truncate rounded-md bg-background-soft px-[var(--space-sm)] py-[var(--space-xs)] font-mono text-caption text-text-secondary">
+                      {mcpServerUrl || "Not available yet"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCopyMcpUrl}
+                      disabled={!mcpServerUrl}
+                      className="shrink-0 rounded-md border border-border px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold text-text-secondary hover:bg-background-alt disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </McpStep>
+
+                <McpStep number={3} title="Add Scantrix as a connector">
+                  <p className="text-caption text-text-secondary">
+                    <span className="font-semibold text-text-primary">Claude.ai / Claude Desktop:</span> Settings →
+                    Connectors → Add custom connector → paste the URL from Step 2 → Connect.
+                  </p>
+                  <p className="mt-[var(--space-sm)] text-caption text-text-secondary">
+                    <span className="font-semibold text-text-primary">Claude Code:</span>
+                  </p>
+                  <pre className="mt-[var(--space-xs)] overflow-x-auto rounded-md bg-background-soft px-[var(--space-sm)] py-[var(--space-xs)] font-mono text-caption text-text-primary">
+                    claude mcp add --transport http scantrix {mcpServerUrl || "<your-workspace-mcp-url>"}
+                  </pre>
+                </McpStep>
+
+                <McpStep number={4} title="Authorize and start asking">
+                  <p className="text-caption text-text-secondary">
+                    Sign in with your Scantrix account when prompted, then try:
+                  </p>
+                  <ul className="mt-[var(--space-xs)] flex flex-col gap-[var(--space-xs)]">
+                    {[
+                      "What invoices are pending review?",
+                      "Show me this month's vendor totals.",
+                      "Which invoices failed to post to QuickBooks?",
+                    ].map((example) => (
+                      <li
+                        key={example}
+                        className="rounded-md bg-background-soft px-[var(--space-sm)] py-[var(--space-xs)] text-caption italic text-text-secondary"
+                      >
+                        “{example}”
+                      </li>
+                    ))}
+                  </ul>
+                </McpStep>
+              </div>
+            </DetailPanelShell>
+          )}
+        </div>
       </div>
     </div>
   );

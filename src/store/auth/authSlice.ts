@@ -305,9 +305,15 @@ const authSlice = createSlice({
         state.error = null;
       })
 
-      .addCase(resetPassword.fulfilled, (state) => {
+      .addCase(resetPassword.fulfilled, (state, action) => {
         state.loading = false;
         state.error = null;
+
+        // Backend logs the user in on a successful reset (same shape as
+        // loginUser) — reflect that here instead of leaving them stuck
+        // signed-out after they just proved account ownership via OTP.
+        state.user = action.payload;
+        state.isAuthenticated = true;
       })
 
       .addCase(

@@ -187,7 +187,7 @@ export function VendorResolutionContent({ invoiceId }: { invoiceId: string }) {
   return (
     <div className="flex h-screen flex-col bg-background-alt">
       <div className="flex h-14 shrink-0 items-center justify-between bg-primary px-[var(--space-md)]">
-        <button type="button" onClick={() => router.back()} aria-label="Back" className="text-white">
+        <button type="button" onClick={() => router.back()} aria-label="Back" className="-m-2 p-2 text-white">
           <ChevronLeft size={26} strokeWidth={2.25} />
         </button>
         <h1 className="text-body font-bold text-white">Resolve Vendor</h1>
@@ -200,9 +200,9 @@ export function VendorResolutionContent({ invoiceId }: { invoiceId: string }) {
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-background-alt font-bold text-text-secondary">
             ?
           </span>
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-caption text-text-secondary">Vendor on invoice</p>
-            <p className="font-bold text-text-primary">{invoiceVendor}</p>
+            <p className="break-words font-bold text-text-primary">{invoiceVendor}</p>
             <p className="text-caption text-text-secondary">Not found in QuickBooks — select a match or create a new one.</p>
           </div>
         </div>

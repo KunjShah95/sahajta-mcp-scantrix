@@ -265,3 +265,35 @@ export const rejectInvoice = createAsyncThunk(
     }
   },
 );
+
+// ======================================
+// DELETE INVOICE
+// ======================================
+// Backend only allows deleting invoices with postedStatus "auto", "manual"
+// or "failed" (soft delete + QB bill void) — "pending" is rejected with a
+// 400. The delete response has no invoice payload, so the invoiceId is
+// carried through manually for the slice to know what to remove.
+
+interface DeleteInvoicePayload {
+  invoiceId: string;
+}
+
+export const deleteInvoice = createAsyncThunk(
+  "invoice/deleteInvoice",
+
+  async (data: DeleteInvoicePayload, thunkAPI) => {
+    try {
+      console.log("========== DELETE INVOICE ==========");
+
+      await api.delete(`/invoices/${data.invoiceId}`);
+
+      console.log("========== DELETE INVOICE SUCCESS ==========");
+
+      return { invoiceId: data.invoiceId };
+    } catch (error: any) {
+      console.log("========== DELETE INVOICE ERROR ==========");
+      console.log(error);
+      return thunkAPI.rejectWithValue(getErrorMessage(error));
+    }
+  },
+);

@@ -110,12 +110,12 @@ export function PlansContent() {
 
       <Link
         href="/subscription"
-        className="mb-[var(--space-lg)] flex items-center justify-between rounded-lg border border-border bg-background-soft px-[var(--space-md)] py-[var(--space-sm)]"
+        className="mb-[var(--space-lg)] flex flex-wrap items-center justify-between gap-[var(--space-sm)] rounded-lg border border-border bg-background-soft px-[var(--space-md)] py-[var(--space-sm)]"
       >
-        <span className="text-body-sm text-text-secondary">
+        <span className="min-w-0 truncate text-body-sm text-text-secondary">
           Current plan: <strong className="font-bold text-trust-navy">{currentPlanName}</strong>
         </span>
-        <span className="flex items-center gap-[var(--space-xs)] text-caption font-bold text-primary">
+        <span className="flex shrink-0 items-center gap-[var(--space-xs)] text-caption font-bold text-primary">
           View status <ChevronRight size={14} strokeWidth={2.25} />
         </span>
       </Link>

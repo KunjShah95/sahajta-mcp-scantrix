@@ -9,6 +9,7 @@ import {
   LogOut,
   Mail,
   Shield,
+  SlidersHorizontal,
   Trash2,
   Users,
 } from "lucide-react";
@@ -114,13 +115,19 @@ export function ProfileContent() {
           href="/accounting-software"
           icon={<Link2 size={18} strokeWidth={2} className="text-primary" />}
           iconBg="#EEF4FF"
-          label="Connect to softwares"
+          label="Integrations"
         />
         <SettingsRow
           href="/team"
           icon={<Users size={18} strokeWidth={2} className="text-trust-navy" />}
           iconBg="#E0F2FE"
           label="Team Members"
+        />
+        <SettingsRow
+          href="/preferences"
+          icon={<SlidersHorizontal size={18} strokeWidth={2} className="text-text-secondary" />}
+          iconBg="#F1F5F9"
+          label="Preferences"
         />
         <SettingsRow
           href="/subscription"

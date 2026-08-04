@@ -6,6 +6,7 @@ import {
   fetchQuickBooksVendors,
   getMyQBConnections,
   getQuickBooksStatus,
+  updateQuickBooksSettings,
   updateQuickBooksVendor,
 } from "./quickBooksApi";
 import { isSessionBoundary } from "../sessionBoundary";
@@ -22,6 +23,8 @@ export interface Vendor {
   phone?: string | null;
   address?: string | null;
   syncedFromQB?: boolean;
+  /** Mongoose timestamp, present on every vendor doc but not always sent by every environment. */
+  createdAt?: string;
 }
 
 export interface GLAccount {
@@ -54,8 +57,18 @@ interface QuickBooksState {
   connected: boolean;
   realmId: string;
   qbConnectionId: string;
+  // True only once qbConnectionId has been set by something that counts as
+  // an actual choice for THIS session (the sole connection when there's only
+  // one, or a real switcher pick) — never by rehydrating persisted storage.
+  // Without this, a qbConnectionId left over from a session before the
+  // "blank until chosen" behavior existed looks perfectly valid (it matches
+  // a real, still-active connection) and would never get cleared, since it
+  // isn't stale/dangling — just never actually chosen this session.
+  hasExplicitSelection: boolean;
   statusLoading: boolean;
   statusError: string | null;
+  autoPostEnabled: boolean;
+  lineItemWiseEnabled: boolean;
   vendors: Vendor[];
   vendorsLoading: boolean;
   vendorsError: string | null;
@@ -71,8 +84,13 @@ const initialState: QuickBooksState = {
   connected: false,
   realmId: "",
   qbConnectionId: "",
+  hasExplicitSelection: false,
   statusLoading: false,
   statusError: null,
+  // Default true matches the backend's default for connections that predate
+  // these settings — see qb_connection.model.js.
+  autoPostEnabled: true,
+  lineItemWiseEnabled: true,
   vendors: [],
   vendorsLoading: false,
   vendorsError: null,
@@ -105,22 +123,44 @@ const quickBooksSlice = createSlice({
         console.log("GET MY CONNECTIONS PAYLOAD:", JSON.stringify(action.payload, null, 2));
 
         const connections = action.payload?.data?.connections; // ← was action.payload?.data
-        const first = Array.isArray(connections) ? connections[0] : null;
+        const list = Array.isArray(connections) ? connections : [];
+        const activeConns = list.filter((c: { status?: string }) => c?.status !== "disconnected");
 
-        if (first) {
-          // This list refreshes constantly (every Dashboard focus), so only
-          // default to the first connection when nothing is selected yet —
-          // never clobber a connection the user already explicitly switched
-          // to via the dropdown.
-          if (!state.qbConnectionId) {
-            state.qbConnectionId = first._id ?? "";
-            state.realmId = first.realmId ?? "";
-          }
+        if (activeConns.length > 0) {
           state.connected = true; // if a connection record exists, they're connected
+
+          if (activeConns.length === 1) {
+            // Only one choice — always the right selection, whether it was
+            // already set or not. No ambiguity, so this always counts as
+            // "explicit" even though the user didn't click anything.
+            const only = activeConns[0];
+            if (state.qbConnectionId !== only._id) {
+              state.qbConnectionId = only._id ?? "";
+              state.realmId = only.realmId ?? "";
+            }
+            state.hasExplicitSelection = true;
+          } else if (!state.hasExplicitSelection) {
+            // 2+ choices and nothing has been explicitly picked THIS
+            // session — this is the case a merely-persisted qbConnectionId
+            // from before this behavior existed would otherwise slip
+            // through (it matches a real, still-active connection, so it
+            // isn't "stale" by the dangling-id check below). Force blank so
+            // the switcher starts unselected until the user picks one.
+            state.qbConnectionId = "";
+            state.realmId = "";
+          } else if (state.qbConnectionId && !activeConns.some((c: { _id: string }) => c._id === state.qbConnectionId)) {
+            // An explicit pick from earlier no longer matches any active
+            // connection (disconnected since, or removed) — clear it rather
+            // than keep sending a dangling X-QB-Id.
+            state.qbConnectionId = "";
+            state.realmId = "";
+            state.hasExplicitSelection = false;
+          }
         } else {
           state.connected = false;
           state.realmId = "";
           state.qbConnectionId = "";
+          state.hasExplicitSelection = false;
         }
       })
       .addCase(getMyQBConnections.rejected, (state, action) => {
@@ -132,6 +172,7 @@ const quickBooksSlice = createSlice({
           state.connected = false;
           state.realmId = "";
           state.qbConnectionId = "";
+          state.hasExplicitSelection = false;
           state.statusError = null;
         } else {
           state.statusError = payload?.message || "Failed to fetch QB connections";
@@ -151,6 +192,8 @@ const quickBooksSlice = createSlice({
         const qbData = action.payload?.data ?? action.payload;
         state.connected = qbData?.connected ?? false;
         state.realmId = qbData?.realmId ?? "";
+        state.autoPostEnabled = qbData?.autoPostEnabled ?? true;
+        state.lineItemWiseEnabled = qbData?.lineItemWiseEnabled ?? true;
         // The backend's status response never echoes back qbConnectionId,
         // so use the one this request was made WITH (action.meta.arg) — that's
         // the connection being switched to. Falling back to the response
@@ -158,12 +201,23 @@ const quickBooksSlice = createSlice({
         // switching companies silently no-op.
         state.qbConnectionId =
           action.meta.arg.qbConnectionId || state.qbConnectionId;
+        // This thunk only ever runs for a connection the app has decided to
+        // use (a switcher pick, or the sole connection) — never speculatively
+        // — so any id it sets counts as an explicit selection.
+        if (action.meta.arg.qbConnectionId) state.hasExplicitSelection = true;
       })
       .addCase(getQuickBooksStatus.rejected, (state, action) => {
         state.statusLoading = false;
         const payload = action.payload as { message?: string; statusCode?: number } | undefined;
         state.statusError = payload?.message || "Failed to fetch QuickBooks status";
       });
+
+    // ── Settings (auto-post / line-item-wise entry) ───────────────────
+    builder.addCase(updateQuickBooksSettings.fulfilled, (state, action) => {
+      const data = action.payload?.data;
+      if (data?.autoPostEnabled !== undefined) state.autoPostEnabled = data.autoPostEnabled;
+      if (data?.lineItemWiseEnabled !== undefined) state.lineItemWiseEnabled = data.lineItemWiseEnabled;
+    });
 
     // ── Vendors ────────────────────────────────────────────────────────
     builder
