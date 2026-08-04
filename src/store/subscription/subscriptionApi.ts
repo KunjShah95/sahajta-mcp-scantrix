@@ -74,3 +74,61 @@ export const choosePlan = createAsyncThunk(
     }
   },
 );
+
+// ================================
+// STRIPE CHECKOUT (real payment — first-time subscribe / no active Stripe subscription yet)
+// ================================
+export const startCheckout = createAsyncThunk(
+  "subscription/startCheckout",
+  async (data: ChoosePlanPayload, thunkAPI) => {
+    try {
+      console.log("========== STRIPE CHECKOUT REQUEST ==========");
+      const response = await api.post("/subscription/checkout", data);
+      console.log("========== STRIPE CHECKOUT SUCCESS ==========");
+      return response.data;
+    } catch (error: any) {
+      console.log("========== STRIPE CHECKOUT ERROR ==========");
+      const message = error?.response?.data?.message || error?.message || "Failed to start checkout";
+      return thunkAPI.rejectWithValue({ message, statusCode: error?.response?.status });
+    }
+  },
+);
+
+// ================================
+// STRIPE BILLING PORTAL (manage/cancel/switch plan for an existing Stripe subscription)
+// ================================
+export const openBillingPortal = createAsyncThunk(
+  "subscription/openBillingPortal",
+  async (_: void, thunkAPI) => {
+    try {
+      console.log("========== STRIPE BILLING PORTAL REQUEST ==========");
+      const response = await api.post("/subscription/billing-portal");
+      console.log("========== STRIPE BILLING PORTAL SUCCESS ==========");
+      return response.data;
+    } catch (error: any) {
+      console.log("========== STRIPE BILLING PORTAL ERROR ==========");
+      const message = error?.response?.data?.message || error?.message || "Failed to open billing portal";
+      return thunkAPI.rejectWithValue({ message, statusCode: error?.response?.status });
+    }
+  },
+);
+
+// ================================
+// CONFIRM CHECKOUT (called right after Stripe redirects back to success_url,
+// for an immediate update instead of waiting on the async webhook)
+// ================================
+export const confirmCheckout = createAsyncThunk(
+  "subscription/confirmCheckout",
+  async (sessionId: string, thunkAPI) => {
+    try {
+      console.log("========== CONFIRM CHECKOUT REQUEST ==========");
+      const response = await api.post("/subscription/confirm-checkout", { sessionId });
+      console.log("========== CONFIRM CHECKOUT SUCCESS ==========");
+      return response.data;
+    } catch (error: any) {
+      console.log("========== CONFIRM CHECKOUT ERROR ==========");
+      const message = error?.response?.data?.message || error?.message || "Failed to confirm checkout";
+      return thunkAPI.rejectWithValue({ message, statusCode: error?.response?.status });
+    }
+  },
+);
