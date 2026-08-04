@@ -11,6 +11,7 @@ const LINKS = [
   { href: "#capabilities", label: "Capabilities" },
   { href: "#difference", label: "Why Scantrix" },
   { href: "#pricing", label: "Pricing" },
+  { href: "#about", label: "About" },
 ];
 
 export function LandingNav() {
