@@ -1,0 +1,37 @@
+- generic [active] [ref=e1]:
+  - link "Scantrix" [ref=e2] [cursor=pointer]:
+    - /url: https://scantrix.ai/
+  - generic [ref=e8]:
+    - generic [ref=e9]:
+      - heading "Welcome back" [level=1] [ref=e10]
+      - paragraph [ref=e11]:
+        - text: Sign in to connect
+        - strong [ref=e12]: Test Claude
+        - text: to your Scantrix account.
+    - generic [ref=e13]:
+      - text: Use your
+      - strong [ref=e14]: Scantrix email & password
+      - text: . If you signed up with Google, Microsoft, or Apple, you'll need to
+      - link "set a password first" [ref=e15] [cursor=pointer]:
+        - /url: https://scantrix.ai/forgot-password
+      - text: .
+    - generic [ref=e16]:
+      - generic [ref=e17]: Email
+      - textbox "Email" [ref=e18]:
+        - /placeholder: you@company.com
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - generic [ref=e21]: Password
+        - button "Show" [ref=e22] [cursor=pointer]
+      - textbox "Password" [ref=e27]:
+        - /placeholder: Your password
+      - link "Forgot password?" [ref=e29] [cursor=pointer]:
+        - /url: https://scantrix.ai/forgot-password
+    - button "Sign in to Scantrix" [ref=e30] [cursor=pointer]
+    - generic [ref=e31]:
+      - text: No account?
+      - link "Sign up free" [ref=e32] [cursor=pointer]:
+        - /url: https://scantrix.ai/register
+      - text: •
+      - link "scantrix.ai" [ref=e33] [cursor=pointer]:
+        - /url: https://scantrix.ai/
