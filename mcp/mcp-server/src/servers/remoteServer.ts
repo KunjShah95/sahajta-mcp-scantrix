@@ -1,4 +1,4 @@
-import express, { type Request, type Response } from "express";
+﻿import express, { type Request, type Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
@@ -40,7 +40,7 @@ export const createRemoteApp = (config: Config): express.Express => {
     }),
   );
 
-  // ── Login page (the /authorize step redirects here) ──
+  // â”€â”€ Login page (the /authorize step redirects here) â”€â”€
   app.get("/login", async (req: Request, res: Response) => {
     const token = String(req.query.req ?? "");
     if (!token) {
@@ -86,7 +86,22 @@ export const createRemoteApp = (config: Config): express.Express => {
         if (loginReq.state) redirect.searchParams.set("state", loginReq.state);
         res.redirect(redirect.toString());
       } catch (error) {
+        // Log to Vercel function logs for debugging cross-account failures.
+        console.error("[savetrix-mcp] /login POST error:", error instanceof Error ? error.message : error);
         const client = await provider.clientsStore.getClient(loginReq.client_id);
+        const msg = error instanceof Error ? error.message : String(error);
+
+        let userError: string;
+        if (/credential|login|password|401|incorrect|invalid|unauthorized|wrong/i.test(msg)) {
+          userError = "Incorrect email or password. Please try again.";
+        } else if (/social|google|apple|microsoft|oauth|provider|no.*password|password.*not.*set/i.test(msg)) {
+          userError = "This account uses social login (Google / Apple / Microsoft). Please set a password at scantrix.ai/forgot-password, then try again.";
+        } else if (/timeout|ETIMEDOUT|ECONNRESET|network|ENOTFOUND/i.test(msg)) {
+          userError = "Could not reach Scantrix servers. Please check your connection and try again.";
+        } else {
+          userError = "Sign-in failed. Please try again. If this persists, reset your password at scantrix.ai.";
+        }
+
         res
           .status(401)
           .type("html")
@@ -95,17 +110,14 @@ export const createRemoteApp = (config: Config): express.Express => {
               reqToken: token,
               webUrl: config.webUrl,
               clientName: client?.client_name,
-              error:
-                error instanceof Error && /credential|login|password|401/i.test(error.message)
-                  ? "Incorrect email or password. Please try again."
-                  : "Sign-in failed. Please try again.",
+              error: userError,
             }),
           );
       }
     },
   );
 
-  // ── MCP endpoint (bearer-protected, one server per request = stateless) ──
+  // â”€â”€ MCP endpoint (bearer-protected, one server per request = stateless) â”€â”€
   const bearer = requireBearerAuth({
     verifier: provider,
     requiredScopes: ["mcp"],
@@ -148,7 +160,7 @@ export const startRemote = (config: Config): void => {
   app.listen(config.port, () => {
     // eslint-disable-next-line no-console
     console.error(
-      `Savetrix MCP connector (remote/OAuth) listening on :${config.port} — public URL ${config.publicUrl}`,
+      `Savetrix MCP connector (remote/OAuth) listening on :${config.port} â€” public URL ${config.publicUrl}`,
     );
   });
 };
