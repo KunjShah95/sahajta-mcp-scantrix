@@ -6,12 +6,15 @@ import {
   ArrowRight,
   Building2,
   Check,
+  Eye,
   Keyboard,
   ListChecks,
   ScanLine,
   Search,
   ShieldCheck,
+  Target,
   UserPlus,
+  Users,
   X,
 } from "lucide-react";
 import { ReactNode, useEffect } from "react";
@@ -617,6 +620,71 @@ function Pricing() {
   );
 }
 
+// --- About -------------------------------------------------------------
+
+const VALUES = [
+  {
+    icon: Target,
+    title: "Accuracy first",
+    body: "We'd rather hold a bill back for a quick review than post something wrong to your books.",
+  },
+  {
+    icon: Users,
+    title: "Built for accountants",
+    body: "Every workflow decision starts from how AP actually works day to day — not a generic OCR demo.",
+  },
+  {
+    icon: Eye,
+    title: "Nothing disappears quietly",
+    body: "If an invoice doesn't post, you get a clear reason and a place to fix it — never a silent failure.",
+  },
+];
+
+function About() {
+  return (
+    <section id="about" className="scroll-mt-20 mx-auto max-w-6xl px-5 py-20 sm:px-8 sm:py-24">
+      <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
+        <Reveal>
+          <SectionLabel>About us</SectionLabel>
+          <h2 className="mt-4 text-[clamp(1.8rem,3.6vw,2.6rem)] font-bold leading-[1.1] tracking-[-0.02em] text-trust-navy">
+            Built to get invoices out of your inbox and into your books.
+          </h2>
+          <p className="mt-5 text-[16px] leading-relaxed text-text-secondary">
+            Scantrix was founded in 2025 on a simple observation: accounts payable teams
+            were still typing invoices into QuickBooks by hand, one bill at a time. We
+            built Scantrix to close that gap — reading invoices, matching vendors, and
+            posting bills automatically, so people spend their time on judgment calls
+            instead of data entry.
+          </p>
+          <span className="mt-6 inline-flex items-center gap-2 rounded-pill border border-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-trust-navy shadow-sm">
+            <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--lp-teal)]" aria-hidden />
+            Founded in 2025
+          </span>
+        </Reveal>
+
+        <div className="flex flex-col gap-4">
+          {VALUES.map((v, i) => {
+            const Icon = v.icon;
+            return (
+              <Reveal key={v.title} delay={i * 90}>
+                <div className="flex gap-4 rounded-2xl border border-border bg-white p-5 shadow-sm">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[color:var(--lp-teal-050)] text-[color:var(--lp-teal-600)]">
+                    <Icon size={20} strokeWidth={2} />
+                  </span>
+                  <div>
+                    <h3 className="text-[15.5px] font-bold text-text-primary">{v.title}</h3>
+                    <p className="mt-1 text-[14px] leading-relaxed text-text-secondary">{v.body}</p>
+                  </div>
+                </div>
+              </Reveal>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // --- Final CTA -------------------------------------------------------------
 
 function FinalCta() {
@@ -674,6 +742,7 @@ function Footer() {
           <a href="#how" className="transition-colors hover:text-trust-navy">How it works</a>
           <a href="#capabilities" className="transition-colors hover:text-trust-navy">Capabilities</a>
           <a href="#pricing" className="transition-colors hover:text-trust-navy">Pricing</a>
+          <a href="#about" className="transition-colors hover:text-trust-navy">About</a>
           <Link href="/login" className="transition-colors hover:text-trust-navy">Log in</Link>
           <Link href="/register" className="font-semibold text-trust-navy">Start free</Link>
         </div>
@@ -718,6 +787,7 @@ export function LandingPage() {
         <DashboardShowcase />
         <Differentiation />
         <Pricing />
+        <About />
         <FinalCta />
       </main>
       <Footer />

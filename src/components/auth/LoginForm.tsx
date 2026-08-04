@@ -31,12 +31,8 @@ const validatePassword = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return "Password is required";
   if (trimmed.length < 6) return "Password must be at least 6 characters";
-  if (!/^[a-zA-Z0-9]{6,}$/.test(trimmed))
-    return "Password can only contain letters and numbers";
   return "";
 };
-
-const filterAlphanumeric = (value: string) => value.replace(/[^a-zA-Z0-9]/g, "");
 
 export function LoginForm() {
   const dispatch = useAppDispatch();
@@ -98,7 +94,7 @@ export function LoginForm() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background-soft px-[var(--space-lg)] py-[var(--space-xxl)]">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-background-soft px-[var(--space-lg)] py-[var(--space-xxl)]">
       <div className="w-full max-w-md">
         <div className="mb-[var(--space-xl)] text-center">
           <h1 className="text-h1 font-bold text-trust-navy">Welcome to Scantrix</h1>
@@ -148,7 +144,7 @@ export function LoginForm() {
                 <button
                   type="button"
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="flex items-center gap-1 text-caption font-semibold text-primary"
+                  className="-m-2 flex items-center gap-1 p-2 text-caption font-semibold text-primary"
                   onClick={() => setShowPassword((value) => !value)}
                 >
                   {showPassword ? <EyeOff size={16} strokeWidth={2} /> : <Eye size={16} strokeWidth={2} />}
@@ -165,9 +161,9 @@ export function LoginForm() {
                 disabled={loading}
                 maxLength={50}
                 onChange={(event) => {
-                  const filtered = filterAlphanumeric(event.target.value);
-                  setPassword(filtered);
-                  if (touched.password) setPasswordError(validatePassword(filtered));
+                  const value = event.target.value;
+                  setPassword(value);
+                  if (touched.password) setPasswordError(validatePassword(value));
                 }}
                 onBlur={() => {
                   setTouched((prev) => ({ ...prev, password: true }));

@@ -106,6 +106,42 @@ export const getQuickBooksStatus = createAsyncThunk(
 );
 
 // ================================
+// UPDATE SETTINGS (auto-post / line-item-wise entry)
+// ================================
+interface UpdateQuickBooksSettingsPayload {
+  accessToken: string;
+  autoPostEnabled?: boolean;
+  lineItemWiseEnabled?: boolean;
+}
+
+export const updateQuickBooksSettings = createAsyncThunk(
+  "quickbooks/updateSettings",
+  async (data: UpdateQuickBooksSettingsPayload, thunkAPI) => {
+    const state = thunkAPI.getState() as RootState;
+    const qbConnectionId = state.quickBooks.qbConnectionId;
+    const body: Record<string, boolean> = {};
+    if (data.autoPostEnabled !== undefined) body.autoPostEnabled = data.autoPostEnabled;
+    if (data.lineItemWiseEnabled !== undefined) body.lineItemWiseEnabled = data.lineItemWiseEnabled;
+    try {
+      console.log("========== UPDATE QB SETTINGS REQUEST ==========");
+      const response = await api.patch("/quickbooks/settings", body, {
+        headers: {
+          Authorization: `Bearer ${data.accessToken}`,
+          ...(qbConnectionId ? { "X-QB-Id": qbConnectionId } : {}),
+        },
+      });
+      console.log("========== UPDATE QB SETTINGS SUCCESS ==========");
+      console.log(JSON.stringify(response.data, null, 2));
+      return response.data;
+    } catch (error: any) {
+      console.log("========== UPDATE QB SETTINGS ERROR ==========");
+      const message = error?.response?.data?.message || error?.message || "Failed to update QuickBooks settings";
+      return thunkAPI.rejectWithValue(message);
+    }
+  },
+);
+
+// ================================
 // DISCONNECT QUICKBOOKS
 // ================================
 interface DisconnectQuickBooksPayload {
@@ -422,6 +458,41 @@ export const fetchQuickBooksVendors = createAsyncThunk(
         error?.message ||
         "Failed to fetch vendors";
       return thunkAPI.rejectWithValue(message);
+    }
+  },
+);
+
+// ================================
+// SYNC VENDORS (pull latest from QuickBooks)
+// ================================
+interface SyncVendorsPayload {
+  accessToken: string;
+}
+
+export const syncQuickBooksVendors = createAsyncThunk(
+  "quickbooks/syncVendors",
+  async (data: SyncVendorsPayload, thunkAPI) => {
+    const state = thunkAPI.getState() as RootState;
+    const qbConnectionId = state.quickBooks.qbConnectionId;
+    try {
+      console.log("========== SYNC VENDORS REQUEST ==========");
+      const response = await api.post(
+        "/quickbooks/vendors/sync",
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${data.accessToken}`,
+            ...(qbConnectionId ? { "X-QB-Id": qbConnectionId } : {}),
+          },
+        },
+      );
+      console.log("========== SYNC VENDORS SUCCESS ==========");
+      console.log(JSON.stringify(response.data, null, 2));
+      return response.data;
+    } catch (error: any) {
+      console.log("========== SYNC VENDORS ERROR ==========");
+      const message = error?.response?.data?.message || error?.message || "Failed to sync vendors from QuickBooks";
+      return thunkAPI.rejectWithValue({ message, statusCode: error?.response?.data?.statusCode });
     }
   },
 );

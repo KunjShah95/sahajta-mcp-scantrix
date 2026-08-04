@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Ban, Pencil, Plus, RotateCcw, Store, X } from "lucide-react";
+import { Ban, Pencil, Plus, RefreshCw, RotateCcw, Store, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
@@ -15,7 +15,9 @@ import { Spinner } from "@/components/ui/Spinner";
 import { confirmDialog, showToast } from "@/lib/dialogManager";
 import { CURRENCY_OPTIONS } from "@/lib/currencies";
 import { taxCodeId as getTaxCodeId, taxCodeName } from "@/lib/quickbooks/taxCode";
+import { useRefreshThrottle } from "@/lib/useRefreshThrottle";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { getInvoices } from "@/store/invoice/invoiceApi";
 import {
   createQuickBooksVendor,
   deleteQuickBooksVendor,
@@ -25,9 +27,12 @@ import {
   fetchQuickBooksVendors,
   getMyQBConnections,
   reactivateQuickBooksVendor,
+  syncQuickBooksVendors,
   updateQuickBooksVendor,
 } from "@/store/quickBooks/quickBooksApi";
 import type { Vendor } from "@/store/quickBooks/quickBooksSlice";
+import { VendorCleanupSuggestions } from "./VendorCleanupSuggestions";
+import { VendorDetailPanel } from "./VendorDetailPanel";
 
 type VendorTab = "active" | "inactive";
 
@@ -70,6 +75,7 @@ export function VendorsContent() {
   const vendorsError = useAppSelector((state) => state.quickBooks.vendorsError);
   const glAccounts = useAppSelector((state) => state.quickBooks.accounts);
   const taxCodes = useAppSelector((state) => state.quickBooks.taxCodes);
+  const invoices = useAppSelector((state) => state.invoice.invoices);
 
   const [loadingConnections, setLoadingConnections] = useState(true);
   const [connections, setConnections] = useState<QBConnection[]>([]);
@@ -90,8 +96,15 @@ export function VendorsContent() {
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
+  const attemptRefresh = useRefreshThrottle();
 
-  const activeConnection = connections.find((c) => c._id === qbConnectionId) || connections[0];
+  // With exactly one connected company there's nothing to choose, so use it
+  // directly. With 2+, only use a match for an id the user actually
+  // selected — the top-bar switcher starts blank when multiple companies are
+  // connected, and this page shouldn't silently pick one on its own.
+  const activeConnection = connections.length === 1 ? connections[0] : connections.find((c) => c._id === qbConnectionId);
   const currentRole = activeConnection?.role || "";
   // Mirrors PERMISSIONS.REVIEW_EDIT_GL on the backend — every role except
   // contributor can manage vendors.
@@ -141,6 +154,9 @@ export function VendorsContent() {
     refetchInactiveVendors();
     dispatch(fetchQuickBooksAccounts({ accessToken }));
     dispatch(fetchQuickBooksTaxCodes({ accessToken }));
+    // Backs the "Suggested cleanups" box below — it derives its tips from
+    // the vendor's own invoice history, not a dedicated stats endpoint.
+    dispatch(getInvoices());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, activeConnection?._id]);
 
@@ -161,6 +177,18 @@ export function VendorsContent() {
 
   const glAccountName = (id?: string | null) => glAccounts.find((a) => a.qbAccountId === id)?.name;
   const taxCodeLabel = (id?: string | null) => taxCodes.find((t) => getTaxCodeId(t) === id)?.name ?? id ?? undefined;
+
+  // A vendor selected on one tab has no meaning on the other (active vs
+  // inactive are disjoint lists), so switching tabs clears the selection
+  // rather than leaving a stale detail panel or silently pointing at nothing.
+  useEffect(() => {
+    setSelectedVendorId(null);
+  }, [activeTab]);
+
+  const selectedVendor = useMemo(
+    () => currentList.find((v) => v._id === selectedVendorId) || null,
+    [currentList, selectedVendorId],
+  );
 
   const openCreateSheet = () => {
     setEditingVendor(null);
@@ -321,6 +349,53 @@ export function VendorsContent() {
     }
   };
 
+  const handleApplyGlAccount = async (vendor: Vendor, glAccountId: string) => {
+    if (!accessToken) return false;
+    const result = await dispatch(updateQuickBooksVendor({ accessToken, vendorId: vendor._id, glAccountId }));
+    if (updateQuickBooksVendor.fulfilled.match(result)) {
+      showToast(`Default GL account updated for ${vendor.displayName}.`, "success");
+      return true;
+    }
+    const payload = result.payload as { message?: string } | undefined;
+    showToast(payload?.message || "Could not update GL account.", "error");
+    return false;
+  };
+
+  const handleApplyTaxCode = async (vendor: Vendor, taxCodeId: string) => {
+    if (!accessToken) return false;
+    const result = await dispatch(updateQuickBooksVendor({ accessToken, vendorId: vendor._id, taxCodeId }));
+    if (updateQuickBooksVendor.fulfilled.match(result)) {
+      showToast(`Default tax code updated for ${vendor.displayName}.`, "success");
+      return true;
+    }
+    const payload = result.payload as { message?: string } | undefined;
+    showToast(payload?.message || "Could not update tax code.", "error");
+    return false;
+  };
+
+  const handleRefresh = async () => {
+    if (!accessToken || refreshing) return;
+    const waitSeconds = attemptRefresh();
+    if (waitSeconds !== null) {
+      showToast(`You're refreshing too often. Try again in ${waitSeconds}s.`, "error");
+      return;
+    }
+    setRefreshing(true);
+    try {
+      const result = await dispatch(syncQuickBooksVendors({ accessToken }));
+      if (syncQuickBooksVendors.fulfilled.match(result)) {
+        refetchVendors();
+        refetchInactiveVendors();
+        showToast("Vendors refreshed from QuickBooks.", "success");
+      } else {
+        const payload = result.payload as { message?: string } | undefined;
+        showToast(payload?.message || "Could not refresh from QuickBooks. Please try again.", "error");
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   if (loadingConnections) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -334,27 +409,43 @@ export function VendorsContent() {
       <div className="mx-auto max-w-2xl p-[var(--space-lg)]">
         <EmptyState
           icon={<Store size={28} strokeWidth={1.75} />}
-          title="No company connected"
-          description="Connect a QuickBooks company before managing vendors."
+          title={connections.length > 0 ? "Select a company" : "No company connected"}
+          description={
+            connections.length > 0
+              ? "Choose a company from the switcher up top to manage its vendors."
+              : "Connect a QuickBooks company before managing vendors."
+          }
         />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-3xl p-[var(--space-lg)]">
+    <div className="mx-auto max-w-6xl p-[var(--space-lg)]">
       <div className="flex items-center justify-between gap-[var(--space-md)]">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-h2 font-bold text-trust-navy">Vendors</h1>
           <p className="mt-[var(--space-xs)] text-body-sm text-text-secondary">
             Manage vendors for {activeConnection.name}.
           </p>
         </div>
         {canManageVendors && (
-          <Button onClick={openCreateSheet} size="sm" className="shrink-0">
-            <Plus size={16} strokeWidth={2.5} />
-            Add Vendor
-          </Button>
+          <div className="flex shrink-0 items-center gap-[var(--space-sm)]">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              aria-label="Refresh from QuickBooks"
+              title="Refresh from QuickBooks"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border bg-white text-trust-navy transition-opacity hover:bg-background-alt disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw size={18} strokeWidth={2.25} className={refreshing ? "animate-spin" : ""} />
+            </button>
+            <Button onClick={openCreateSheet} size="sm" className="shrink-0">
+              <Plus size={16} strokeWidth={2.5} />
+              Add Vendor
+            </Button>
+          </div>
         )}
       </div>
 
@@ -364,118 +455,172 @@ export function VendorsContent() {
         </Card>
       )}
 
-      <div className="mt-[var(--space-lg)] flex gap-[var(--space-xs)] rounded-md bg-background-alt p-[var(--space-xs)]">
-        {(["active", "inactive"] as VendorTab[]).map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setActiveTab(tab)}
-            aria-current={activeTab === tab ? "page" : undefined}
-            className={`flex-1 rounded-md px-[var(--space-sm)] py-[var(--space-xs)] text-body-sm font-semibold ${
-              activeTab === tab ? "bg-white text-primary shadow-sm" : "text-text-secondary"
-            }`}
-          >
-            {tab === "active" ? `Active (${vendors.length})` : `Inactive (${inactiveVendors.length})`}
-          </button>
-        ))}
-      </div>
+      <div className="mt-[var(--space-lg)] grid grid-cols-1 gap-[var(--space-lg)] lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+        <div>
+          <div className="flex gap-[var(--space-xs)] rounded-md bg-background-alt p-[var(--space-xs)]">
+            {(["active", "inactive"] as VendorTab[]).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                aria-current={activeTab === tab ? "page" : undefined}
+                className={`flex-1 rounded-md px-[var(--space-sm)] py-[var(--space-xs)] text-body-sm font-semibold ${
+                  activeTab === tab ? "bg-white text-primary shadow-sm" : "text-text-secondary"
+                }`}
+              >
+                {tab === "active" ? `Active (${vendors.length})` : `Inactive (${inactiveVendors.length})`}
+              </button>
+            ))}
+          </div>
 
-      {currentList.length > 0 && (
-        <Input
-          placeholder="Search by name, email or phone…"
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          className="mt-[var(--space-md)] w-full"
-        />
-      )}
+          {currentList.length > 0 && (
+            <Input
+              placeholder="Search by name, email or phone…"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              className="mt-[var(--space-md)] w-full"
+            />
+          )}
 
-      <div className="mt-[var(--space-md)] flex flex-col gap-[var(--space-sm)]">
-        {currentLoading ? (
-          <SkeletonListRows count={4} />
-        ) : currentError ? (
-          <ErrorState message={currentError} onRetry={activeTab === "active" ? refetchVendors : refetchInactiveVendors} />
-        ) : currentList.length === 0 ? (
-          activeTab === "active" ? (
-            <EmptyState
-              icon={<Store size={28} strokeWidth={1.75} />}
-              title="No vendors yet"
-              description="Vendors sync automatically from QuickBooks, or add one manually."
-              actionLabel={canManageVendors ? "Add Vendor" : undefined}
-              onAction={canManageVendors ? openCreateSheet : undefined}
+          <div className="mt-[var(--space-md)] flex flex-col gap-[var(--space-sm)]">
+            {currentLoading ? (
+              <SkeletonListRows count={4} />
+            ) : currentError ? (
+              <ErrorState message={currentError} onRetry={activeTab === "active" ? refetchVendors : refetchInactiveVendors} />
+            ) : currentList.length === 0 ? (
+              activeTab === "active" ? (
+                <EmptyState
+                  icon={<Store size={28} strokeWidth={1.75} />}
+                  title="No vendors yet"
+                  description="Vendors sync automatically from QuickBooks, or add one manually."
+                  actionLabel={canManageVendors ? "Add Vendor" : undefined}
+                  onAction={canManageVendors ? openCreateSheet : undefined}
+                />
+              ) : (
+                <EmptyState
+                  icon={<Ban size={28} strokeWidth={1.75} />}
+                  title="No deactivated vendors"
+                  description="Vendors you deactivate will show up here so you can reactivate them later."
+                />
+              )
+            ) : filteredVendors.length === 0 ? (
+              <Card className="text-center text-body-sm text-text-secondary">No vendors match &quot;{searchText}&quot;.</Card>
+            ) : (
+              filteredVendors.map((vendor) => {
+                const glName = glAccountName(vendor.glAccountId);
+                const taxName = taxCodeLabel(vendor.taxCodeId);
+                const isDeactivating = deactivatingId === vendor._id;
+                const isReactivating = reactivatingId === vendor._id;
+                const isSelected = selectedVendorId === vendor._id;
+                return (
+                  <Card
+                    key={vendor._id}
+                    onClick={() => setSelectedVendorId(vendor._id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedVendorId(vendor._id);
+                      }
+                    }}
+                    className={`flex cursor-pointer items-start justify-between gap-[var(--space-md)] transition-colors ${
+                      isSelected ? "border-primary bg-primary/5" : "hover:bg-background-alt"
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-[var(--space-sm)]">
+                        <p className="truncate font-bold text-text-primary">{vendor.displayName}</p>
+                        {vendor.currency && <Badge variant="neutral">{vendor.currency}</Badge>}
+                      </div>
+                      {(vendor.email || vendor.phone) && (
+                        <p className="mt-[var(--space-xs)] truncate text-body-sm text-text-secondary">
+                          {[vendor.email, vendor.phone].filter(Boolean).join(" · ")}
+                        </p>
+                      )}
+                      {(glName || taxName) && (
+                        <p className="mt-[var(--space-xs)] truncate text-caption text-text-secondary">
+                          {[glName && `GL: ${glName}`, taxName && `Tax: ${taxName}`].filter(Boolean).join("  ·  ")}
+                        </p>
+                      )}
+                    </div>
+                    {canManageVendors && (
+                      <div className="flex shrink-0 items-center gap-[var(--space-xs)]" onClick={(e) => e.stopPropagation()}>
+                        {activeTab === "active" ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openEditSheet(vendor)}
+                              aria-label={`Edit ${vendor.displayName}`}
+                              className="flex h-10 w-10 items-center justify-center rounded-md text-text-secondary hover:bg-background-alt lg:h-8 lg:w-8"
+                            >
+                              <Pencil size={16} strokeWidth={2} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeactivate(vendor)}
+                              disabled={isDeactivating}
+                              aria-label={`Deactivate ${vendor.displayName}`}
+                              className="flex h-10 w-10 items-center justify-center rounded-md bg-error/10 text-error disabled:cursor-not-allowed disabled:opacity-60 lg:h-8 lg:w-8"
+                            >
+                              {isDeactivating ? "…" : <Ban size={16} strokeWidth={2} />}
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleReactivate(vendor)}
+                            disabled={isReactivating}
+                            aria-label={`Reactivate ${vendor.displayName}`}
+                            className="flex h-10 items-center gap-[var(--space-xs)] rounded-md bg-primary/10 px-[var(--space-sm)] text-caption font-bold text-primary disabled:cursor-not-allowed disabled:opacity-60 lg:h-8"
+                          >
+                            {isReactivating ? "…" : <RotateCcw size={14} strokeWidth={2.25} />}
+                            Reactivate
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </Card>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-[var(--space-md)] lg:sticky lg:top-[var(--space-lg)]">
+          {selectedVendor ? (
+            <VendorDetailPanel
+              vendor={selectedVendor}
+              glAccounts={glAccounts}
+              taxCodes={taxCodes}
+              invoices={invoices}
+              canManage={canManageVendors}
+              isInactive={activeTab === "inactive"}
+              onEdit={() => openEditSheet(selectedVendor)}
+              onDeactivate={() => handleDeactivate(selectedVendor)}
+              onReactivate={() => handleReactivate(selectedVendor)}
+              deactivating={deactivatingId === selectedVendor._id}
+              reactivating={reactivatingId === selectedVendor._id}
             />
           ) : (
-            <EmptyState
-              icon={<Ban size={28} strokeWidth={1.75} />}
-              title="No deactivated vendors"
-              description="Vendors you deactivate will show up here so you can reactivate them later."
+            <Card className="text-center text-body-sm text-text-secondary">
+              Select a vendor to see their details and recent invoices.
+            </Card>
+          )}
+
+          {canManageVendors && activeTab === "active" && (
+            <VendorCleanupSuggestions
+              vendors={vendors}
+              glAccounts={glAccounts}
+              taxCodes={taxCodes}
+              invoices={invoices}
+              onApplyGlAccount={handleApplyGlAccount}
+              onApplyTaxCode={handleApplyTaxCode}
+              onOpenEdit={openEditSheet}
+              onDeactivate={handleDeactivate}
             />
-          )
-        ) : filteredVendors.length === 0 ? (
-          <Card className="text-center text-body-sm text-text-secondary">No vendors match &quot;{searchText}&quot;.</Card>
-        ) : (
-          filteredVendors.map((vendor) => {
-            const glName = glAccountName(vendor.glAccountId);
-            const taxName = taxCodeLabel(vendor.taxCodeId);
-            const isDeactivating = deactivatingId === vendor._id;
-            const isReactivating = reactivatingId === vendor._id;
-            return (
-              <Card key={vendor._id} className="flex items-start justify-between gap-[var(--space-md)]">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-[var(--space-sm)]">
-                    <p className="truncate font-bold text-text-primary">{vendor.displayName}</p>
-                    {vendor.currency && <Badge variant="neutral">{vendor.currency}</Badge>}
-                  </div>
-                  {(vendor.email || vendor.phone) && (
-                    <p className="mt-[var(--space-xs)] truncate text-body-sm text-text-secondary">
-                      {[vendor.email, vendor.phone].filter(Boolean).join(" · ")}
-                    </p>
-                  )}
-                  {(glName || taxName) && (
-                    <p className="mt-[var(--space-xs)] truncate text-caption text-text-secondary">
-                      {[glName && `GL: ${glName}`, taxName && `Tax: ${taxName}`].filter(Boolean).join("  ·  ")}
-                    </p>
-                  )}
-                </div>
-                {canManageVendors && (
-                  <div className="flex shrink-0 items-center gap-[var(--space-xs)]">
-                    {activeTab === "active" ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => openEditSheet(vendor)}
-                          aria-label={`Edit ${vendor.displayName}`}
-                          className="flex h-8 w-8 items-center justify-center rounded-md text-text-secondary hover:bg-background-alt"
-                        >
-                          <Pencil size={16} strokeWidth={2} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeactivate(vendor)}
-                          disabled={isDeactivating}
-                          aria-label={`Deactivate ${vendor.displayName}`}
-                          className="flex h-8 w-8 items-center justify-center rounded-md bg-error/10 text-error disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isDeactivating ? "…" : <Ban size={16} strokeWidth={2} />}
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleReactivate(vendor)}
-                        disabled={isReactivating}
-                        aria-label={`Reactivate ${vendor.displayName}`}
-                        className="flex h-8 items-center gap-[var(--space-xs)] rounded-md bg-primary/10 px-[var(--space-sm)] text-caption font-bold text-primary disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {isReactivating ? "…" : <RotateCcw size={14} strokeWidth={2.25} />}
-                        Reactivate
-                      </button>
-                    )}
-                  </div>
-                )}
-              </Card>
-            );
-          })
-        )}
+          )}
+        </div>
       </div>
 
       {sheetVisible && (
@@ -486,7 +631,12 @@ export function VendorsContent() {
           >
             <div className="mb-[var(--space-md)] flex items-center justify-between">
               <h2 className="text-h3 font-bold text-text-primary">{editingVendor ? "Edit Vendor" : "Add Vendor"}</h2>
-              <button type="button" onClick={closeSheet} aria-label="Close" className="text-text-secondary">
+              <button
+                type="button"
+                onClick={closeSheet}
+                aria-label="Close"
+                className="-m-[var(--space-sm)] p-[var(--space-sm)] text-text-secondary"
+              >
                 <X size={20} strokeWidth={2.25} />
               </button>
             </div>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, ChevronRight, Clock, Filter, RefreshCw, Upload } from "lucide-react";
+import { ArrowRight, ArrowUpLeft, Check, ChevronRight, Clock, RefreshCw, Upload } from "lucide-react";
 import { ChangeEvent, DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Card } from "@/components/ui/Card";
@@ -13,7 +13,14 @@ import { StatRow } from "@/components/invoices/StatRow";
 import { TopVendorsCard } from "@/components/invoices/TopVendorsCard";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { getInvoices, rejectInvoice, scanInvoice } from "@/store/invoice/invoiceApi";
-import { connectQuickBooks, getMyQBConnections, getQuickBooksStatus } from "@/store/quickBooks/quickBooksApi";
+import {
+  connectQuickBooks,
+  getMyQBConnections,
+  getQuickBooksStatus,
+  syncQuickBooksAccounts,
+  syncQuickBooksTaxCodes,
+  syncQuickBooksVendors,
+} from "@/store/quickBooks/quickBooksApi";
 import { showToast } from "@/lib/dialogManager";
 import { getInvoiceAmount, getInvoiceFailureReason, getInvoiceStatus } from "@/lib/invoiceDisplay";
 import { requestExpandTransition } from "@/lib/pageTransition";
@@ -35,6 +42,10 @@ function timeAgo(ms: number): string {
 
 const MAX_UPLOAD_FILES = 20;
 const WEEKLY_SCAN_WEEKS = 5;
+// "Sync now" pulls the QB connection status plus vendors/GL accounts/tax
+// codes in one shot — throttled so a user mashing the button doesn't fan out
+// 4 requests every click.
+const SYNC_COOLDOWN_MS = 2 * 60 * 1000;
 
 // Real dropzone matching the landing page's ScanVisual card style (dashed
 // border, centered icon-in-circle, generous padding) — visual language
@@ -139,7 +150,9 @@ function InvoiceDropzone({
 // styling per the earlier color-unification pass.
 const RECENT_STATUS_STYLE = {
   posted: { label: "Posted", dot: "bg-primary-600", text: "text-primary-700", bg: "bg-primary-50" },
-  pending: { label: "Pending", dot: "bg-warning", text: "text-warning", bg: "bg-warning/10" },
+  // Matches INVOICE_STATUS_THEME.pending / InvoiceDetailContent's pending
+  // theme (trust-navy) instead of warning-yellow, for cross-page consistency.
+  pending: { label: "Pending", dot: "bg-trust-navy", text: "text-trust-navy", bg: "bg-trust-navy/10" },
   processing: { label: "Processing", dot: "bg-warning", text: "text-warning", bg: "bg-warning/10" },
   failed: { label: "Failed", dot: "bg-error", text: "text-error", bg: "bg-error/10" },
 } as const;
@@ -193,36 +206,46 @@ function RecentInvoiceRow({
           onOpen();
         }
       }}
-      className={`grid cursor-pointer grid-cols-[auto_auto_2fr_1fr_0.9fr_0.9fr_20px] items-center gap-[var(--space-sm)] rounded-lg px-[var(--space-sm)] py-[var(--space-sm)] ${
+      className={`flex cursor-pointer flex-col gap-[var(--space-sm)] rounded-lg border border-border px-[var(--space-sm)] py-[var(--space-sm)] lg:grid lg:grid-cols-[auto_auto_2fr_1fr_0.9fr_0.9fr_20px] lg:items-center lg:gap-[var(--space-sm)] lg:border-0 ${
         selected ? "bg-primary-50" : "hover:bg-background-alt"
       }`}
     >
-      <input
-        type="checkbox"
-        checked={selected}
-        onChange={onToggleSelect}
-        onClick={(event) => event.stopPropagation()}
-        aria-label={`Select ${vendorName}`}
-        className="h-4 w-4 shrink-0 accent-primary"
-      />
-      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-caption font-bold ${style.bg} ${style.text}`}>
-        {vendorName.slice(0, 2).toUpperCase()}
-      </span>
-      <div className="min-w-0">
-        <p className="truncate font-bold text-text-primary">{vendorName}</p>
-        {failureReason ? (
-          <p className="truncate text-caption text-error">{failureReason}</p>
-        ) : reference ? (
-          <p className="truncate text-caption text-text-secondary">{reference}</p>
-        ) : null}
+      {/* lg:contents keeps these as direct grid items (same column order as
+          before) on desktop, while grouping them into one flex row below lg
+          so the row reads as a card: avatar + vendor info together. */}
+      <div className="flex items-center gap-[var(--space-sm)] lg:contents">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelect}
+          onClick={(event) => event.stopPropagation()}
+          aria-label={`Select ${vendorName}`}
+          className="h-4 w-4 shrink-0 accent-primary"
+        />
+        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-caption font-bold ${style.bg} ${style.text}`}>
+          {vendorName.slice(0, 2).toUpperCase()}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-bold text-text-primary">{vendorName}</p>
+          {failureReason ? (
+            <p className="truncate text-caption text-error">{failureReason}</p>
+          ) : reference ? (
+            <p className="truncate text-caption text-text-secondary">{reference}</p>
+          ) : null}
+        </div>
       </div>
-      <span className="text-caption text-text-secondary">{receivedLabel(invoice.createdAt)}</span>
-      <span className={`inline-flex w-fit items-center gap-[6px] rounded-pill px-[var(--space-sm)] py-[2px] text-caption font-bold ${style.bg} ${style.text}`}>
-        <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
-        {style.label}
-      </span>
-      <span className="text-right font-bold text-text-primary">{getInvoiceAmount(invoice)}</span>
-      <ChevronRight size={18} strokeWidth={2} className="shrink-0 text-text-secondary" />
+      {/* Same lg:contents trick — received/status/amount/chevron stay in
+          their original column order at lg, but wrap into a second,
+          space-between line below lg instead of squeezing into a 7-col grid. */}
+      <div className="flex flex-wrap items-center justify-between gap-[var(--space-sm)] lg:contents">
+        <span className="text-caption text-text-secondary">{receivedLabel(invoice.createdAt)}</span>
+        <span className={`inline-flex w-fit items-center gap-[6px] rounded-pill px-[var(--space-sm)] py-[2px] text-caption font-bold ${style.bg} ${style.text}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+          {style.label}
+        </span>
+        <span className="text-right font-bold text-text-primary">{getInvoiceAmount(invoice)}</span>
+        <ChevronRight size={18} strokeWidth={2} className="shrink-0 text-text-secondary" />
+      </div>
     </div>
   );
 }
@@ -235,8 +258,14 @@ export function DashboardContent() {
   const [connectingQB, setConnectingQB] = useState(false);
   const [syncingQB, setSyncingQB] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
+  // Deliberately separate from lastSyncedAt above — that one gets touched by
+  // routine invoice refreshes (on mount, and every 3s while an invoice is
+  // processing), which would keep resetting a shared cooldown and leave
+  // "Sync now" permanently disabled. This one only ever moves on an actual
+  // manual Sync now click.
+  const [lastQBSyncAt, setLastQBSyncAt] = useState<number | null>(null);
   const [, setSyncLabelTick] = useState(0);
-  const [recentTab, setRecentTab] = useState<"all" | "pending" | "failed">("all");
+  const [recentTab, setRecentTab] = useState<"all" | "auto" | "pending" | "failed">("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [rejectingBulk, setRejectingBulk] = useState(false);
   const recentCardRef = useRef<HTMLDivElement>(null);
@@ -253,6 +282,14 @@ export function DashboardContent() {
   } = useAppSelector((state) => state.invoice);
   const { connected, statusLoading, qbConnectionId } = useAppSelector((state) => state.quickBooks);
 
+  // Connected to at least one company but haven't picked one yet via the
+  // top-bar switcher — qbConnectionId only ever starts/goes blank while
+  // `connected` is true when there are 2+ companies to choose from (see
+  // quickBooksSlice.ts's getMyQBConnections.fulfilled) — a single connection
+  // is always auto-selected. So this can't be confused with "not connected
+  // to QuickBooks at all", which is handled by the banner above instead.
+  const needsEntitySelection = connected && !qbConnectionId;
+
   // "Last synced" is relative time, so re-render once a minute to keep it
   // from reading "just now" long after it's stopped being true.
   useEffect(() => {
@@ -267,13 +304,45 @@ export function DashboardContent() {
     setLastSyncedAt(Date.now());
   }, [dispatch]);
 
+  const syncCooldownActive = lastQBSyncAt !== null && Date.now() - lastQBSyncAt < SYNC_COOLDOWN_MS;
+
   const handleSyncNow = async () => {
     if (!accessToken || !qbConnectionId || syncingQB) return;
+    if (syncCooldownActive) {
+      const secondsLeft = Math.ceil((SYNC_COOLDOWN_MS - (Date.now() - (lastQBSyncAt ?? 0))) / 1000);
+      showToast(`Please wait ${secondsLeft}s before syncing again.`, "error");
+      return;
+    }
     setSyncingQB(true);
     try {
-      await dispatch(getQuickBooksStatus({ accessToken, qbConnectionId }));
+      const [, vendorsResult, accountsResult, taxCodesResult] = await Promise.all([
+        dispatch(getQuickBooksStatus({ accessToken, qbConnectionId })),
+        dispatch(syncQuickBooksVendors({ accessToken })),
+        dispatch(syncQuickBooksAccounts({ accessToken })),
+        dispatch(syncQuickBooksTaxCodes({ accessToken })),
+      ]);
+      const vendorsOk = syncQuickBooksVendors.fulfilled.match(vendorsResult);
+      const accountsOk = syncQuickBooksAccounts.fulfilled.match(accountsResult);
+      const taxCodesOk = syncQuickBooksTaxCodes.fulfilled.match(taxCodesResult);
+      const okCount = [vendorsOk, accountsOk, taxCodesOk].filter(Boolean).length;
+
       await syncInvoices();
+
+      if (okCount === 3) {
+        const vendorCount = vendorsOk ? vendorsResult.payload?.data?.count : undefined;
+        const accountCount = accountsOk ? accountsResult.payload?.data?.count : undefined;
+        const taxCodeCount = taxCodesOk ? taxCodesResult.payload?.data?.count : undefined;
+        showToast(
+          `Synced ${vendorCount ?? 0} vendor(s), ${accountCount ?? 0} GL account(s), and ${taxCodeCount ?? 0} tax code(s) from QuickBooks.`,
+          "success",
+        );
+      } else if (okCount > 0) {
+        showToast("Synced, but part of it failed. Try again in a moment.", "error");
+      } else {
+        showToast("Could not sync with QuickBooks. Please try again.", "error");
+      }
     } finally {
+      setLastQBSyncAt(Date.now());
       setSyncingQB(false);
     }
   };
@@ -337,17 +406,28 @@ export function DashboardContent() {
   // recent overall happen to match), since those tabs would otherwise often
   // render empty.
   const recentTabInvoices = useMemo(() => {
-    const source = recentTab === "pending" ? pendingInvoices : recentTab === "failed" ? failedInvoices : invoices;
+    const source =
+      recentTab === "auto"
+        ? autoPostedInvoices
+        : recentTab === "pending"
+          ? pendingInvoices
+          : recentTab === "failed"
+            ? failedInvoices
+            : invoices;
     return source.slice(0, 5);
-  }, [recentTab, invoices, pendingInvoices, failedInvoices]);
+  }, [recentTab, invoices, autoPostedInvoices, pendingInvoices, failedInvoices]);
 
   // Pre-seed selectedInvoice before navigating, same as InvoiceListContent's
   // handleOpenInvoice — the detail page renders whatever's already in
   // selectedInvoice while its own getInvoiceDetails fetch is in flight, so
   // skipping this would flash whatever invoice was last viewed instead.
+  // Pending invoices go straight to the editable review screen (matching
+  // PendingInvoicesContent's handleOpenInvoice) since a pending invoice has
+  // no posted data yet worth showing read-only.
   const handleOpenInvoice = (invoice: InvoiceRecord) => {
     dispatch(setSelectedInvoice(invoice));
-    router.push(`/invoices/${invoice._id}`);
+    const suffix = invoice.postedStatus === "pending" ? "/review" : "";
+    router.push(`/invoices/${invoice._id}${suffix}`);
   };
 
   // Kicks off the "Recent card grows into the full Invoices page" animation
@@ -487,6 +567,28 @@ export function DashboardContent() {
     [dispatch, qbConnectionId, syncInvoices],
   );
 
+  // Nothing on this page means anything until a company is picked — rather
+  // than show a dashboard full of zeroes (or worse, a failed invoice fetch
+  // for whatever happened to be selected), the entire page collapses to
+  // just this prompt. Everything reappears the instant qbConnectionId is
+  // set, since that's the only thing gating this branch.
+  if (needsEntitySelection) {
+    return (
+      <div className="relative mx-auto max-w-6xl p-[var(--space-lg)]">
+        {/* Points back at the top-bar switcher itself, not at this text —
+            positioned near the top-left of the page content, right under
+            the header, rather than under the message below. */}
+        <ArrowUpLeft size={40} strokeWidth={2.25} className="absolute left-[var(--space-xs)] top-0 animate-bounce text-primary" />
+        <div className="mx-auto flex max-w-md flex-col items-center py-[var(--space-xl)] text-center">
+          <p className="text-h2 font-bold text-trust-navy">Select a company</p>
+          <p className="mt-[var(--space-sm)] text-body-sm text-text-secondary">
+            Select a company from the switcher up top to see its dashboard.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 gap-[var(--space-lg)] p-[var(--space-lg)] lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
     <div className="flex flex-col gap-[var(--space-md)]">
@@ -562,7 +664,7 @@ export function DashboardContent() {
           </div>
           <div className="flex flex-wrap items-center gap-[var(--space-sm)]">
             <div className="flex gap-[var(--space-xs)]">
-              {(["all", "pending", "failed"] as const).map((tab) => (
+              {(["all", "auto", "pending", "failed"] as const).map((tab) => (
                 <button
                   key={tab}
                   type="button"
@@ -573,17 +675,10 @@ export function DashboardContent() {
                       : "border-border text-text-secondary hover:bg-background-alt"
                   }`}
                 >
-                  {tab === "all" ? "All" : tab === "pending" ? "Pending" : "Failed"}
+                  {tab === "all" ? "All" : tab === "auto" ? "Auto-posted" : tab === "pending" ? "Pending" : "Failed"}
                 </button>
               ))}
             </div>
-            <button
-              type="button"
-              className="flex items-center gap-[var(--space-xs)] rounded-pill border border-border px-[var(--space-md)] py-[var(--space-xs)] text-body-sm font-semibold text-text-secondary hover:bg-background-alt"
-            >
-              <Filter size={14} strokeWidth={2.25} />
-              Filter
-            </button>
             <button
               type="button"
               onClick={handleViewAllInvoices}
@@ -616,7 +711,11 @@ export function DashboardContent() {
           </div>
         )}
 
-        <div className="mt-[var(--space-md)] grid grid-cols-[auto_auto_2fr_1fr_0.9fr_0.9fr_20px] gap-[var(--space-sm)] border-b border-border px-[var(--space-sm)] pb-[var(--space-sm)] text-caption font-bold uppercase tracking-wide text-text-secondary">
+        {/* Column labels only make sense for the desktop grid rows below —
+            the mobile card layout has its own inline labeling per row, so
+            this header is hidden below lg rather than squeezing 7 columns
+            into a phone width. */}
+        <div className="mt-[var(--space-md)] hidden grid-cols-[auto_auto_2fr_1fr_0.9fr_0.9fr_20px] gap-[var(--space-sm)] border-b border-border px-[var(--space-sm)] pb-[var(--space-sm)] text-caption font-bold uppercase tracking-wide text-text-secondary lg:grid">
           <span />
           <span />
           <span>Vendor / Reference</span>
@@ -626,37 +725,51 @@ export function DashboardContent() {
           <span />
         </div>
 
-        {invoiceLoading && recentTabInvoices.length === 0 && <SkeletonListRows count={3} className="mt-[var(--space-sm)]" />}
+        {/* lg:contents restores the exact flat sibling structure (and
+            therefore spacing) the desktop layout had before the header above
+            gained a mobile-hidden state — this wrapper only carries real
+            margin/gap below lg, where it substitutes for the now-hidden
+            header's spacing and adds breathing room between stacked cards. */}
+        <div className="mt-[var(--space-md)] flex flex-col gap-[var(--space-sm)] lg:mt-0 lg:contents">
+          {invoiceLoading && recentTabInvoices.length === 0 && <SkeletonListRows count={3} className="mt-[var(--space-sm)]" />}
 
-        {/* Show the error whenever the fetch failed, regardless of whether
-            recentTabInvoices happens to be non-empty — a failed fetch means
-            whatever's in state is not this session's confirmed data, and
-            masking that behind stale data is exactly how the cross-account
-            invoice leak went unnoticed. Don't render the (possibly stale)
-            list alongside it. */}
-        {!invoiceLoading && invoiceError && (
-          <ErrorState message="Couldn't load recent invoices." onRetry={syncInvoices} />
-        )}
-
-        {!invoiceLoading && !invoiceError && recentTabInvoices.length === 0 && (
-          <div className="flex flex-col items-center py-[var(--space-lg)] text-center">
-            <p className="font-bold text-text-primary">No invoices here</p>
-            <p className="mt-[var(--space-xs)] text-body-sm text-text-secondary">
-              {recentTab === "all" ? "Scanned and posted invoices will appear here." : `No ${recentTab} invoices right now.`}
-            </p>
-          </div>
-        )}
-
-        {!invoiceError &&
-          recentTabInvoices.map((invoice) => (
-            <RecentInvoiceRow
-              key={invoice._id}
-              invoice={invoice}
-              selected={selectedIds.has(invoice._id)}
-              onToggleSelect={() => toggleSelected(invoice._id)}
-              onOpen={() => handleOpenInvoice(invoice)}
+          {/* Show the error whenever the fetch failed, regardless of whether
+              recentTabInvoices happens to be non-empty — a failed fetch means
+              whatever's in state is not this session's confirmed data, and
+              masking that behind stale data is exactly how the cross-account
+              invoice leak went unnoticed. Don't render the (possibly stale)
+              list alongside it. */}
+          {!invoiceLoading && invoiceError && (
+            <ErrorState
+              message={typeof invoiceError === "string" ? invoiceError : "Couldn't load recent invoices."}
+              onRetry={syncInvoices}
             />
-          ))}
+          )}
+
+          {!invoiceLoading && !invoiceError && recentTabInvoices.length === 0 && (
+            <div className="flex flex-col items-center py-[var(--space-lg)] text-center">
+              <p className="font-bold text-text-primary">No invoices here</p>
+              <p className="mt-[var(--space-xs)] text-body-sm text-text-secondary">
+                {recentTab === "all"
+                  ? "Scanned and posted invoices will appear here."
+                  : recentTab === "auto"
+                    ? "No auto-posted invoices right now."
+                    : `No ${recentTab} invoices right now.`}
+              </p>
+            </div>
+          )}
+
+          {!invoiceError &&
+            recentTabInvoices.map((invoice) => (
+              <RecentInvoiceRow
+                key={invoice._id}
+                invoice={invoice}
+                selected={selectedIds.has(invoice._id)}
+                onToggleSelect={() => toggleSelected(invoice._id)}
+                onOpen={() => handleOpenInvoice(invoice)}
+              />
+            ))}
+        </div>
       </div>
     </div>
 
@@ -679,7 +792,8 @@ export function DashboardContent() {
           <button
             type="button"
             onClick={handleSyncNow}
-            disabled={syncingQB}
+            disabled={syncingQB || syncCooldownActive}
+            title={syncCooldownActive ? "You can sync again in a couple of minutes." : undefined}
             className="mt-[var(--space-md)] inline-flex items-center gap-[var(--space-xs)] rounded-pill border border-border px-[var(--space-md)] py-[var(--space-xs)] text-body-sm font-bold text-text-primary hover:bg-background-alt disabled:cursor-not-allowed disabled:opacity-60"
           >
             <RefreshCw size={14} strokeWidth={2.25} className={syncingQB ? "animate-spin" : ""} />

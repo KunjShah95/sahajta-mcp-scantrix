@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, Mail } from "lucide-react";
-import { ChangeEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, ClipboardEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { resendRegisterOtp, verifyRegisterOtp } from "@/store/auth/authApi";
@@ -43,14 +43,44 @@ export function VerifyOtpContent() {
     return () => clearTimeout(timer);
   }, [countdown]);
 
+  // Fills every box from a single string of digits (a paste, or — as a
+  // safety net — any other multi-character insert a browser hands us
+  // despite maxLength=1) and focuses the next empty box, or the last box
+  // once the whole code is filled.
+  const distributeOtp = (rawValue: string) => {
+    const digits = rawValue.replace(/[^0-9]/g, "").slice(0, OTP_LENGTH).split("");
+    if (digits.length === 0) return;
+    const next = Array(OTP_LENGTH).fill("");
+    digits.forEach((d, i) => {
+      next[i] = d;
+    });
+    setOtp(next);
+    inputRefs.current[Math.min(digits.length, OTP_LENGTH - 1)]?.focus();
+  };
+
   const handleOtpChange = (event: ChangeEvent<HTMLInputElement>, index: number) => {
-    const digit = event.target.value.replace(/[^0-9]/g, "").slice(-1);
+    const raw = event.target.value.replace(/[^0-9]/g, "");
+    if (raw.length > 1) {
+      distributeOtp(raw);
+      return;
+    }
+    const digit = raw.slice(-1);
     const next = [...otp];
     next[index] = digit;
     setOtp(next);
     if (digit && index < OTP_LENGTH - 1) {
       inputRefs.current[index + 1]?.focus();
     }
+  };
+
+  // maxLength=1 makes the browser truncate a pasted string down to one
+  // character before onChange ever sees it — this runs first and reads the
+  // clipboard directly, so the full code gets through.
+  const handleOtpPaste = (event: ClipboardEvent<HTMLInputElement>) => {
+    const pasted = event.clipboardData.getData("text");
+    if (!/[0-9]/.test(pasted)) return;
+    event.preventDefault();
+    distributeOtp(pasted);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>, index: number) => {
@@ -109,8 +139,13 @@ export function VerifyOtpContent() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center bg-background-soft px-[var(--space-lg)] pt-[var(--space-lg)]">
-      <button type="button" onClick={() => router.back()} aria-label="Back" className="self-start text-trust-navy">
+    <div className="flex min-h-dvh flex-col items-center bg-background-soft px-[var(--space-lg)] pt-[var(--space-lg)]">
+      <button
+        type="button"
+        onClick={() => router.back()}
+        aria-label="Back"
+        className="-m-2 self-start p-2 text-trust-navy"
+      >
         <ChevronLeft size={26} strokeWidth={2.25} />
       </button>
 
@@ -122,7 +157,7 @@ export function VerifyOtpContent() {
       <p className="mt-[var(--space-xs)] text-body text-text-secondary">We sent a 6-digit verification code to</p>
       <p className="mb-[var(--space-xl)] mt-1 font-bold text-trust-navy">{email}</p>
 
-      <div className="mb-[var(--space-xl)] flex gap-[var(--space-sm)]">
+      <div className="mb-[var(--space-xl)] flex gap-1 sm:gap-[var(--space-sm)]">
         {otp.map((digit, index) => (
           <input
             key={index}
@@ -132,10 +167,11 @@ export function VerifyOtpContent() {
             value={digit}
             onChange={(e) => handleOtpChange(e, index)}
             onKeyDown={(e) => handleKeyDown(e, index)}
+            onPaste={handleOtpPaste}
             inputMode="numeric"
             maxLength={1}
             disabled={loading}
-            className={`h-14 w-12 rounded-md border-2 text-center text-xl font-bold text-text-primary focus:outline-none ${
+            className={`h-12 w-9 rounded-md border-2 text-center text-lg font-bold text-text-primary focus:outline-none sm:h-14 sm:w-12 sm:text-xl ${
               digit ? "border-trust-navy bg-trust-navy/10" : "border-border bg-white"
             }`}
           />
