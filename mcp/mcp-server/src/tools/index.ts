@@ -261,10 +261,11 @@ export const registerSavetrixTools = (
   server.registerTool("savetrix_invoice_upload", {
     title: "Upload invoice",
     description:
-      "Upload an invoice photo or PDF from a local file path and have it scanned. " +
-      "The file must exist on the machine running this server.",
+      "Upload an invoice photo or PDF and have it scanned. For a local/stdio MCP server, pass filePath. " +
+      "For a remote MCP server that cannot access the chat client's filesystem, pass fileBase64 with fileName (and optional mimeType). " +
+      "Use exactly one input method; inline files must be 20 MB or smaller.",
     inputSchema: S.invoiceUploadSchema,
-  }, run((c, a) => invoicesClient.uploadInvoice(c, a.filePath)));
+  }, run((c, a) => invoicesClient.uploadInvoice(c, a)));
 
   server.registerTool("savetrix_invoice_update", {
     title: "Update invoice details",
