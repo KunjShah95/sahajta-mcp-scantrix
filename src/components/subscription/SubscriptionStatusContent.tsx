@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Lock } from "lucide-react";
-import { useEffect } from "react";
+import { ArrowRight, Lock, Settings } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 
+import { showToast } from "@/lib/dialogManager";
 import { Spinner } from "@/components/ui/Spinner";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { fetchMySubscription } from "@/store/subscription/subscriptionApi";
+import { fetchMySubscription, openBillingPortal, confirmCheckout } from "@/store/subscription/subscriptionApi";
 
 const STATUS_META: Record<string, { label: string; className: string }> = {
   active: { label: "Active", className: "bg-success/10 text-success" },
@@ -24,13 +26,64 @@ function formatDate(value: string | null | undefined) {
 
 export function SubscriptionStatusContent() {
   const dispatch = useAppDispatch();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const subscription = useAppSelector((state) => state.subscription.subscription);
   const loading = useAppSelector((state) => state.subscription.subscriptionLoading);
   const error = useAppSelector((state) => state.subscription.subscriptionError);
+  const [openingPortal, setOpeningPortal] = useState(false);
 
   useEffect(() => {
     dispatch(fetchMySubscription());
   }, [dispatch]);
+
+  // Landing back here from Stripe Checkout (success_url includes these query
+  // params — see stripe.service.js createCheckoutSession). Confirm the
+  // session immediately instead of waiting on the async webhook, same
+  // pattern as the mobile app's /subscription/sync after a RevenueCat
+  // purchase, then strip the params so a page refresh doesn't re-confirm.
+  useEffect(() => {
+    const checkoutStatus = searchParams.get("checkout");
+    const sessionId = searchParams.get("session_id");
+
+    if (checkoutStatus === "success" && sessionId) {
+      dispatch(confirmCheckout(sessionId)).then((result) => {
+        dispatch(fetchMySubscription());
+        if (confirmCheckout.fulfilled.match(result)) {
+          showToast("Subscription confirmed — you're all set!", "success");
+        } else {
+          // Payment likely succeeded on Stripe's side even if this immediate
+          // confirm call failed (network blip, etc.) — the webhook is the
+          // durable path and will still activate it shortly. Don't leave the
+          // user with zero feedback after they just paid.
+          const payload = result.payload as { message?: string } | undefined;
+          showToast(
+            payload?.message || "Payment received — confirming your subscription is taking a little longer than usual. Refresh in a moment.",
+            "error"
+          );
+        }
+      });
+      router.replace("/subscription");
+    } else if (checkoutStatus === "cancelled") {
+      router.replace("/subscription");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const handleManageSubscription = async () => {
+    setOpeningPortal(true);
+    try {
+      const result = await dispatch(openBillingPortal());
+      if (openBillingPortal.fulfilled.match(result)) {
+        window.location.href = result.payload.data.url;
+      } else {
+        const payload = result.payload as { message?: string } | undefined;
+        showToast(payload?.message || "Could not open billing portal. Please try again.", "error");
+      }
+    } finally {
+      setOpeningPortal(false);
+    }
+  };
 
   if (loading && !subscription) {
     return (
@@ -133,6 +186,24 @@ export function SubscriptionStatusContent() {
       >
         Change Plan <ArrowRight size={16} strokeWidth={2.25} />
       </Link>
+
+      {subscription.provider === "stripe" && (
+        <button
+          type="button"
+          onClick={handleManageSubscription}
+          disabled={openingPortal}
+          className="mt-[var(--space-sm)] flex w-full items-center justify-center gap-[var(--space-xs)] rounded-lg border border-border bg-white py-[var(--space-sm)] font-bold text-text-primary disabled:opacity-60"
+        >
+          {openingPortal ? (
+            <Spinner size="sm" />
+          ) : (
+            <>
+              <Settings size={16} strokeWidth={2.25} />
+              Manage Subscription
+            </>
+          )}
+        </button>
+      )}
     </div>
   );
 }

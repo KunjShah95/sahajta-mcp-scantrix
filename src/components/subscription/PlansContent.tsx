@@ -4,10 +4,16 @@ import Link from "next/link";
 import { Check, ChevronRight, Eye } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { confirmDialog, showToast } from "@/lib/dialogManager";
+import { showToast } from "@/lib/dialogManager";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { fetchPlans, fetchMySubscription, choosePlan, type SubscriptionPlanKey } from "@/store/subscription/subscriptionApi";
+import {
+  fetchPlans,
+  fetchMySubscription,
+  startCheckout,
+  openBillingPortal,
+  type SubscriptionPlanKey,
+} from "@/store/subscription/subscriptionApi";
 
 type BillingCycle = "monthly" | "yearly";
 
@@ -40,11 +46,6 @@ function priceSuffix(planKey: string, cycle: BillingCycle) {
   return cycle === "monthly" ? "/mo" : "/yr";
 }
 
-function formatDate(value: string | null | undefined) {
-  if (!value) return null;
-  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
 export function PlansContent() {
   const dispatch = useAppDispatch();
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
@@ -60,39 +61,40 @@ export function PlansContent() {
     dispatch(fetchMySubscription());
   }, [dispatch]);
 
+  // Real payment via Stripe. No "are you sure" dialog here — Stripe's own
+  // hosted Checkout page is the confirmation step. If the user already has
+  // an active Stripe subscription, a NEW Checkout Session would create a
+  // second, separate subscription rather than changing the existing one —
+  // so plan switches for an existing Stripe subscriber go through the
+  // Billing Portal instead, which updates the existing subscription in place.
   const handleChoosePlan = async (planKey: SubscriptionPlanKey, planName: string) => {
-    const confirmed = await confirmDialog({
-      title: `Switch to ${planName}?`,
-      message: `Switching plans shifts your billing date to today and resets any active QuickBooks scan locks. Any unused value from your current plan is credited as bonus days on ${planName} — no cash is charged or refunded.`,
-      confirmLabel: "Switch Plan",
-    });
-    if (!confirmed) return;
-
+    // Guard against clicking before fetchMySubscription resolves — subscription
+    // is still null right after mount, so subscription?.provider === "stripe"
+    // would read false even for an existing Stripe/mobile subscriber, sending
+    // them into a fresh Checkout Session instead of the Billing Portal. The
+    // backend also blocks this server-side (see stripe.service.js
+    // createCheckoutSession), but that just surfaces as a confusing error
+    // toast instead of routing correctly, so guard it here too.
+    if (subscriptionLoading) return;
     setSwitchingKey(`${planKey}-${cycle}`);
     try {
-      const result = await dispatch(choosePlan({ plan: planKey, billingInterval: cycle }));
-      if (choosePlan.fulfilled.match(result)) {
-        const planSwitch = result.payload?.data?.planSwitch;
-        dispatch(fetchMySubscription());
-        showToast(
-          planSwitch?.bonusDays
-            ? `You're now on ${planName}. ${planSwitch.bonusDays} bonus day(s) credited from your previous plan.`
-            : `You're now on ${planName}.`,
-          "success",
-        );
-      } else {
-        const payload = result.payload as { message?: string; code?: string; renewsAt?: string } | undefined;
-        if (payload?.code === "ALREADY_ON_PLAN") {
-          showToast("You're already on this plan.", "info");
-        } else if (payload?.code === "DOWNGRADE_LOCKED_UNTIL_RENEWAL") {
-          const renewsAt = formatDate(payload.renewsAt);
-          showToast(
-            `You can only upgrade until your current billing period ends${renewsAt ? ` on ${renewsAt}` : ""}. Downgrading becomes available after that.`,
-            "error",
-          );
+      if (subscription?.provider === "stripe") {
+        const result = await dispatch(openBillingPortal());
+        if (openBillingPortal.fulfilled.match(result)) {
+          window.location.href = result.payload.data.url;
         } else {
-          showToast(payload?.message || "Could not switch plans. Please try again.", "error");
+          const payload = result.payload as { message?: string } | undefined;
+          showToast(payload?.message || "Could not open billing portal. Please try again.", "error");
         }
+        return;
+      }
+
+      const result = await dispatch(startCheckout({ plan: planKey, billingInterval: cycle }));
+      if (startCheckout.fulfilled.match(result)) {
+        window.location.href = result.payload.data.url;
+      } else {
+        const payload = result.payload as { message?: string } | undefined;
+        showToast(payload?.message || `Could not start checkout for ${planName}. Please try again.`, "error");
       }
     } finally {
       setSwitchingKey(null);
@@ -193,7 +195,7 @@ export function PlansContent() {
                   <button
                     type="button"
                     onClick={() => handleChoosePlan(plan.key as SubscriptionPlanKey, plan.name)}
-                    disabled={isSwitching}
+                    disabled={isSwitching || subscriptionLoading}
                     className={`w-full rounded-lg py-[var(--space-sm)] text-body-sm font-bold disabled:opacity-60 ${
                       meta.highlight ? "bg-primary text-white" : "border border-border bg-background-soft text-text-primary"
                     }`}

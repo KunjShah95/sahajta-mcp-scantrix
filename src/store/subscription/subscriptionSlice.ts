@@ -1,5 +1,5 @@
 import { createSlice } from "@reduxjs/toolkit";
-import { fetchPlans, fetchMySubscription, choosePlan } from "./subscriptionApi";
+import { fetchPlans, fetchMySubscription, choosePlan, startCheckout, openBillingPortal, confirmCheckout } from "./subscriptionApi";
 import { isSessionBoundary } from "../sessionBoundary";
 
 export interface PlanCatalogEntry {
@@ -24,6 +24,10 @@ export interface MySubscription {
   planName: string;
   status: "trialing" | "active" | "past_due" | "canceled" | "expired";
   billingInterval: "monthly" | "yearly" | null;
+  // "stripe" = real, paid web subscription (see stripe.service.js). "manual"
+  // (or null) = the free/admin-driven flow. Both use the same currentPeriod/
+  // downgradeAvailableAt cycle math below — no special-casing needed.
+  provider: "stripe" | "apple" | "google" | "manual" | null;
   trialStartedAt: string | null;
   trialEndsAt: string | null;
   billingAnchor: string | null;
@@ -45,6 +49,8 @@ interface SubscriptionState {
   subscriptionError: string | null;
 
   choosingPlan: boolean;
+  checkingOut: boolean;
+  openingPortal: boolean;
 }
 
 const initialState: SubscriptionState = {
@@ -57,6 +63,8 @@ const initialState: SubscriptionState = {
   subscriptionError: null,
 
   choosingPlan: false,
+  checkingOut: false,
+  openingPortal: false,
 };
 
 const subscriptionSlice = createSlice({
@@ -106,6 +114,41 @@ const subscriptionSlice = createSlice({
       })
       .addCase(choosePlan.rejected, (state) => {
         state.choosingPlan = false;
+      });
+
+    builder
+      .addCase(startCheckout.pending, (state) => {
+        state.checkingOut = true;
+      })
+      .addCase(startCheckout.fulfilled, (state) => {
+        state.checkingOut = false;
+        // No state to merge — the browser redirects to Stripe next, away
+        // from this app entirely.
+      })
+      .addCase(startCheckout.rejected, (state) => {
+        state.checkingOut = false;
+      });
+
+    builder
+      .addCase(openBillingPortal.pending, (state) => {
+        state.openingPortal = true;
+      })
+      .addCase(openBillingPortal.fulfilled, (state) => {
+        state.openingPortal = false;
+      })
+      .addCase(openBillingPortal.rejected, (state) => {
+        state.openingPortal = false;
+      });
+
+    builder
+      .addCase(confirmCheckout.fulfilled, () => {
+        // Caller re-dispatches fetchMySubscription for the authoritative
+        // post-checkout state, same pattern as choosePlan above.
+      })
+      .addCase(confirmCheckout.rejected, () => {
+        // Caller (SubscriptionStatusContent) shows an error toast directly
+        // from the rejected action's payload — no slice-level error state
+        // needed since this only ever runs once, right after redirect.
       });
 
     // See sessionBoundary.ts — plan/subscription/billing-slot data is
