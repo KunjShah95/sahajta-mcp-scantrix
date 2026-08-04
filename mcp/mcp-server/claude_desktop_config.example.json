@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "savetrix": {
+      "command": "node",
+      "args": ["C:\\path\\to\\expense-management-web-app\\mcp-server\\dist\\index.js"],
+      "env": {
+        "SAVETRIX_EMAIL": "you@company.com",
+        "SAVETRIX_PASSWORD": "your-password"
+      }
+    }
+  }
+}

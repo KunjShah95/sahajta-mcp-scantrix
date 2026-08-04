@@ -22,6 +22,7 @@ import invoiceReducer from "./invoice/invoiceSlice";
 import vendorReducer from "./vendor/vendorSlice";
 import quickBooksReducer from "./quickBooks/quickBooksSlice";
 import subscriptionReducer from "./subscription/subscriptionSlice";
+import chatReducer from "./chat/chatSlice";
 
 // Only persist the QB fields we need across restarts.
 // auth/invoice/vendor are untouched — auth already uses its own
@@ -38,6 +39,7 @@ const rootReducer = combineReducers({
   vendor: vendorReducer,       // unchanged
   quickBooks: persistReducer(quickBooksPersistConfig, quickBooksReducer),
   subscription: subscriptionReducer,
+  chat: chatReducer, // unchanged — deliberately not persisted, see chatSlice.ts
 });
 
 export const store = configureStore({

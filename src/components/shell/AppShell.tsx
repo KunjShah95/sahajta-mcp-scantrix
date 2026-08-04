@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { ReactNode, useEffect, useRef, useState } from "react";
 
+import { ChatWidget } from "@/components/chatbot/ChatWidget";
 import { ExpandTransitionOverlay } from "@/components/shell/ExpandTransitionOverlay";
 import { GlobalSearchBar } from "@/components/shell/GlobalSearchBar";
 import { getSidebarPinned, setSidebarPinned } from "@/lib/storage";
@@ -429,6 +430,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <div className="flex shrink-0 items-center justify-end gap-[var(--space-xs)] lg:gap-[var(--space-sm)]">
             <GlobalSearchBar />
+
+            <ChatWidget companyName={activeConnection?.name} />
 
             <button
               type="button"

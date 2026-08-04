@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, Landmark, Plus, X } from "lucide-react";
+import { BookOpen, Landmark, Plus, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
@@ -20,6 +20,8 @@ import {
   fetchQuickBooksAccounts,
   fetchQuickBooksTaxCodes,
   getMyQBConnections,
+  syncQuickBooksAccounts,
+  syncQuickBooksTaxCodes,
 } from "@/store/quickBooks/quickBooksApi";
 
 interface QBConnection {
@@ -78,6 +80,7 @@ export function GLTaxCodeContent() {
   const [form, setForm] = useState<AccountFormState>(EMPTY_ACCOUNT_FORM);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // With exactly one connected company there's nothing to choose, so use it
   // directly. With 2+, only use a match for an id the user actually
@@ -197,6 +200,35 @@ export function GLTaxCodeContent() {
     }
   };
 
+  const handleRefresh = async () => {
+    if (!accessToken || refreshing) return;
+    setRefreshing(true);
+    try {
+      const [accountsResult, taxCodesResult] = await Promise.all([
+        dispatch(syncQuickBooksAccounts({ accessToken })),
+        dispatch(syncQuickBooksTaxCodes({ accessToken })),
+      ]);
+      const accountsOk = syncQuickBooksAccounts.fulfilled.match(accountsResult);
+      const taxCodesOk = syncQuickBooksTaxCodes.fulfilled.match(taxCodesResult);
+
+      if (accountsOk || taxCodesOk) {
+        refetchAccounts();
+        refetchTaxCodes();
+      }
+
+      if (accountsOk && taxCodesOk) {
+        showToast("GL accounts and tax codes refreshed from QuickBooks.", "success");
+      } else if (accountsOk || taxCodesOk) {
+        showToast("Refreshed, but one part failed. Try again to complete the sync.", "error");
+      } else {
+        const payload = (accountsResult.payload || taxCodesResult.payload) as { message?: string } | undefined;
+        showToast(payload?.message || "Could not refresh from QuickBooks. Please try again.", "error");
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   if (loadingConnections) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -230,12 +262,24 @@ export function GLTaxCodeContent() {
             Manage GL accounts and view tax codes for {activeConnection.name}.
           </p>
         </div>
-        {canManage && activeTab === "accounts" && (
-          <Button onClick={openCreateSheet} size="sm" className="lg:shrink-0 lg:self-start">
-            <Plus size={16} strokeWidth={2.5} />
-            Add GL Account
-          </Button>
-        )}
+        <div className="flex shrink-0 items-center gap-[var(--space-sm)]">
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            aria-label="Refresh from QuickBooks"
+            title="Refresh from QuickBooks"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border bg-white text-trust-navy transition-opacity hover:bg-background-alt disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw size={18} strokeWidth={2.25} className={refreshing ? "animate-spin" : ""} />
+          </button>
+          {canManage && activeTab === "accounts" && (
+            <Button onClick={openCreateSheet} size="sm" className="shrink-0">
+              <Plus size={16} strokeWidth={2.5} />
+              Add GL Account
+            </Button>
+          )}
+        </div>
       </div>
 
       {!canManage && (

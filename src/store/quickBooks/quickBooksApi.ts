@@ -679,7 +679,8 @@ export const syncQuickBooksTaxCodes = createAsyncThunk(
       return response.data;
     } catch (error: any) {
       console.log("========== SYNC TAX CODES ERROR ==========");
-      const message = error?.response?.data?.message || error?.message || "Failed to sync tax codes from QuickBooks";
+      const message =
+        error?.response?.data?.message || error?.message || "Failed to sync tax codes from QuickBooks";
       return thunkAPI.rejectWithValue({ message, statusCode: error?.response?.data?.statusCode });
     }
   },
