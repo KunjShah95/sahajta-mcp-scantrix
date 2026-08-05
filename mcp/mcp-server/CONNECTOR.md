@@ -71,6 +71,38 @@ thing a model will try first.
 > for any file over 4 MB. Raising the browser-upload path itself means moving
 > uploads off the function (direct-to-storage signed URL).
 
+### Optional: zero-click upload via the model's own sandbox
+
+The browser-upload link (above) is the supported, always-works path — it
+needs no configuration and works on any Claude plan. But there's a genuinely
+real optional path on top of it, for a user willing to configure their own
+Claude settings: **claude.ai's own "Code execution and file creation" sandbox
+can be given outbound network access to specific domains** (Settings →
+Capabilities → Code execution and file creation → Domain allowlist →
+"package managers and specific domains" → add `mcp.scantrix.ai` under
+"Additional allowed domains"). If a user has done this, Claude can run `curl`
+inside its own sandbox straight at the same ticketed `/upload?t=…` URL —
+no new endpoint needed, it's the identical link `savetrix_invoice_upload_link`
+already returns. `uploadHelp()` in `tools/index.ts` tells the model exactly
+how to do this (raw-bytes POST, not multipart, with a graceful fallback to
+just handing the user the link if the curl fails).
+
+Two things worth knowing before pointing anyone at this:
+- **This is a per-user/per-org setting change** on Claude's side, not
+  something we control — most non-technical users won't discover it on
+  their own, and it's arguably more friction than clicking a link.
+- **As of this writing it has open reliability bugs on Anthropic's side**
+  (anthropics/claude-code#19087, #38984, #52982): domains added to
+  "Additional allowed domains" have been reported to be silently ignored by
+  the sandbox's network proxy, so a correctly-configured user can still see
+  it just not work. Don't present this as "the fix" to an end user — it's a
+  best-effort path that degrades to the link automatically when unavailable.
+- The **raw API-level "code execution tool"** (what a third-party developer
+  configures via the Messages API) is a *different* sandbox with internet
+  access "completely disabled" per Anthropic's own docs — this only applies
+  to claude.ai's/Claude Desktop's own consumer-product sandbox, not to
+  someone else's custom-built agent using our connector.
+
 ### Why `invoiceUploadSchema` must stay a flat `z.object`
 
 A `z.union` there serializes to a **top-level `anyOf`**, which is illegal for a
