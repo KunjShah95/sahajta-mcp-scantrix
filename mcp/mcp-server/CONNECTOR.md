@@ -64,8 +64,12 @@ thing a model will try first.
 
 > **Size ceiling on Vercel:** a serverless function's request body is capped at
 > ~4.5 MB, so the upload page advertises 4 MB when `VERCEL` is set and the API's
-> full 20 MB otherwise. Raising this means moving uploads off the function
-> (direct-to-storage signed URL).
+> full 50 MB otherwise. That 50 MB ceiling isn't a documented Savetrix backend
+> limit — the web app's own upload flow enforces none at all — it's just a
+> safety cap sized for real scanned invoices/photos. `fileUrl` is unaffected by
+> the Vercel body cap (the server downloads it directly), so it's the answer
+> for any file over 4 MB. Raising the browser-upload path itself means moving
+> uploads off the function (direct-to-storage signed URL).
 
 ### Why `invoiceUploadSchema` must stay a flat `z.object`
 

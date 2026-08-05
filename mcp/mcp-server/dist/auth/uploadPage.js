@@ -119,7 +119,10 @@ export const uploadPage = (opts) => {
 
   function pick(f) {
     if (!f) return;
-    if (f.size > MAX) { show("err", "That file is larger than ${maxMb} MB."); return; }
+    if (f.size > MAX) {
+      show("err", "That file is larger than ${maxMb} MB. Go back to your chat and ask Claude to fetch it from a link instead (e.g. a Google Drive or Dropbox share link) \\u2014 that path isn't limited to ${maxMb} MB.");
+      return;
+    }
     chosen = f;
     main.textContent = f.name;
     send.disabled = false;

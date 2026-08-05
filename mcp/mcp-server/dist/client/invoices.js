@@ -3,7 +3,15 @@ import { basename } from "node:path";
 import axios from "axios";
 import FormData from "form-data";
 import { unwrapList, unwrapOne, getPagination } from "./unwrap.js";
-export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+// Not derived from any documented Savetrix backend limit — the web app's own
+// upload flow (src/store/invoice/invoiceApi.ts's scanInvoice) enforces no
+// byte-size cap at all and just forwards whatever the browser picks. This is
+// a safety ceiling against a runaway fileUrl download inside a serverless
+// function, sized to comfortably cover real scanned invoices/photos (a
+// multi-page scan or a phone photo can land in the 10-40 MB range). If the
+// real backend has a lower limit, that surfaces as a real error from
+// Savetrix itself rather than being pre-empted here.
+export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 /**
  * The MCP client (Claude) rejects large string arguments before they ever
  * reach this server, so inline base64 only works for trivially small files.
@@ -81,7 +89,9 @@ export const resolveUploadSource = async (input) => {
         const url = assertFetchableUrl(input.fileUrl);
         const res = await axios.get(url.toString(), {
             responseType: "arraybuffer",
-            timeout: 30000,
+            // 30s was tight even before the limit was raised — a multi-MB file
+            // over a slow origin can take longer than that to download.
+            timeout: 60000,
             maxContentLength: MAX_UPLOAD_BYTES,
             maxBodyLength: MAX_UPLOAD_BYTES,
             // Don't follow a public URL into a redirect chain that lands somewhere
@@ -104,7 +114,7 @@ export const resolveUploadSource = async (input) => {
         if (!stat.isFile())
             throw new Error(`Not a file: ${input.filePath}`);
         if (stat.size > MAX_UPLOAD_BYTES)
-            throw new Error("Invoice files must be 20 MB or smaller.");
+            throw new Error(`Invoice files must be ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB or smaller.`);
         const fileName = input.fileName ?? basename(input.filePath);
         return {
             bytes: readFileSync(input.filePath),
@@ -128,7 +138,7 @@ export const resolveUploadSource = async (input) => {
 /** Post already-resolved bytes to the Savetrix API. Used by the upload page too. */
 export const uploadInvoiceBytes = async (client, file) => {
     if (file.bytes.length > MAX_UPLOAD_BYTES) {
-        throw new Error("Invoice files must be 20 MB or smaller.");
+        throw new Error(`Invoice files must be ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB or smaller.`);
     }
     const form = new FormData();
     form.append("files", file.bytes, {
@@ -137,6 +147,9 @@ export const uploadInvoiceBytes = async (client, file) => {
     });
     const res = await client.api.post("/invoices", form, {
         headers: { ...form.getHeaders() },
+        // Override the shared client's 30s default — a large multipart body over
+        // a slow connection can legitimately take longer than that.
+        timeout: 120000,
     });
     return res.data;
 };
