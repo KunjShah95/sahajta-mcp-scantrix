@@ -77,11 +77,14 @@ export class ChatHistoryStoreError extends Error {
 }
 
 function assertConfigured(): void {
-  // On Vercel the SDK authenticates via the project's OIDC token; locally it
-  // needs BLOB_READ_WRITE_TOKEN (written into .env.local by
-  // `vercel blob create-store … --environment development`). Fail loudly and
-  // early rather than letting every call turn into an opaque 500.
-  if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN && !process.env.BLOB_STORE_ID) {
+  // Mirrors the SDK's own credential resolution: OIDC needs BOTH a token and a
+  // store id (VERCEL_OIDC_TOKEN alone is not enough), otherwise it falls back
+  // to BLOB_READ_WRITE_TOKEN. Both are injected automatically once the store is
+  // connected to the project; locally, `vercel env pull` writes the latter into
+  // .env.local. Checked up front so a misconfigured environment reports itself
+  // instead of surfacing as an opaque failure on every call.
+  const hasOidc = Boolean(process.env.VERCEL_OIDC_TOKEN && process.env.BLOB_STORE_ID);
+  if (!process.env.BLOB_READ_WRITE_TOKEN && !hasOidc) {
     throw new ChatHistoryStoreError("blob-store-not-configured");
   }
 }
