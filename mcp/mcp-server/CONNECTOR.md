@@ -99,6 +99,32 @@ vercel env add SAVETRIX_PUBLIC_URL       # e.g. https://savetrix-mcp.vercel.app
 `SAVETRIX_PUBLIC_URL` **must exactly match** the deployed domain (it's the OAuth
 issuer). Optional: `SAVETRIX_API_URL`, `SAVETRIX_WEB_URL`.
 
+### Moving to a new domain without breaking existing connections
+
+Pointing `SAVETRIX_PUBLIC_URL` at a new domain while an old alias still resolves
+leaves the alias advertising the *new* host as its resource. A client that
+validates protected-resource metadata (RFC 9728 / the MCP auth spec) can reject
+that mismatch as "no MCP server found at the provided URL" — the same failure
+mode as commit `71abb07`.
+
+List the old hostname so it advertises itself instead:
+
+```bash
+vercel env add SAVETRIX_ALLOWED_HOSTS
+# e.g. old-project-name.vercel.app     (comma-separated, hostnames only)
+```
+
+Each allowlisted host then serves its own `issuer`, `authorization_endpoint`,
+`token_endpoint`, `registration_endpoint`, `resource`, the matching
+`resource_metadata` pointer on a 401, and upload links on its own origin.
+Anything *not* listed falls back to the canonical URL — the Host header is never
+trusted blindly, or a spoofed one could hand a client metadata pointing its
+`/token` calls at a domain you don't own.
+
+Tokens are host-independent (encrypted with `SAVETRIX_TOKEN_SECRET`), so
+sessions survive the switch. Once everyone has moved, drop the alias from
+`SAVETRIX_ALLOWED_HOSTS` and remove it in Vercel.
+
 Then deploy to production:
 
 ```bash

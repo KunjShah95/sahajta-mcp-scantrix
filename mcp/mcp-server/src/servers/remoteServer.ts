@@ -1,4 +1,4 @@
-import express, { type Request, type Response } from "express";
+import express, { type Request, type Response, type NextFunction } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
@@ -56,10 +56,66 @@ export const createRemoteApp = (config: Config): express.Express => {
   const resourceUrl = new URL("/mcp", issuerUrl);
   const provider = new SavetrixOAuthProvider(config);
 
+  // ── Host-aware identity (domain migrations) ──
+  // The canonical issuer is SAVETRIX_PUBLIC_URL, but a deployment can keep
+  // answering on an older alias while clients migrate. Serving the canonical
+  // host's metadata to a request that arrived on the alias means telling a
+  // client "the resource is <other origin>" — the RFC 9728 mismatch that a
+  // validating client rejects as "no MCP server found at the provided URL".
+  // So each allowlisted host advertises itself.
+  const allowed = new Set(
+    [issuerUrl.hostname.toLowerCase(), ...config.allowedHosts].filter(Boolean),
+  );
+
+  const baseUrlFor = (req: Request): URL => {
+    const host = (req.hostname ?? "").toLowerCase();
+    if (!host || !allowed.has(host) || host === issuerUrl.hostname.toLowerCase()) {
+      return issuerUrl;
+    }
+    const url = new URL(issuerUrl.toString());
+    url.host = req.get("host") ?? host;
+    return url;
+  };
+
+  const resourceUrlFor = (req: Request): URL => new URL("/mcp", baseUrlFor(req));
+
   const app = express();
   // One proxy hop (Vercel / most PaaS). Avoids the permissive-trust-proxy
   // error from the rate limiter that a bare `true` triggers.
   app.set("trust proxy", 1);
+
+  // Alias-host discovery. Registered ahead of mcpAuthRouter so it wins for a
+  // request on an allowlisted alias; on the canonical host these call next()
+  // and the SDK router serves the documents byte-for-byte as before.
+  const onAlias = (req: Request): boolean =>
+    baseUrlFor(req).hostname !== issuerUrl.hostname;
+
+  app.get("/.well-known/oauth-protected-resource/mcp", (req, res, next) => {
+    if (!onAlias(req)) return next();
+    const base = baseUrlFor(req);
+    res.status(200).json({
+      resource: new URL("/mcp", base).toString(),
+      authorization_servers: [base.toString()],
+      scopes_supported: ["mcp"],
+      resource_name: "Savetrix",
+    });
+  });
+
+  app.get("/.well-known/oauth-authorization-server", (req, res, next) => {
+    if (!onAlias(req)) return next();
+    const base = baseUrlFor(req).toString();
+    res.status(200).json({
+      issuer: base,
+      authorization_endpoint: new URL("/authorize", base).toString(),
+      response_types_supported: ["code"],
+      code_challenge_methods_supported: ["S256"],
+      token_endpoint: new URL("/token", base).toString(),
+      token_endpoint_auth_methods_supported: ["client_secret_post", "none"],
+      grant_types_supported: ["authorization_code", "refresh_token"],
+      scopes_supported: ["mcp"],
+      registration_endpoint: new URL("/register", base).toString(),
+    });
+  });
 
   // Standard OAuth endpoints: /authorize, /token, /register, and the
   // .well-known metadata documents clients use for discovery.
@@ -153,11 +209,15 @@ export const createRemoteApp = (config: Config): express.Express => {
   );
 
   // ── MCP endpoint (bearer-protected, one server per request = stateless) ──
-  const bearer = requireBearerAuth({
-    verifier: provider,
-    requiredScopes: ["mcp"],
-    resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(resourceUrl),
-  });
+  // Built per request so the 401's resource_metadata points at the host the
+  // client actually called, matching the documents served above.
+  const bearer = (req: Request, res: Response, next: NextFunction): void => {
+    requireBearerAuth({
+      verifier: provider,
+      requiredScopes: ["mcp"],
+      resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(resourceUrlFor(req)),
+    })(req, res, next);
+  };
 
   const handleMcp = async (req: Request, res: Response): Promise<void> => {
     const extra = (req.auth?.extra ?? {}) as {
@@ -194,7 +254,12 @@ export const createRemoteApp = (config: Config): express.Express => {
           } satisfies UploadTicket,
           UPLOAD_TICKET_TTL,
         );
-        return `${config.publicUrl}/upload?t=${encodeURIComponent(ticket)}`;
+        // Keep the link on whichever host this session is connected to, so a
+        // client still on an alias isn't bounced to a different origin.
+        return new URL(
+          `/upload?t=${encodeURIComponent(ticket)}`,
+          baseUrlFor(req),
+        ).toString();
       },
     });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });

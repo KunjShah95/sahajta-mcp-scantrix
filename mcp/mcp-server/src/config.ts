@@ -11,8 +11,20 @@ export interface Config {
   qbConnectionId?: string;
   mcpApiKey?: string;
   configFilePath: string;
-  /** Public HTTPS base URL of the deployed connector (OAuth issuer). */
+  /** Canonical public HTTPS base URL of the deployed connector (OAuth issuer). */
   publicUrl?: string;
+  /**
+   * Extra hostnames this deployment also answers on (e.g. an old
+   * *.vercel.app alias kept alive during a domain migration). A request
+   * arriving on one of these advertises *itself* as the issuer/resource
+   * instead of the canonical host, so a client that validates
+   * protected-resource metadata per RFC 9728 doesn't reject the mismatch.
+   *
+   * Allowlisted rather than trusting the Host header outright: an
+   * attacker-controlled Host would otherwise let us hand a victim metadata
+   * pointing its /token calls at a host we don't own.
+   */
+  allowedHosts: string[];
   /** Secret used to encrypt OAuth tokens/codes (>=32 chars). */
   tokenSecret?: string;
 }
@@ -101,6 +113,10 @@ export const loadConfig = (argv: string[]): Config => {
     mcpApiKey: envStr("SAVETRIX_MCP_API_KEY"),
     configFilePath: args.configFilePath,
     publicUrl: envStr("SAVETRIX_PUBLIC_URL")?.replace(/\/$/, ""),
+    allowedHosts: (envStr("SAVETRIX_ALLOWED_HOSTS") ?? "")
+      .split(",")
+      .map((h) => h.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, ""))
+      .filter((h) => h !== ""),
     tokenSecret: envStr("SAVETRIX_TOKEN_SECRET"),
   };
 };

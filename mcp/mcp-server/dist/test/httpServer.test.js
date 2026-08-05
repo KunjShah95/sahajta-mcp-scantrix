@@ -8,6 +8,7 @@ const makeConfig = (overrides = {}) => ({
     http: true,
     remote: false,
     configFilePath: "does/not/matter.json",
+    allowedHosts: [],
     ...overrides,
 });
 const initializePayload = {

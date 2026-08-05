@@ -11,6 +11,7 @@ const testConfig = {
     http: false,
     remote: false,
     configFilePath: "does/not/matter.json",
+    allowedHosts: [],
 };
 test("requireConfirm rejects without confirm:true and passes with it", () => {
     const denied = requireConfirm({}, "post invoice");

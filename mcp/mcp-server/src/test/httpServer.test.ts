@@ -10,6 +10,7 @@ const makeConfig = (overrides: Partial<Config> = {}): Config => ({
   http: true,
   remote: false,
   configFilePath: "does/not/matter.json",
+  allowedHosts: [],
   ...overrides,
 });
 
