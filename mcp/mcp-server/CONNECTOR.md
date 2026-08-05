@@ -125,6 +125,49 @@ i.e. a tool Claude sees as taking **no arguments at all**. That is precisely how
 remote uploads broke once already. `src/test/client.test.ts` asserts the emitted
 schema stays a flat object with real properties — keep that test.
 
+## Switching QuickBooks companies mid-conversation
+
+`savetrix_qb_set_active` reporting success and the next call still acting on
+the old company was a real client-reported bug, not a one-off glitch. Root
+cause: this server builds a **fresh `SavetrixClient` on every single `/mcp`
+request** (see `handleMcp` in `remoteServer.ts`) — there is no session state
+between tool calls. `setActiveQbId()` mutates that one request's in-memory
+client and is gone the instant the response is sent. The *next* call's fresh
+client has no memory of it, so `resolveQbId()` falls back to `GET
+/qb-connections` and picks whichever connection **the backend** flags
+`status: "active"` — a connection-health concept, not "what the user picked."
+This is the same reason the web app never asks the backend to change an
+"active" company at all; it just remembers the user's choice client-side in
+Redux/localStorage (`AppShell.tsx`'s `handleSwitch`) and sends the right
+`X-QB-Id` on every subsequent request itself.
+
+There's no server-side fix available without adding a session store (a
+deliberate architectural choice this project has avoided — see "no session
+database" throughout this file), and MCP has no mechanism for a tool call to
+swap the bearer token a client uses afterward. So the fix mirrors the web
+app's own approach, just shifted to the one thing that *does* have memory
+across tool calls in a single conversation — the model itself:
+
+- Every QB-scoped tool's schema (`schemas.ts`) now accepts an optional
+  `qbConnectionId` argument (`qbConnectionIdOverride`).
+- `applyQbOverride()` in `tools/index.ts` calls `client.setActiveQbId(...)`
+  with it before running the tool — this is centralized in the shared
+  `withClient`/`run` wrapper, plus manually in the two tools that bypass it
+  (`savetrix_invoice_upload`, `savetrix_invoice_upload_link`).
+- `savetrix_qb_set_active`'s result includes an explicit `warning` field
+  telling the model to pass that same id on every subsequent call for the
+  rest of the conversation — this is a prompt-level instruction the model has
+  to actually follow, not a guarantee the server can enforce.
+- The ticketed upload link snapshots `resolveQbId()`'s result **at link-
+  creation time** into the ticket itself, so a file uploaded through the
+  browser later still lands in the company that was active when the link was
+  minted, instead of that separate request re-deriving a possibly different
+  default.
+
+`src/test/tools.test.ts`'s "an explicit qbConnectionId argument overrides the
+default active company" test proves the override actually reaches the
+outbound `X-QB-Id` header — keep it; it would have caught this bug.
+
 ## Deploy to Vercel
 
 From the `mcp-server/` directory:

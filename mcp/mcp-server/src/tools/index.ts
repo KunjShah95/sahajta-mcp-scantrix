@@ -60,10 +60,24 @@ const authGuidance = async (
   return null;
 };
 
+// Applies the caller's explicit qbConnectionId override (if any) before
+// running a tool. This server builds a fresh SavetrixClient per request (see
+// handleMcp in remoteServer.ts), so savetrix_qb_set_active's effect on one
+// call's client is gone by the next — resolveQbId() would otherwise silently
+// re-derive whichever connection the backend flags "active" (connection
+// health, not "what the user picked"). Setting it here, from the model's own
+// explicit qbConnectionId argument, is what actually makes each individual
+// call target the right company. See schemas.ts's qbConnectionIdOverride.
+const applyQbOverride = (client: SavetrixClient, args: unknown): void => {
+  const override = (args as { qbConnectionId?: string } | undefined)?.qbConnectionId;
+  if (override) client.setActiveQbId(override);
+};
+
 const withClient =
   (client: SavetrixClient) =>
   <TArgs>(fn: (client: SavetrixClient, args: TArgs) => Promise<unknown>) =>
   async (args: TArgs) => {
+    applyQbOverride(client, args);
     try {
       return text(await fn(client, args));
     } catch (error) {
@@ -300,6 +314,7 @@ export const registerSavetrixTools = (
       "If you have none of those, call this with no arguments (or use savetrix_invoice_upload_link) to get a browser upload link for the user.",
     inputSchema: S.invoiceUploadSchema,
   }, async (a) => {
+    applyQbOverride(client, a);
     const hasSource = Boolean(a.fileUrl || a.filePath || a.fileBase64);
     if (!hasSource) return md(await uploadHelp(host));
     try {
@@ -323,8 +338,11 @@ export const registerSavetrixTools = (
     description:
       "Get a short-lived link the user can open in their browser to upload an invoice photo or PDF. " +
       "Use this whenever the user has a file on their own device and this server is remote.",
-    inputSchema: S.confirmSchema.omit({ confirm: true }),
-  }, async () => md(await uploadHelp(host)));
+    inputSchema: S.qbScopedSchema,
+  }, async (a) => {
+    applyQbOverride(client, a);
+    return md(await uploadHelp(host));
+  });
 
   server.registerTool("savetrix_invoice_update", {
     title: "Update invoice details",
@@ -395,7 +413,7 @@ export const registerSavetrixTools = (
   server.registerTool("savetrix_account_list", {
     title: "List GL accounts",
     description: "List accounting categories (GL accounts) for the active QuickBooks connection.",
-    inputSchema: S.confirmSchema.omit({ confirm: true }),
+    inputSchema: S.qbScopedSchema,
   }, run((c) => accountsClient.listAccounts(c)));
 
   server.registerTool("savetrix_account_create", {
@@ -407,27 +425,27 @@ export const registerSavetrixTools = (
   server.registerTool("savetrix_account_sync", {
     title: "Sync GL accounts",
     description: "Pull the latest GL accounts from QuickBooks into the app.",
-    inputSchema: S.confirmSchema.omit({ confirm: true }),
+    inputSchema: S.qbScopedSchema,
   }, run((c) => accountsClient.syncAccounts(c)));
 
   // ── Tax codes ─────────────────────────────────────────────────────────
   server.registerTool("savetrix_taxcode_list", {
     title: "List tax codes",
     description: "List tax codes for the active QuickBooks connection.",
-    inputSchema: S.confirmSchema.omit({ confirm: true }),
+    inputSchema: S.qbScopedSchema,
   }, run((c) => taxcodesClient.listTaxCodes(c)));
 
   server.registerTool("savetrix_taxcode_sync", {
     title: "Sync tax codes",
     description: "Pull the latest tax codes from QuickBooks into the app.",
-    inputSchema: S.confirmSchema.omit({ confirm: true }),
+    inputSchema: S.qbScopedSchema,
   }, run((c) => taxcodesClient.syncTaxCodes(c)));
 
   // ── QuickBooks connection ─────────────────────────────────────────────
   server.registerTool("savetrix_qb_status", {
     title: "QuickBooks status",
     description: "Show the connection status for the active QuickBooks company.",
-    inputSchema: S.confirmSchema.omit({ confirm: true }),
+    inputSchema: S.qbScopedSchema,
   }, run(async (c) => {
     const id = await c.resolveQbId();
     if (!id) return { connected: false, message: "No active QuickBooks connection." };
@@ -442,11 +460,24 @@ export const registerSavetrixTools = (
 
   server.registerTool("savetrix_qb_set_active", {
     title: "Set active QuickBooks connection",
-    description: "Switch which connected QuickBooks company the server operates on.",
+    description:
+      "Switch which connected QuickBooks company subsequent tool calls operate on. " +
+      "IMPORTANT: this server is stateless between tool calls, so this only affects THIS " +
+      "response, not future ones. You (the model) must pass the returned qbConnectionId " +
+      "explicitly on every Savetrix tool call for the rest of the conversation — see the " +
+      "warning in the result.",
     inputSchema: S.setActiveSchema,
   }, run(async (c, a) => {
     c.setActiveQbId(a.qbConnectionId);
-    return { success: true, activeQbId: a.qbConnectionId };
+    return {
+      success: true,
+      activeQbId: a.qbConnectionId,
+      warning:
+        `Pass qbConnectionId: "${a.qbConnectionId}" explicitly as an argument on every ` +
+        "Savetrix tool call for the rest of this conversation. This server has no memory " +
+        "between tool calls — without that argument, the next call silently falls back to " +
+        "whichever connection the backend itself flags active, which may be a different company.",
+    };
   }));
 
   server.registerTool("savetrix_qb_connect", {
@@ -490,7 +521,7 @@ export const registerSavetrixTools = (
   server.registerTool("savetrix_team_list", {
     title: "List team members",
     description: "List members of the active QuickBooks team.",
-    inputSchema: S.confirmSchema.omit({ confirm: true }),
+    inputSchema: S.qbScopedSchema,
   }, run((c) => teamClient.listTeamMembers(c)));
 
   server.registerTool("savetrix_team_invite", {

@@ -169,7 +169,7 @@ test("invoice upload tool schema is a flat object with real properties", async (
   assert.equal(json.oneOf, undefined);
   assert.equal(json.allOf, undefined);
   const props = Object.keys(json.properties ?? {}).sort();
-  assert.deepEqual(props, ["fileBase64", "fileName", "filePath", "fileUrl", "mimeType"]);
+  assert.deepEqual(props, ["fileBase64", "fileName", "filePath", "fileUrl", "mimeType", "qbConnectionId"]);
 });
 
 test("resolveUploadSource requires exactly one source", async () => {

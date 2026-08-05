@@ -204,11 +204,19 @@ export const createRemoteApp = (config) => {
             // file is a browser upload. Mint a ticket that carries this request's
             // already-verified Savetrix session — the link needs no second login.
             createUploadLink: async () => {
+                // Snapshot whichever company this request resolved to (reflects an
+                // explicit qbConnectionId override from THIS call, if any — see
+                // applyQbOverride in tools/index.ts) so the eventual /upload POST,
+                // which happens on a totally separate request/client instance later,
+                // still lands in the right company instead of falling back to
+                // resolveQbId()'s "whichever the backend flags active" default.
+                const qbConnectionId = await client.resolveQbId();
                 const ticket = await encryptToken(config.tokenSecret, "upload", {
                     st_at: accessToken,
                     st_rt: refreshToken,
                     email: extra.email,
                     user: extra.user,
+                    qbConnectionId,
                 }, UPLOAD_TICKET_TTL);
                 // Keep the link on whichever host this session is connected to, so a
                 // client still on an alias isn't bounced to a different origin.
@@ -297,6 +305,11 @@ export const createRemoteApp = (config) => {
                 refreshToken: ticket.st_rt,
                 user: ticket.user,
             });
+            // Restore the company that was active when the link was minted,
+            // rather than letting resolveQbId() re-derive a possibly different
+            // one on this separate request — see createUploadLink above.
+            if (ticket.qbConnectionId)
+                client.setActiveQbId(ticket.qbConnectionId);
             const result = await uploadInvoiceBytes(client, {
                 bytes,
                 fileName,
