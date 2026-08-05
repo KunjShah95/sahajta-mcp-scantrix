@@ -58,6 +58,12 @@ const chatSlice = createSlice({
     // §5, §7.8). The qbConnectionId-change case is wired from ChatWidget,
     // since only the component tree knows when that id actually changed.
     clearChat: () => initialState,
+
+    restoreConversation: (state, action: PayloadAction<ChatMessage[]>) => {
+      state.messages = action.payload;
+      state.status = "idle";
+      state.error = null;
+    },
   },
 
   extraReducers: (builder) => {
@@ -70,6 +76,6 @@ const chatSlice = createSlice({
   },
 });
 
-export const { sendMessage, startAssistantMessage, appendAssistantChunk, streamCompleted, streamFailed, clearChat } =
+export const { sendMessage, startAssistantMessage, appendAssistantChunk, streamCompleted, streamFailed, clearChat, restoreConversation } =
   chatSlice.actions;
 export default chatSlice.reducer;
