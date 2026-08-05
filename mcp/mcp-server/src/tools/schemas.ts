@@ -21,7 +21,14 @@ export const invoiceListSchema = z.object({
 
 export const invoiceIdSchema = z.object({ invoiceId: z.string().min(1) });
 
-export const invoiceUploadSchema = z.object({ filePath: z.string().min(1) });
+export const invoiceUploadSchema = z.union([
+  z.object({ filePath: z.string().min(1) }),
+  z.object({
+    fileBase64: z.string().min(1),
+    fileName: z.string().min(1),
+    mimeType: z.string().min(1).optional(),
+  }),
+]);
 
 export const lineItemSchema = z.object({
   description: z.string(),

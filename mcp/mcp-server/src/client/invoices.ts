@@ -5,6 +5,12 @@ import type { SavetrixClient } from "./savetrixClient.js";
 import { unwrapList, unwrapOne, getPagination } from "./unwrap.js";
 import type { ExtractedData } from "../types.js";
 
+const MAX_INLINE_FILE_BYTES = 20 * 1024 * 1024;
+
+export type InvoiceUploadSource =
+  | { filePath: string }
+  | { fileBase64: string; fileName: string; mimeType?: string };
+
 const MIME_BY_EXT: Record<string, string> = {
   pdf: "application/pdf",
   png: "image/png",
@@ -20,15 +26,30 @@ const mimeFromPath = (filePath: string): string => {
 
 export const uploadInvoice = async (
   client: SavetrixClient,
-  filePath: string,
+  source: InvoiceUploadSource,
 ): Promise<unknown> => {
-  const stat = statSync(filePath);
-  if (!stat.isFile()) throw new Error(`Not a file: ${filePath}`);
   const form = new FormData();
-  form.append("files", createReadStream(filePath), {
-    filename: basename(filePath),
-    contentType: mimeFromPath(filePath),
-  });
+  if ("filePath" in source) {
+    const stat = statSync(source.filePath);
+    if (!stat.isFile()) throw new Error(`Not a file: ${source.filePath}`);
+    form.append("files", createReadStream(source.filePath), {
+      filename: basename(source.filePath),
+      contentType: mimeFromPath(source.filePath),
+    });
+  } else {
+    const encoded = source.fileBase64.replace(/^data:[^;]+;base64,/, "");
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || encoded.length % 4 !== 0) {
+      throw new Error("fileBase64 is not valid base64 data");
+    }
+    const bytes = Buffer.from(encoded, "base64");
+    if (bytes.length > MAX_INLINE_FILE_BYTES) {
+      throw new Error("Inline invoice files must be 20 MB or smaller");
+    }
+    form.append("files", bytes, {
+      filename: basename(source.fileName),
+      contentType: source.mimeType ?? mimeFromPath(source.fileName),
+    });
+  }
   const res = await client.api.post("/invoices", form, {
     headers: { ...form.getHeaders() },
   });

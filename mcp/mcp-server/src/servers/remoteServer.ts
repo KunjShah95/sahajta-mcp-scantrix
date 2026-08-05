@@ -1,4 +1,4 @@
-﻿import express, { type Request, type Response } from "express";
+import express, { type Request, type Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
@@ -22,6 +22,16 @@ export const createRemoteApp = (config: Config): express.Express => {
     throw new Error("SAVETRIX_PUBLIC_URL must be set for the remote connector.");
   }
   const issuerUrl = new URL(config.publicUrl);
+  // The actual protected resource is /mcp, not the site root. Without this,
+  // mcpAuthRouter defaults resourceServerUrl to the issuer (site root), so
+  // the advertised protected-resource metadata says "resource: <root>" while
+  // clients are actually connecting to ".../mcp" — a mismatch that a
+  // resource-validating client (per RFC 9728 / the MCP authorization spec)
+  // can reject as "no MCP server found at the provided URL", even though
+  // the OAuth login itself succeeded. Confirmed against
+  // @modelcontextprotocol/sdk's own router.js: getOAuthProtectedResourceMetadataUrl's
+  // doc example is literally `.../mcp` -> `.../.well-known/oauth-protected-resource/mcp`.
+  const resourceUrl = new URL("/mcp", issuerUrl);
   const provider = new SavetrixOAuthProvider(config);
 
   const app = express();
@@ -35,12 +45,13 @@ export const createRemoteApp = (config: Config): express.Express => {
     mcpAuthRouter({
       provider,
       issuerUrl,
+      resourceServerUrl: resourceUrl,
       scopesSupported: ["mcp"],
       resourceName: "Savetrix",
     }),
   );
 
-  // â”€â”€ Login page (the /authorize step redirects here) â”€â”€
+  // ── Login page (the /authorize step redirects here) ──
   app.get("/login", async (req: Request, res: Response) => {
     const token = String(req.query.req ?? "");
     if (!token) {
@@ -86,7 +97,8 @@ export const createRemoteApp = (config: Config): express.Express => {
         if (loginReq.state) redirect.searchParams.set("state", loginReq.state);
         res.redirect(redirect.toString());
       } catch (error) {
-        // Log to Vercel function logs for debugging cross-account failures.
+        // Structural only (no credentials) — helps distinguish real backend
+        // failures from bad-password attempts when debugging via Vercel logs.
         console.error("[savetrix-mcp] /login POST error:", error instanceof Error ? error.message : error);
         const client = await provider.clientsStore.getClient(loginReq.client_id);
         const msg = error instanceof Error ? error.message : String(error);
@@ -95,7 +107,8 @@ export const createRemoteApp = (config: Config): express.Express => {
         if (/credential|login|password|401|incorrect|invalid|unauthorized|wrong/i.test(msg)) {
           userError = "Incorrect email or password. Please try again.";
         } else if (/social|google|apple|microsoft|oauth|provider|no.*password|password.*not.*set/i.test(msg)) {
-          userError = "This account uses social login (Google / Apple / Microsoft). Please set a password at scantrix.ai/forgot-password, then try again.";
+          userError =
+            "This account uses social login (Google / Apple / Microsoft). Please set a password at scantrix.ai/forgot-password, then try again.";
         } else if (/timeout|ETIMEDOUT|ECONNRESET|network|ENOTFOUND/i.test(msg)) {
           userError = "Could not reach Scantrix servers. Please check your connection and try again.";
         } else {
@@ -117,11 +130,11 @@ export const createRemoteApp = (config: Config): express.Express => {
     },
   );
 
-  // â”€â”€ MCP endpoint (bearer-protected, one server per request = stateless) â”€â”€
+  // ── MCP endpoint (bearer-protected, one server per request = stateless) ──
   const bearer = requireBearerAuth({
     verifier: provider,
     requiredScopes: ["mcp"],
-    resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(issuerUrl),
+    resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(resourceUrl),
   });
 
   const handleMcp = async (req: Request, res: Response): Promise<void> => {
@@ -160,7 +173,7 @@ export const startRemote = (config: Config): void => {
   app.listen(config.port, () => {
     // eslint-disable-next-line no-console
     console.error(
-      `Savetrix MCP connector (remote/OAuth) listening on :${config.port} â€” public URL ${config.publicUrl}`,
+      `Savetrix MCP connector (remote/OAuth) listening on :${config.port} — public URL ${config.publicUrl}`,
     );
   });
 };

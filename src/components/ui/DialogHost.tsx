@@ -110,7 +110,7 @@ export function DialogHost() {
         </div>
       )}
 
-      <div className="fixed bottom-[var(--space-lg)] right-[var(--space-lg)] z-[100] flex w-full max-w-sm flex-col gap-[var(--space-sm)]">
+      <div className="fixed bottom-[var(--space-lg)] left-[var(--space-lg)] right-[var(--space-lg)] z-[100] flex flex-col gap-[var(--space-sm)] lg:left-auto lg:w-full lg:max-w-sm">
         {toasts.map((toast) => {
           const Icon = TOAST_ICON[toast.tone];
           return (

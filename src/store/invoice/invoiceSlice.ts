@@ -9,6 +9,7 @@ import {
   postInvoiceToQuickBooks,
   updateInvoiceExtractedData,
   rejectInvoice,
+  deleteInvoice,
 } from "./invoiceApi";
 
 // ======================================
@@ -125,6 +126,8 @@ interface InvoiceState {
   rejectingError: any;
   updatingExtractedData: boolean;
   updatingExtractedDataError: any;
+  deleting: boolean;
+  deletingError: any;
   error: any;
 }
 
@@ -148,8 +151,18 @@ const initialState: InvoiceState = {
   rejectingError: null,
   updatingExtractedData: false,
   updatingExtractedDataError: null,
+  deleting: false,
+  deletingError: null,
   error: null,
 };
+
+// The updateInvoice endpoint (backs post/reject/edit) nests the invoice
+// under data.invoice — same shape getInvoiceDetails already unwraps in
+// invoiceApi.ts. `?? payload?.data` is kept as a fallback for any response
+// shape that isn't nested this way.
+function extractInvoice(payload: any): InvoiceRecord | undefined {
+  return payload?.data?.invoice ?? payload?.data;
+}
 
 // ======================================
 // SLICE
@@ -265,7 +278,7 @@ const invoiceSlice = createSlice({
 
     builder.addCase(postInvoiceToQuickBooks.fulfilled, (state, action) => {
       state.posting = false;
-      state.selectedInvoice = action.payload?.data ?? state.selectedInvoice;
+      state.selectedInvoice = extractInvoice(action.payload) ?? state.selectedInvoice;
     });
 
     builder.addCase(postInvoiceToQuickBooks.rejected, (state, action) => {
@@ -284,9 +297,9 @@ const invoiceSlice = createSlice({
 
     builder.addCase(rejectInvoice.fulfilled, (state, action) => {
       state.rejecting = false;
-      state.selectedInvoice = action.payload?.data ?? state.selectedInvoice;
+      state.selectedInvoice = extractInvoice(action.payload) ?? state.selectedInvoice;
 
-      const updatedInvoice: InvoiceRecord = action.payload?.data;
+      const updatedInvoice = extractInvoice(action.payload);
       if (updatedInvoice?._id) {
         state.pendingInvoices = state.pendingInvoices.filter(
           (inv) => inv._id !== updatedInvoice._id,
@@ -315,18 +328,56 @@ const invoiceSlice = createSlice({
     builder.addCase(updateInvoiceExtractedData.fulfilled, (state, action) => {
       state.updatingExtractedData = false;
 
-      const updatedInvoice: InvoiceRecord = action.payload?.data;
+      const updatedInvoice = extractInvoice(action.payload);
       if (updatedInvoice?._id) {
         state.selectedInvoice = updatedInvoice;
         state.invoices = state.invoices.map((inv) =>
           inv._id === updatedInvoice._id ? updatedInvoice : inv,
         );
+        // The edit endpoint never changes postedStatus, so the invoice stays
+        // in whichever per-status array it was already in — just refresh
+        // its contents there too, otherwise list pages would keep showing
+        // pre-edit data until the next full getInvoices() refetch.
+        const replaceIn = (list: InvoiceRecord[]) =>
+          list.map((inv) => (inv._id === updatedInvoice._id ? updatedInvoice : inv));
+        state.autoPostedInvoices = replaceIn(state.autoPostedInvoices);
+        state.manualPostedInvoices = replaceIn(state.manualPostedInvoices);
+        state.pendingInvoices = replaceIn(state.pendingInvoices);
+        state.failedInvoices = replaceIn(state.failedInvoices);
       }
     });
 
     builder.addCase(updateInvoiceExtractedData.rejected, (state, action) => {
       state.updatingExtractedData = false;
       state.updatingExtractedDataError = action.payload;
+    });
+
+    // ======================================
+    // DELETE INVOICE
+    // ======================================
+
+    builder.addCase(deleteInvoice.pending, (state) => {
+      state.deleting = true;
+      state.deletingError = null;
+    });
+
+    builder.addCase(deleteInvoice.fulfilled, (state, action) => {
+      state.deleting = false;
+
+      const { invoiceId } = action.payload;
+      const removeFrom = (list: InvoiceRecord[]) => list.filter((inv) => inv._id !== invoiceId);
+      state.invoices = removeFrom(state.invoices);
+      state.autoPostedInvoices = removeFrom(state.autoPostedInvoices);
+      state.manualPostedInvoices = removeFrom(state.manualPostedInvoices);
+      state.pendingInvoices = removeFrom(state.pendingInvoices);
+      state.failedInvoices = removeFrom(state.failedInvoices);
+      if (state.selectedInvoice?._id === invoiceId) state.selectedInvoice = null;
+      if (state.invoiceDetails?._id === invoiceId) state.invoiceDetails = null;
+    });
+
+    builder.addCase(deleteInvoice.rejected, (state, action) => {
+      state.deleting = false;
+      state.deletingError = action.payload;
     });
 
     // ======================================

@@ -43,7 +43,6 @@ const validators: Record<FieldName, (value: string) => string> = {
   password: (v) => {
     if (!v) return "Password is required";
     if (v.length < 6) return "Password must be at least 6 characters";
-    if (!/^[a-zA-Z0-9]{6,}$/.test(v)) return "Password can only contain letters and numbers";
     return "";
   },
 };
@@ -87,7 +86,6 @@ export function RegisterForm() {
   const handleChange = (field: FieldName, raw: string) => {
     let sanitized = raw;
     if (field === "phone") sanitized = raw.replace(/\D/g, "").slice(0, 10);
-    if (field === "password") sanitized = raw.replace(/[^a-zA-Z0-9]/g, "");
 
     setValues((prev) => ({ ...prev, [field]: sanitized }));
     if (touched[field]) {
@@ -149,7 +147,7 @@ export function RegisterForm() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background-soft px-[var(--space-lg)] py-[var(--space-xxl)]">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-background-soft px-[var(--space-lg)] py-[var(--space-xxl)]">
       <div className="w-full max-w-md">
         <div className="mb-[var(--space-xl)] text-center">
           <h1 className="text-h1 font-bold text-trust-navy">Create Account</h1>
@@ -245,7 +243,7 @@ export function RegisterForm() {
                 <button
                   type="button"
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="flex items-center gap-1 text-caption font-semibold text-primary"
+                  className="-m-2 flex items-center gap-1 p-2 text-caption font-semibold text-primary"
                   onClick={() => setShowPassword((v) => !v)}
                 >
                   {showPassword ? <EyeOff size={16} strokeWidth={2} /> : <Eye size={16} strokeWidth={2} />}

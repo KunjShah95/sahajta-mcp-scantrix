@@ -37,6 +37,7 @@ export function GoogleSignInButton({ onSuccess, onError }: GoogleSignInButtonPro
   const dispatch = useAppDispatch();
   const buttonRef = useRef<HTMLDivElement>(null);
   const [scriptReady, setScriptReady] = useState(false);
+  const renderedWidthRef = useRef<number | null>(null);
 
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
@@ -69,17 +70,40 @@ export function GoogleSignInButton({ onSuccess, onError }: GoogleSignInButtonPro
   );
 
   useEffect(() => {
-    if (!scriptReady || !clientId || !window.google || !buttonRef.current) return;
+    const container = buttonRef.current;
+    if (!scriptReady || !clientId || !window.google || !container) return;
     window.google.accounts.id.initialize({
       client_id: clientId,
       callback: handleCredential,
     });
-    window.google.accounts.id.renderButton(buttonRef.current, {
-      theme: "outline",
-      size: "large",
-      width: 320,
-      text: "continue_with",
-    });
+
+    // Google's button has a fixed pixel width (this card is capped at
+    // max-w-md, which itself shrinks below ~430px viewports), so a hardcoded
+    // 320 overflows the card on phone-sized screens. Cap it to the actual
+    // space available and re-render on resize/orientation change so it never
+    // exceeds its container, while staying at 320 (unchanged) wherever that
+    // already fit before.
+    const renderGoogleButton = () => {
+      if (!container || !window.google) return;
+      const available = container.offsetWidth || 320;
+      const width = Math.max(240, Math.min(320, available));
+      if (renderedWidthRef.current === width) return;
+      renderedWidthRef.current = width;
+      container.innerHTML = "";
+      window.google.accounts.id.renderButton(container, {
+        theme: "outline",
+        size: "large",
+        width,
+        text: "continue_with",
+      });
+    };
+
+    renderGoogleButton();
+
+    const resizeObserver = new ResizeObserver(() => renderGoogleButton());
+    resizeObserver.observe(container);
+
+    return () => resizeObserver.disconnect();
   }, [scriptReady, clientId, handleCredential]);
 
   if (!clientId) {

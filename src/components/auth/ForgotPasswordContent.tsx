@@ -53,7 +53,7 @@ export function ForgotPasswordContent() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background-soft px-[var(--space-lg)] py-[var(--space-xxl)]">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-background-soft px-[var(--space-lg)] py-[var(--space-xxl)]">
       <div className="w-full max-w-md">
         <Link
           href="/login"

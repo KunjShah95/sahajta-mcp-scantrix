@@ -12,6 +12,7 @@ import {
   unwrapOne,
   getPagination,
 } from "../client/unwrap.js";
+import { uploadInvoice } from "../client/invoices.js";
 
 const makeSession = async (): Promise<SessionStore> => {
   const dir = await mkdtemp(join(tmpdir(), "savetrix-client-"));
@@ -122,5 +123,29 @@ test("client logout calls the backend and clears tokens", async () => {
   mock.onPost("/auth/logout").reply(200, { success: true });
   await client.logout();
   assert.equal(client.getAccessToken(), undefined);
+  mock.restore();
+});
+
+test("invoice upload accepts inline base64 when the MCP server cannot access the client path", async () => {
+  const instance = axios.create();
+  const mock = new MockAdapter(instance as never);
+  const client = new SavetrixClient({
+    baseURL: "https://api.test",
+    session: await makeSession(),
+    axiosInstance: instance as never,
+  });
+  client.setTokens("at", "rt");
+  mock.onPost("/invoices").reply((config) => {
+    assert.match(String(config.headers?.["Content-Type"]), /^multipart\/form-data; boundary=/);
+    assert.match(config.data.getBuffer().toString("utf8"), /invoice\.pdf/);
+    return [200, { success: true }];
+  });
+
+  const result = await uploadInvoice(client, {
+    fileBase64: Buffer.from("test pdf bytes").toString("base64"),
+    fileName: "invoice.pdf",
+  });
+
+  assert.deepEqual(result, { success: true });
   mock.restore();
 });
