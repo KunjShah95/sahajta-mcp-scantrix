@@ -71,37 +71,50 @@ thing a model will try first.
 > for any file over 4 MB. Raising the browser-upload path itself means moving
 > uploads off the function (direct-to-storage signed URL).
 
-### Optional: zero-click upload via the model's own sandbox
+### Why "have Claude curl the file from its own sandbox" doesn't work here
 
-The browser-upload link (above) is the supported, always-works path — it
-needs no configuration and works on any Claude plan. But there's a genuinely
-real optional path on top of it, for a user willing to configure their own
-Claude settings: **claude.ai's own "Code execution and file creation" sandbox
-can be given outbound network access to specific domains** (Settings →
-Capabilities → Code execution and file creation → Domain allowlist →
-"package managers and specific domains" → add `mcp.scantrix.ai` under
-"Additional allowed domains"). If a user has done this, Claude can run `curl`
-inside its own sandbox straight at the same ticketed `/upload?t=…` URL —
-no new endpoint needed, it's the identical link `savetrix_invoice_upload_link`
-already returns. `uploadHelp()` in `tools/index.ts` tells the model exactly
-how to do this (raw-bytes POST, not multipart, with a graceful fallback to
-just handing the user the link if the curl fails).
+This was considered and researched properly (not just assumed) before being
+ruled out — worth recording so it doesn't get re-proposed and re-investigated
+later.
 
-Two things worth knowing before pointing anyone at this:
-- **This is a per-user/per-org setting change** on Claude's side, not
-  something we control — most non-technical users won't discover it on
-  their own, and it's arguably more friction than clicking a link.
-- **As of this writing it has open reliability bugs on Anthropic's side**
-  (anthropics/claude-code#19087, #38984, #52982): domains added to
-  "Additional allowed domains" have been reported to be silently ignored by
-  the sandbox's network proxy, so a correctly-configured user can still see
-  it just not work. Don't present this as "the fix" to an end user — it's a
-  best-effort path that degrades to the link automatically when unavailable.
-- The **raw API-level "code execution tool"** (what a third-party developer
-  configures via the Messages API) is a *different* sandbox with internet
-  access "completely disabled" per Anthropic's own docs — this only applies
-  to claude.ai's/Claude Desktop's own consumer-product sandbox, not to
-  someone else's custom-built agent using our connector.
+claude.ai *does* give ordinary chat users a code-execution sandbox ("Code
+execution and file creation," Settings → Capabilities), and that sandbox
+*does* have outbound network access by default. But per Anthropic's own
+Help Center (support.claude.com, "Create and edit files with Claude"), for
+Free/Pro/Max plans — the population our end-users are actually on — that
+access is a **fixed allowlist of package-registry domains** (npm, PyPI,
+GitHub, crates.io, Ubuntu archives, Yarn) plus Anthropic's own API host.
+`mcp.scantrix.ai` is not on it, and **a Free/Pro/Max user has no UI to add a
+domain to it at all.** Only a Team/Enterprise *organization admin* can
+configure a custom domain allowlist — a different plan tier, a deliberate
+admin-side setting, not something our end-users are in a position to do.
+
+Separately, and independent of network access: the **MCP specification
+itself has no client-to-server file-upload primitive**, confirmed directly
+by an Anthropic maintainer in the spec's own GitHub repo (modelcontextprotocol/
+modelcontextprotocol, discussion #1197) — resources/blob content are defined
+to flow server→client only, with no `resources/write` or equivalent. A draft
+proposal for this (SEP-2631) exists but is an unmerged Draft as of the
+current 2026-07-28 spec revision. So even setting network access aside,
+there's no protocol-level "hand the sandbox's file to a tool call by
+reference" mechanism to lean on.
+
+Separately from claude.ai's own sandbox: the **Messages API's "code execution
+tool" and "bash tool"** (what a third-party developer wires into their own
+application) are confirmed-separate, developer-only capabilities — not
+something a claude.ai end-user ever gets, regardless of what Claude
+"decides" to attempt. The bash tool's own docs describe it as a **client
+tool**: the *developer's application* runs the command, not Claude itself.
+The code execution tool's "Platform availability" list doesn't include
+claude.ai at all, and that container is fully network-isolated by default
+("Internet access: completely disabled") — a stricter policy than claude.ai's
+own sandbox, confirming these are different, separately-configured surfaces
+even though the naming is easy to conflate.
+
+**Bottom line:** for this app's actual audience (non-technical claude.ai
+end-users), `fileUrl` and the ticketed browser-upload link are not a stopgap
+— they're the only two paths that exist. Full research notes with citations:
+`research-claude-file-upload.md` in this directory.
 
 ### Why `invoiceUploadSchema` must stay a flat `z.object`
 
