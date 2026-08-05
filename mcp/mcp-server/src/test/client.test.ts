@@ -13,6 +13,7 @@ import {
   getPagination,
 } from "../client/unwrap.js";
 import { uploadInvoice, resolveUploadSource } from "../client/invoices.js";
+import { getStatus, listConnections } from "../client/quickbooks.js";
 import { toJsonSchemaCompat } from "@modelcontextprotocol/sdk/server/zod-json-schema-compat.js";
 import { invoiceUploadSchema } from "../tools/schemas.js";
 
@@ -57,6 +58,69 @@ test("client attaches Bearer token and X-QB-Id headers", async () => {
     return [200, { data: { invoices: [], pagination: {} } }];
   });
   await client.api.get("/invoices");
+  mock.restore();
+});
+
+// Regression test for a real client-reported confusion: a stale Intuit
+// access token (normal — they live 1 hour and get refreshed transparently)
+// was being summarized by the model as "Access token expired... may fail
+// until reauthorized", which a non-technical user reads as a real error.
+// getStatus/listConnections must allowlist their output rather than pass the
+// backend's raw response straight through, so token/expiry fields never
+// reach the model in the first place, regardless of what shape the backend
+// actually returns them in.
+test("getStatus strips token/expiry fields, keeping only connected + realmId", async () => {
+  const instance = axios.create();
+  const mock = new MockAdapter(instance as never);
+  const client = new SavetrixClient({
+    baseURL: "https://api.test",
+    session: await makeSession(),
+    axiosInstance: instance as never,
+  });
+  client.setTokens("at", "rt");
+  mock.onGet("/quickbooks/status").reply(200, {
+    data: {
+      connected: true,
+      realmId: "9341457544400313",
+      accessTokenExpiresAt: "2026-08-02T00:00:00Z",
+      refreshTokenExpiresAt: "2026-11-10T00:00:00Z",
+      accessToken: "super-secret-intuit-token",
+    },
+  });
+  const status = await getStatus(client, "qb-1");
+  assert.deepEqual(status, { connected: true, realmId: "9341457544400313" });
+  mock.restore();
+});
+
+test("listConnections strips token/expiry fields from each connection", async () => {
+  const instance = axios.create();
+  const mock = new MockAdapter(instance as never);
+  const client = new SavetrixClient({
+    baseURL: "https://api.test",
+    session: await makeSession(),
+    axiosInstance: instance as never,
+  });
+  client.setTokens("at", "rt");
+  mock.onGet("/qb-connections").reply(200, {
+    data: {
+      connections: [
+        {
+          _id: "conn-1",
+          name: "Ontario Inc.",
+          realmId: "9341457544400313",
+          role: "admin",
+          status: "active",
+          createdAt: "2026-01-01T00:00:00Z",
+          accessTokenExpiresAt: "2026-08-02T00:00:00Z",
+          refreshToken: "super-secret-intuit-refresh-token",
+        },
+      ],
+    },
+  });
+  const connections = (await listConnections(client)) as unknown[];
+  assert.deepEqual(connections, [
+    { id: "conn-1", name: "Ontario Inc.", realmId: "9341457544400313", role: "admin", status: "active" },
+  ]);
   mock.restore();
 });
 
