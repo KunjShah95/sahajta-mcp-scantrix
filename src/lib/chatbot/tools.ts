@@ -13,7 +13,7 @@
 // so headers must be attached per-request instead.
 import axios from "axios";
 
-import type { InvoiceRecord } from "@/store/invoice/invoiceSlice";
+import type { ExtractedData, InvoiceRecord } from "@/store/invoice/invoiceSlice";
 import type { GLAccount, TaxCode, Vendor } from "@/store/quickBooks/quickBooksSlice";
 import { getInvoiceStatus } from "@/lib/invoiceDisplay";
 import {
@@ -52,6 +52,78 @@ function savetrixGet<T>(
       "X-QB-Id": qbConnectionId,
     },
   });
+}
+
+// ── Write helpers ───────────────────────────────────────────────────────────
+// POST/PATCH/DELETE variants of savetrixGet — same per-request header injection so
+// write operations are scoped to the requesting user's company exactly like reads.
+// Modeled on mcp/mcp-server/src/client/invoices.ts and vendors.ts, which call
+// client.api.patch/post/delete with the same Bearer + X-QB-Id headers.
+
+function savetrixPost<T>(
+  path: string,
+  body: unknown,
+  accessToken: string,
+  qbConnectionId: string,
+) {
+  return axios.post<T>(path, body, {
+    baseURL: BASE_URL,
+    timeout: 30000,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "X-QB-Id": qbConnectionId,
+    },
+  });
+}
+
+function savetrixPatch<T>(
+  path: string,
+  body: unknown,
+  accessToken: string,
+  qbConnectionId: string,
+) {
+  return axios.patch<T>(path, body, {
+    baseURL: BASE_URL,
+    timeout: 30000,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "X-QB-Id": qbConnectionId,
+    },
+  });
+}
+
+function savetrixDelete<T>(path: string, accessToken: string, qbConnectionId: string) {
+  return axios.delete<T>(path, {
+    baseURL: BASE_URL,
+    timeout: 30000,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "X-QB-Id": qbConnectionId,
+    },
+  });
+}
+
+// ── Confirmation gate ───────────────────────────────────────────────────────
+// Destructive actions (post to QB, reject, deactivate, delete) require confirm=true.
+// Mirrors mcp/mcp-server/src/tools/gates.ts requireConfirm. When the gate fails
+// we return a structured message the model relays to the user, who then re-issues
+// the same tool call with confirm: true — the model retains the args from the
+// previous attempt in its context.
+export interface ConfirmGateResult {
+  ok: boolean;
+  message?: string;
+}
+
+export function requireConfirm(args: { confirm?: boolean }, action: string): ConfirmGateResult {
+  if (args.confirm !== true) {
+    return {
+      ok: false,
+      message:
+        `Action "${action}" modifies data and requires explicit confirmation. ` +
+        `Please confirm you want to do this, then I'll proceed.`,
+    };
+  }
+  return { ok: true };
 }
 
 // Fetches every page of /invoices — the backend caps at limit=100/page (see
@@ -282,6 +354,249 @@ export async function listTaxCodes(
   return { taxCodes: items.slice(0, MAX_RESULTS_RETURNED).map(toTaxCodeChatContext) };
 }
 
+// ── Write: Invoice ──────────────────────────────────────────────────────
+
+export interface UpdateInvoiceArgs {
+  invoiceId: string;
+  extractedData: Partial<ExtractedData>;
+}
+
+// PATCH /invoices/:id — updates the extracted data on an invoice (vendor,
+// amount, GL account, tax code, line items, dates, etc.) without posting it.
+// Mirrors mcp/mcp-server/src/client/invoices.ts updateInvoiceExtractedData and
+// src/store/invoice/invoiceApi.ts updateInvoiceExtractedData thunk.
+export async function updateInvoice(
+  accessToken: string,
+  qbConnectionId: string,
+  args: UpdateInvoiceArgs,
+): Promise<unknown> {
+  const res = await savetrixPatch<{ data?: unknown }>(
+    `/invoices/${args.invoiceId}`,
+    { extractedData: args.extractedData },
+    accessToken,
+    qbConnectionId,
+  );
+  return res.data?.data ?? res.data;
+}
+
+export interface PostInvoiceToQbArgs {
+  invoiceId: string;
+  vendorId: string;
+  extractedData: Partial<ExtractedData>;
+  confirm: boolean;
+}
+
+// PATCH /invoices/:id with vendorId + postedStatus:"manual" — sends an approved
+// invoice into QuickBooks. Destructive: requires confirm=true.
+// Mirrors mcp/mcp-server/src/client/invoices.ts postInvoiceToQuickBooks and
+// src/store/invoice/invoiceApi.ts postInvoiceToQuickBooks thunk.
+export async function postInvoiceToQuickBooks(
+  accessToken: string,
+  qbConnectionId: string,
+  args: PostInvoiceToQbArgs,
+): Promise<unknown> {
+  const gate = requireConfirm(args, "post invoice to QuickBooks");
+  if (!gate.ok) return { success: false, message: gate.message, confirmationRequired: true };
+
+  const res = await savetrixPatch<{ data?: unknown }>(
+    `/invoices/${args.invoiceId}`,
+    {
+      vendorId: args.vendorId,
+      postedStatus: "manual",
+      extractedData: args.extractedData,
+    },
+    accessToken,
+    qbConnectionId,
+  );
+  return res.data?.data ?? res.data;
+}
+
+export interface RejectInvoiceArgs {
+  invoiceId: string;
+  reason?: string;
+  confirm: boolean;
+}
+
+// PATCH /invoices/:id with postedStatus:"failed" — rejects an invoice (duplicate,
+// bad scan, etc.). Destructive: requires confirm=true.
+// Mirrors mcp/mcp-server/src/client/invoices.ts rejectInvoice and
+// src/store/invoice/invoiceApi.ts rejectInvoice thunk.
+export async function rejectInvoice(
+  accessToken: string,
+  qbConnectionId: string,
+  args: RejectInvoiceArgs,
+): Promise<unknown> {
+  const gate = requireConfirm(args, "reject invoice");
+  if (!gate.ok) return { success: false, message: gate.message, confirmationRequired: true };
+
+  const res = await savetrixPatch<{ data?: unknown }>(
+    `/invoices/${args.invoiceId}`,
+    {
+      postedStatus: "failed",
+      ...(args.reason ? { reason: args.reason } : {}),
+    },
+    accessToken,
+    qbConnectionId,
+  );
+  return res.data?.data ?? res.data;
+}
+
+// ── Write: Vendor ───────────────────────────────────────────────────────
+
+export interface CreateVendorArgs {
+  displayName: string;
+  currency: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  glAccountId?: string;
+  taxCodeId?: string;
+}
+
+// POST /quickbooks/vendors — creates a new vendor in QuickBooks.
+// Mirrors mcp/mcp-server/src/client/vendors.ts createVendor and
+// src/store/quickBooks/quickBooksApi.ts createQuickBooksVendor thunk.
+export async function createVendor(
+  accessToken: string,
+  qbConnectionId: string,
+  args: CreateVendorArgs,
+): Promise<unknown> {
+  const res = await savetrixPost<{ data?: unknown }>("/quickbooks/vendors", {
+    displayName: args.displayName,
+    currency: args.currency,
+    glAccountId: args.glAccountId ?? "",
+    taxCodeId: args.taxCodeId ?? "",
+    ...(args.email ? { email: args.email } : {}),
+    ...(args.phone ? { phone: args.phone } : {}),
+    ...(args.address ? { address: args.address } : {}),
+  }, accessToken, qbConnectionId);
+  return res.data?.data ?? res.data;
+}
+
+export interface UpdateVendorArgs {
+  vendorId: string;
+  displayName?: string;
+  currency?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  glAccountId?: string;
+  taxCodeId?: string;
+}
+
+// PATCH /quickbooks/vendors/:id — updates a vendor's details.
+// Mirrors mcp/mcp-server/src/client/vendors.ts updateVendor and
+// src/store/quickBooks/quickBooksApi.ts updateQuickBooksVendor thunk.
+export async function updateVendor(
+  accessToken: string,
+  qbConnectionId: string,
+  args: UpdateVendorArgs,
+): Promise<unknown> {
+  const { vendorId, ...fields } = args;
+  const body: Record<string, string> = {};
+  for (const key of ["displayName", "currency", "email", "phone", "address", "glAccountId", "taxCodeId"] as const) {
+    if (fields[key] !== undefined) body[key] = fields[key] as string;
+  }
+  const res = await savetrixPatch<{ data?: unknown }>(
+    `/quickbooks/vendors/${vendorId}`,
+    body,
+    accessToken,
+    qbConnectionId,
+  );
+  return res.data?.data ?? res.data;
+}
+
+export interface DeactivateVendorArgs {
+  vendorId: string;
+  confirm: boolean;
+}
+
+// DELETE /quickbooks/vendors/:id — deactivates a vendor (hidden, not destroyed).
+// Destructive: requires confirm=true.
+// Mirrors mcp/mcp-server/src/client/vendors.ts deactivateVendor and
+// src/store/quickBooks/quickBooksApi.ts deleteQuickBooksVendor thunk.
+export async function deactivateVendor(
+  accessToken: string,
+  qbConnectionId: string,
+  args: DeactivateVendorArgs,
+): Promise<unknown> {
+  const gate = requireConfirm(args, "deactivate vendor");
+  if (!gate.ok) return { success: false, message: gate.message, confirmationRequired: true };
+
+  const res = await savetrixDelete<{ data?: unknown }>(
+    `/quickbooks/vendors/${args.vendorId}`,
+    accessToken,
+    qbConnectionId,
+  );
+  return { success: true, ...(res.data?.data ?? res.data) };
+}
+
+export interface ReactivateVendorArgs {
+  vendorId: string;
+}
+
+// POST /quickbooks/vendors/:id/reactivate — brings back a deactivated vendor.
+// Mirrors mcp/mcp-server/src/client/vendors.ts reactivateVendor and
+// src/store/quickBooks/quickBooksApi.ts reactivateQuickBooksVendor thunk.
+export async function reactivateVendor(
+  accessToken: string,
+  qbConnectionId: string,
+  args: ReactivateVendorArgs,
+): Promise<unknown> {
+  const res = await savetrixPost<{ data?: unknown }>(
+    `/quickbooks/vendors/${args.vendorId}/reactivate`,
+    {},
+    accessToken,
+    qbConnectionId,
+  );
+  return res.data?.data ?? res.data;
+}
+
+// ── Write: GL Account ─────────────────────────────────────────────────
+
+export interface CreateGLAccountArgs {
+  name: string;
+  accountType: string;
+  accountSubType?: string;
+}
+
+// POST /quickbooks/accounts — creates a new GL account in QuickBooks.
+// Mirrors mcp/mcp-server/src/client/accounts.ts createAccount and
+// src/store/quickBooks/quickBooksApi.ts createQuickBooksAccount thunk.
+export async function createGLAccount(
+  accessToken: string,
+  qbConnectionId: string,
+  args: CreateGLAccountArgs,
+): Promise<unknown> {
+  const res = await savetrixPost<{ data?: unknown }>("/quickbooks/accounts", {
+    name: args.name,
+    accountType: args.accountType,
+    ...(args.accountSubType ? { accountSubType: args.accountSubType } : {}),
+  }, accessToken, qbConnectionId);
+  return res.data?.data ?? res.data;
+}
+
+// POST /quickbooks/accounts/sync — pulls the latest GL accounts from QuickBooks
+// into the app's local store. Non-destructive (no data lost). Not in the MCP
+// server's public tool set, but mirrors savetrix_account_sync for the web chat.
+export async function syncGLAccounts(
+  accessToken: string,
+  qbConnectionId: string,
+): Promise<unknown> {
+  const res = await savetrixPost<{ data?: unknown }>("/quickbooks/accounts/sync", {}, accessToken, qbConnectionId);
+  return res.data?.data ?? res.data;
+}
+
+// POST /quickbooks/taxcodes/sync — pulls the latest tax codes from QuickBooks
+// into the app's local store. Non-destructive. Mirrors savetrix_taxcode_sync.
+export async function syncTaxCodes(
+  accessToken: string,
+  qbConnectionId: string,
+): Promise<unknown> {
+  const res = await savetrixPost<{ data?: unknown }>("/quickbooks/taxcodes/sync", {}, accessToken, qbConnectionId);
+  return res.data?.data ?? res.data;
+}
+
 // ── dispatcher ───────────────────────────────────────────────────────────
 
 export const TOOL_NAMES = [
@@ -291,6 +606,17 @@ export const TOOL_NAMES = [
   "list_vendors",
   "list_gl_accounts",
   "list_tax_codes",
+  // ── write tools ────────────────────────────────────────────────────────────
+  "update_invoice",
+  "post_invoice_to_qb",
+  "reject_invoice",
+  "create_vendor",
+  "update_vendor",
+  "deactivate_vendor",
+   "reactivate_vendor",
+  "create_gl_account",
+  "sync_accounts",
+  "sync_tax_codes",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -318,10 +644,35 @@ export async function callTool(
         return await listGLAccounts(accessToken, qbConnectionId);
       case "list_tax_codes":
         return await listTaxCodes(accessToken, qbConnectionId);
+      // ── write tools ───────────────────────────────────────────────────────
+      case "update_invoice":
+          return await updateInvoice(accessToken, qbConnectionId, args as unknown as UpdateInvoiceArgs);
+        case "post_invoice_to_qb":
+          return await postInvoiceToQuickBooks(accessToken, qbConnectionId, args as unknown as PostInvoiceToQbArgs);
+        case "reject_invoice":
+          return await rejectInvoice(accessToken, qbConnectionId, args as unknown as RejectInvoiceArgs);
+        case "create_vendor":
+          return await createVendor(accessToken, qbConnectionId, args as unknown as CreateVendorArgs);
+        case "update_vendor":
+          return await updateVendor(accessToken, qbConnectionId, args as unknown as UpdateVendorArgs);
+        case "deactivate_vendor":
+          return await deactivateVendor(accessToken, qbConnectionId, args as unknown as DeactivateVendorArgs);
+        case "reactivate_vendor":
+          return await reactivateVendor(accessToken, qbConnectionId, args as unknown as ReactivateVendorArgs);
+        case "create_gl_account":
+          return await createGLAccount(accessToken, qbConnectionId, args as unknown as CreateGLAccountArgs);
+        case "sync_accounts":
+          return await syncGLAccounts(accessToken, qbConnectionId);
+        case "sync_tax_codes":
+          return await syncTaxCodes(accessToken, qbConnectionId);
       default:
         return { error: `Unknown tool: ${name}` };
     }
-  } catch {
-    return { error: "That lookup failed against the Savetrix backend. Say so plainly rather than guessing." };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    // Surface backend errors as plain-language text the model can relay —
+    // never a crash of the whole streaming response. Destructive-action
+    // errors (e.g. a failed post) should tell the user what went wrong.
+    return { success: false, message: msg };
   }
 }
