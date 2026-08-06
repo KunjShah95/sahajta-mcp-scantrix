@@ -6,7 +6,7 @@ connectors. A non-technical user just:
 1. Settings → Connectors → **Add custom connector**
 2. Pastes the connector URL
 3. Claude opens a **browser** → they sign in to Savetrix → approve
-4. Done — the 32 Savetrix tools are available, no config files.
+4. Done — the 33 Savetrix tools are available, no config files.
 
 It works because the server is a full **OAuth 2.1 authorization server** (MCP
 2025-06-18 auth spec) plus the MCP **Streamable HTTP** endpoint. Savetrix isn't
@@ -25,7 +25,148 @@ Savetrix and mints encrypted tokens wrapping that session. Everything is
 | `/token` | code → access/refresh token (PKCE) |
 | `/register` | dynamic client registration |
 | `/mcp` | the MCP endpoint (bearer-protected) |
+| `/upload` | ticketed browser invoice upload (see below) |
 | `/healthz` | health check |
+
+## Uploading invoices through a remote connector
+
+This is the one operation that cannot work the obvious way, and it is worth
+understanding before changing `savetrix_invoice_upload`.
+
+Claude connects to this server **from Anthropic's cloud**, not from the user's
+machine. So:
+
+- `filePath` can never work remotely. A path the user sees in chat (e.g.
+  `/mnt/user-data/uploads/bill.pdf`) lives in Claude's own sandbox and will
+  always fail here with `ENOENT`. `filePath` is for stdio/local installs only.
+- `fileBase64` cannot carry a real invoice. Claude's MCP client rejects large
+  string arguments *before the request reaches this server* — failures start
+  around 13–16 KB of string content, and base64 in connectors breaks near
+  ~11 K characters (≈8 KB of binary). A 200 KB PDF is ~270 KB of base64. The
+  cap is enforced explicitly in `resolveUploadSource()` so the failure is a
+  clear message instead of a truncated argument.
+
+The two paths that do work:
+
+1. **`fileUrl`** — a public https link. The server downloads the bytes itself.
+   Zero clicks. URLs pointing at loopback/private/link-local hosts are refused
+   so the connector can't be used to reach internal services.
+2. **Browser upload** — `savetrix_invoice_upload_link` (or calling
+   `savetrix_invoice_upload` with no arguments) returns a link to `/upload?t=…`.
+   The ticket is an encrypted JWT wrapping the caller's already-verified
+   Savetrix session, valid 30 minutes, so the page needs no second login. The
+   page POSTs the file as the **raw request body** (not multipart), which is why
+   no multipart parser dependency is needed.
+
+`savetrix_invoice_upload` also converts an `ENOENT` into the upload link rather
+than surfacing a raw filesystem error, since a sandbox path is the most common
+thing a model will try first.
+
+> **Size ceiling on Vercel:** a serverless function's request body is capped at
+> ~4.5 MB, so the upload page advertises 4 MB when `VERCEL` is set and the API's
+> full 50 MB otherwise. That 50 MB ceiling isn't a documented Savetrix backend
+> limit — the web app's own upload flow enforces none at all — it's just a
+> safety cap sized for real scanned invoices/photos. `fileUrl` is unaffected by
+> the Vercel body cap (the server downloads it directly), so it's the answer
+> for any file over 4 MB. Raising the browser-upload path itself means moving
+> uploads off the function (direct-to-storage signed URL).
+
+### Why "have Claude curl the file from its own sandbox" doesn't work here
+
+This was considered and researched properly (not just assumed) before being
+ruled out — worth recording so it doesn't get re-proposed and re-investigated
+later.
+
+claude.ai *does* give ordinary chat users a code-execution sandbox ("Code
+execution and file creation," Settings → Capabilities), and that sandbox
+*does* have outbound network access by default. But per Anthropic's own
+Help Center (support.claude.com, "Create and edit files with Claude"), for
+Free/Pro/Max plans — the population our end-users are actually on — that
+access is a **fixed allowlist of package-registry domains** (npm, PyPI,
+GitHub, crates.io, Ubuntu archives, Yarn) plus Anthropic's own API host.
+`mcp.scantrix.ai` is not on it, and **a Free/Pro/Max user has no UI to add a
+domain to it at all.** Only a Team/Enterprise *organization admin* can
+configure a custom domain allowlist — a different plan tier, a deliberate
+admin-side setting, not something our end-users are in a position to do.
+
+Separately, and independent of network access: the **MCP specification
+itself has no client-to-server file-upload primitive**, confirmed directly
+by an Anthropic maintainer in the spec's own GitHub repo (modelcontextprotocol/
+modelcontextprotocol, discussion #1197) — resources/blob content are defined
+to flow server→client only, with no `resources/write` or equivalent. A draft
+proposal for this (SEP-2631) exists but is an unmerged Draft as of the
+current 2026-07-28 spec revision. So even setting network access aside,
+there's no protocol-level "hand the sandbox's file to a tool call by
+reference" mechanism to lean on.
+
+Separately from claude.ai's own sandbox: the **Messages API's "code execution
+tool" and "bash tool"** (what a third-party developer wires into their own
+application) are confirmed-separate, developer-only capabilities — not
+something a claude.ai end-user ever gets, regardless of what Claude
+"decides" to attempt. The bash tool's own docs describe it as a **client
+tool**: the *developer's application* runs the command, not Claude itself.
+The code execution tool's "Platform availability" list doesn't include
+claude.ai at all, and that container is fully network-isolated by default
+("Internet access: completely disabled") — a stricter policy than claude.ai's
+own sandbox, confirming these are different, separately-configured surfaces
+even though the naming is easy to conflate.
+
+**Bottom line:** for this app's actual audience (non-technical claude.ai
+end-users), `fileUrl` and the ticketed browser-upload link are not a stopgap
+— they're the only two paths that exist. Full research notes with citations:
+`research-claude-file-upload.md` in this directory.
+
+### Why `invoiceUploadSchema` must stay a flat `z.object`
+
+A `z.union` there serializes to a **top-level `anyOf`**, which is illegal for a
+tool `input_schema` — Anthropic's API requires `type: "object"` at the root. The
+MCP SDK does not error on it; it silently emits `{"type":"object","properties":{}}`,
+i.e. a tool Claude sees as taking **no arguments at all**. That is precisely how
+remote uploads broke once already. `src/test/client.test.ts` asserts the emitted
+schema stays a flat object with real properties — keep that test.
+
+## Switching QuickBooks companies mid-conversation
+
+`savetrix_qb_set_active` reporting success and the next call still acting on
+the old company was a real client-reported bug, not a one-off glitch. Root
+cause: this server builds a **fresh `SavetrixClient` on every single `/mcp`
+request** (see `handleMcp` in `remoteServer.ts`) — there is no session state
+between tool calls. `setActiveQbId()` mutates that one request's in-memory
+client and is gone the instant the response is sent. The *next* call's fresh
+client has no memory of it, so `resolveQbId()` falls back to `GET
+/qb-connections` and picks whichever connection **the backend** flags
+`status: "active"` — a connection-health concept, not "what the user picked."
+This is the same reason the web app never asks the backend to change an
+"active" company at all; it just remembers the user's choice client-side in
+Redux/localStorage (`AppShell.tsx`'s `handleSwitch`) and sends the right
+`X-QB-Id` on every subsequent request itself.
+
+There's no server-side fix available without adding a session store (a
+deliberate architectural choice this project has avoided — see "no session
+database" throughout this file), and MCP has no mechanism for a tool call to
+swap the bearer token a client uses afterward. So the fix mirrors the web
+app's own approach, just shifted to the one thing that *does* have memory
+across tool calls in a single conversation — the model itself:
+
+- Every QB-scoped tool's schema (`schemas.ts`) now accepts an optional
+  `qbConnectionId` argument (`qbConnectionIdOverride`).
+- `applyQbOverride()` in `tools/index.ts` calls `client.setActiveQbId(...)`
+  with it before running the tool — this is centralized in the shared
+  `withClient`/`run` wrapper, plus manually in the two tools that bypass it
+  (`savetrix_invoice_upload`, `savetrix_invoice_upload_link`).
+- `savetrix_qb_set_active`'s result includes an explicit `warning` field
+  telling the model to pass that same id on every subsequent call for the
+  rest of the conversation — this is a prompt-level instruction the model has
+  to actually follow, not a guarantee the server can enforce.
+- The ticketed upload link snapshots `resolveQbId()`'s result **at link-
+  creation time** into the ticket itself, so a file uploaded through the
+  browser later still lands in the company that was active when the link was
+  minted, instead of that separate request re-deriving a possibly different
+  default.
+
+`src/test/tools.test.ts`'s "an explicit qbConnectionId argument overrides the
+default active company" test proves the override actually reaches the
+outbound `X-QB-Id` header — keep it; it would have caught this bug.
 
 ## Deploy to Vercel
 
@@ -49,6 +190,32 @@ vercel env add SAVETRIX_PUBLIC_URL       # e.g. https://savetrix-mcp.vercel.app
 
 `SAVETRIX_PUBLIC_URL` **must exactly match** the deployed domain (it's the OAuth
 issuer). Optional: `SAVETRIX_API_URL`, `SAVETRIX_WEB_URL`.
+
+### Moving to a new domain without breaking existing connections
+
+Pointing `SAVETRIX_PUBLIC_URL` at a new domain while an old alias still resolves
+leaves the alias advertising the *new* host as its resource. A client that
+validates protected-resource metadata (RFC 9728 / the MCP auth spec) can reject
+that mismatch as "no MCP server found at the provided URL" — the same failure
+mode as commit `71abb07`.
+
+List the old hostname so it advertises itself instead:
+
+```bash
+vercel env add SAVETRIX_ALLOWED_HOSTS
+# e.g. old-project-name.vercel.app     (comma-separated, hostnames only)
+```
+
+Each allowlisted host then serves its own `issuer`, `authorization_endpoint`,
+`token_endpoint`, `registration_endpoint`, `resource`, the matching
+`resource_metadata` pointer on a 401, and upload links on its own origin.
+Anything *not* listed falls back to the canonical URL — the Host header is never
+trusted blindly, or a spoofed one could hand a client metadata pointing its
+`/token` calls at a domain you don't own.
+
+Tokens are host-independent (encrypted with `SAVETRIX_TOKEN_SECRET`), so
+sessions survive the switch. Once everyone has moved, drop the alias from
+`SAVETRIX_ALLOWED_HOSTS` and remove it in Vercel.
 
 Then deploy to production:
 
@@ -95,7 +262,7 @@ SAVETRIX_PORT=8791 node dist/index.js --remote
 ```
 
 Verified end-to-end locally: DCR → authorize → login (real Savetrix creds) →
-token → `initialize` → `tools/list` (32 tools) → `tools/call` returns data.
+token → `initialize` → `tools/list` (33 tools) → `tools/call` returns data.
 
 ## Notes
 

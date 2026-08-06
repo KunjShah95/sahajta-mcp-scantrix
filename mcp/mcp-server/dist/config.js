@@ -64,6 +64,10 @@ export const loadConfig = (argv) => {
         mcpApiKey: envStr("SAVETRIX_MCP_API_KEY"),
         configFilePath: args.configFilePath,
         publicUrl: envStr("SAVETRIX_PUBLIC_URL")?.replace(/\/$/, ""),
+        allowedHosts: (envStr("SAVETRIX_ALLOWED_HOSTS") ?? "")
+            .split(",")
+            .map((h) => h.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, ""))
+            .filter((h) => h !== ""),
         tokenSecret: envStr("SAVETRIX_TOKEN_SECRET"),
     };
 };

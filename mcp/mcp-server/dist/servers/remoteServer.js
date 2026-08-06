@@ -7,6 +7,17 @@ import { createClientForTokens } from "../client/savetrixClient.js";
 import { registerSavetrixTools } from "../tools/index.js";
 import { SavetrixOAuthProvider } from "../auth/provider.js";
 import { loginPage } from "../auth/loginPage.js";
+import { uploadPage } from "../auth/uploadPage.js";
+import { encryptToken, decryptToken } from "../auth/tokens.js";
+import { uploadInvoiceBytes, MAX_UPLOAD_BYTES } from "../client/invoices.js";
+/** How long a browser upload link stays valid — long enough to find the file. */
+const UPLOAD_TICKET_TTL = 60 * 30;
+/**
+ * Vercel caps a serverless function's request body at ~4.5 MB, so promising
+ * the API's full 20 MB there would just turn into an opaque 413. Advertise
+ * whichever ceiling actually applies.
+ */
+const maxBrowserUploadBytes = () => process.env.VERCEL ? 4 * 1024 * 1024 : MAX_UPLOAD_BYTES;
 /**
  * Builds the remote connector Express app: an OAuth 2.1 authorization server
  * (so Claude's "Add custom connector" browser flow works) plus the MCP
@@ -28,10 +39,59 @@ export const createRemoteApp = (config) => {
     // doc example is literally `.../mcp` -> `.../.well-known/oauth-protected-resource/mcp`.
     const resourceUrl = new URL("/mcp", issuerUrl);
     const provider = new SavetrixOAuthProvider(config);
+    // ── Host-aware identity (domain migrations) ──
+    // The canonical issuer is SAVETRIX_PUBLIC_URL, but a deployment can keep
+    // answering on an older alias while clients migrate. Serving the canonical
+    // host's metadata to a request that arrived on the alias means telling a
+    // client "the resource is <other origin>" — the RFC 9728 mismatch that a
+    // validating client rejects as "no MCP server found at the provided URL".
+    // So each allowlisted host advertises itself.
+    const allowed = new Set([issuerUrl.hostname.toLowerCase(), ...config.allowedHosts].filter(Boolean));
+    const baseUrlFor = (req) => {
+        const host = (req.hostname ?? "").toLowerCase();
+        if (!host || !allowed.has(host) || host === issuerUrl.hostname.toLowerCase()) {
+            return issuerUrl;
+        }
+        const url = new URL(issuerUrl.toString());
+        url.host = req.get("host") ?? host;
+        return url;
+    };
+    const resourceUrlFor = (req) => new URL("/mcp", baseUrlFor(req));
     const app = express();
     // One proxy hop (Vercel / most PaaS). Avoids the permissive-trust-proxy
     // error from the rate limiter that a bare `true` triggers.
     app.set("trust proxy", 1);
+    // Alias-host discovery. Registered ahead of mcpAuthRouter so it wins for a
+    // request on an allowlisted alias; on the canonical host these call next()
+    // and the SDK router serves the documents byte-for-byte as before.
+    const onAlias = (req) => baseUrlFor(req).hostname !== issuerUrl.hostname;
+    app.get("/.well-known/oauth-protected-resource/mcp", (req, res, next) => {
+        if (!onAlias(req))
+            return next();
+        const base = baseUrlFor(req);
+        res.status(200).json({
+            resource: new URL("/mcp", base).toString(),
+            authorization_servers: [base.toString()],
+            scopes_supported: ["mcp"],
+            resource_name: "Savetrix",
+        });
+    });
+    app.get("/.well-known/oauth-authorization-server", (req, res, next) => {
+        if (!onAlias(req))
+            return next();
+        const base = baseUrlFor(req).toString();
+        res.status(200).json({
+            issuer: base,
+            authorization_endpoint: new URL("/authorize", base).toString(),
+            response_types_supported: ["code"],
+            code_challenge_methods_supported: ["S256"],
+            token_endpoint: new URL("/token", base).toString(),
+            token_endpoint_auth_methods_supported: ["client_secret_post", "none"],
+            grant_types_supported: ["authorization_code", "refresh_token"],
+            scopes_supported: ["mcp"],
+            registration_endpoint: new URL("/register", base).toString(),
+        });
+    });
     // Standard OAuth endpoints: /authorize, /token, /register, and the
     // .well-known metadata documents clients use for discovery.
     app.use(mcpAuthRouter({
@@ -116,24 +176,53 @@ export const createRemoteApp = (config) => {
         }
     });
     // ── MCP endpoint (bearer-protected, one server per request = stateless) ──
-    const bearer = requireBearerAuth({
-        verifier: provider,
-        requiredScopes: ["mcp"],
-        resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(resourceUrl),
-    });
+    // Built per request so the 401's resource_metadata points at the host the
+    // client actually called, matching the documents served above.
+    const bearer = (req, res, next) => {
+        requireBearerAuth({
+            verifier: provider,
+            requiredScopes: ["mcp"],
+            resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(resourceUrlFor(req)),
+        })(req, res, next);
+    };
     const handleMcp = async (req, res) => {
         const extra = (req.auth?.extra ?? {});
-        if (!extra.st_at || !extra.st_rt) {
+        const { st_at: accessToken, st_rt: refreshToken } = extra;
+        if (!accessToken || !refreshToken) {
             res.status(401).json({ error: "invalid_token" });
             return;
         }
         const client = createClientForTokens(config, {
-            accessToken: extra.st_at,
-            refreshToken: extra.st_rt,
+            accessToken,
+            refreshToken,
             user: extra.user,
         });
         const server = new McpServer({ name: "savetrix-mcp-server", version: "1.0.0" });
-        registerSavetrixTools(server, client);
+        registerSavetrixTools(server, client, {
+            // Claude reaches this server from Anthropic's cloud and can never read a
+            // file off the user's device, so the only reliable transport for a local
+            // file is a browser upload. Mint a ticket that carries this request's
+            // already-verified Savetrix session — the link needs no second login.
+            createUploadLink: async () => {
+                // Snapshot whichever company this request resolved to (reflects an
+                // explicit qbConnectionId override from THIS call, if any — see
+                // applyQbOverride in tools/index.ts) so the eventual /upload POST,
+                // which happens on a totally separate request/client instance later,
+                // still lands in the right company instead of falling back to
+                // resolveQbId()'s "whichever the backend flags active" default.
+                const qbConnectionId = await client.resolveQbId();
+                const ticket = await encryptToken(config.tokenSecret, "upload", {
+                    st_at: accessToken,
+                    st_rt: refreshToken,
+                    email: extra.email,
+                    user: extra.user,
+                    qbConnectionId,
+                }, UPLOAD_TICKET_TTL);
+                // Keep the link on whichever host this session is connected to, so a
+                // client still on an alias isn't bounced to a different origin.
+                return new URL(`/upload?t=${encodeURIComponent(ticket)}`, baseUrlFor(req)).toString();
+            },
+        });
         const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
         res.on("close", () => {
             void transport.close();
@@ -145,6 +234,99 @@ export const createRemoteApp = (config) => {
     app.post("/mcp", bearer, express.json(), handleMcp);
     app.get("/mcp", bearer, handleMcp);
     app.delete("/mcp", bearer, handleMcp);
+    // ── Browser invoice upload (ticketed; no OAuth round-trip) ──
+    const readTicket = (raw) => decryptToken(config.tokenSecret, "upload", String(raw ?? ""));
+    app.get("/upload", async (req, res) => {
+        const raw = String(req.query.t ?? "");
+        if (!raw) {
+            res.status(400).send("Missing upload ticket.");
+            return;
+        }
+        try {
+            const ticket = await readTicket(raw);
+            res.status(200).type("html").send(uploadPage({
+                ticket: raw,
+                webUrl: config.webUrl,
+                maxBytes: maxBrowserUploadBytes(),
+                email: ticket.email,
+            }));
+        }
+        catch {
+            res
+                .status(400)
+                .send("This upload link has expired. Ask Claude for a new upload link.");
+        }
+    });
+    // The page sends the file as the raw request body (not multipart) so no
+    // multipart parser dependency is needed here.
+    app.post("/upload", express.raw({ type: "*/*", limit: maxBrowserUploadBytes() }), async (req, res) => {
+        let ticket;
+        try {
+            ticket = await readTicket(req.query.t);
+        }
+        catch {
+            res.status(401).json({ message: "This upload link has expired. Ask Claude for a new one." });
+            return;
+        }
+        // Normally express.raw() leaves a Buffer here. Some platforms (Vercel
+        // among them) may pre-read the request body before the Express app sees
+        // it, in which case req.body arrives already decoded — accept that too
+        // rather than reporting an empty upload.
+        let bytes;
+        if (Buffer.isBuffer(req.body)) {
+            bytes = req.body;
+        }
+        else if (typeof req.body === "string") {
+            bytes = Buffer.from(req.body, "binary");
+        }
+        else {
+            bytes = Buffer.alloc(0);
+        }
+        if (bytes.length === 0) {
+            res.status(400).json({ message: "No file data received." });
+            return;
+        }
+        let fileName = "invoice.pdf";
+        const headerName = req.get("x-file-name");
+        if (headerName) {
+            try {
+                fileName = decodeURIComponent(headerName);
+            }
+            catch {
+                fileName = headerName;
+            }
+        }
+        // Never let a client-supplied name escape into a path.
+        fileName = fileName.replace(/[/\\]/g, "_").slice(0, 200) || "invoice.pdf";
+        const contentType = (req.get("content-type") ?? "").split(";")[0].trim();
+        try {
+            const client = createClientForTokens(config, {
+                accessToken: ticket.st_at,
+                refreshToken: ticket.st_rt,
+                user: ticket.user,
+            });
+            // Restore the company that was active when the link was minted,
+            // rather than letting resolveQbId() re-derive a possibly different
+            // one on this separate request — see createUploadLink above.
+            if (ticket.qbConnectionId)
+                client.setActiveQbId(ticket.qbConnectionId);
+            const result = await uploadInvoiceBytes(client, {
+                bytes,
+                fileName,
+                mimeType: contentType || "application/octet-stream",
+            });
+            res.status(200).json({ ok: true, result });
+        }
+        catch (error) {
+            console.error("[savetrix-mcp] /upload error:", error instanceof Error ? error.message : error);
+            const status = error?.response?.status;
+            res.status(status === 401 ? 401 : 502).json({
+                message: status === 401
+                    ? "Your Scantrix session expired. Ask Claude for a new upload link."
+                    : "Scantrix could not accept that file. Please try again.",
+            });
+        }
+    });
     app.get("/healthz", (_req, res) => res.status(200).json({ ok: true }));
     return app;
 };

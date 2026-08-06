@@ -1,4 +1,26 @@
 import { z } from "zod";
+// This remote connector is stateless per request (a fresh SavetrixClient is
+// built for every /mcp call — see handleMcp in remoteServer.ts), so
+// savetrix_qb_set_active setting an in-memory activeQbId has zero effect on
+// the NEXT tool call: it just gets discarded and resolveQbId() re-derives
+// from whichever connection the backend itself flags "active" (a connection-
+// health concept, not "what the user is currently working on" — the same
+// reason the web app tracks the chosen company client-side in Redux instead
+// of asking the backend). Every QB-scoped tool below accepts this override so
+// the MODEL — which does have memory across tool calls in one conversation —
+// can carry the user's selection forward explicitly instead of relying on
+// server-side state that doesn't exist.
+const qbConnectionIdOverride = z
+    .string()
+    .min(1)
+    .optional()
+    .describe("Explicitly target this QuickBooks connection (from savetrix_qb_connections). " +
+    "Required on every call after switching companies with savetrix_qb_set_active — " +
+    "this stateless server cannot remember your selection between tool calls, so you " +
+    "must pass it yourself on every subsequent Savetrix tool call for the rest of this conversation.");
+// Shared empty-args-plus-override schema for QB-scoped tools that otherwise
+// take no parameters (status/list/sync calls).
+export const qbScopedSchema = z.object({ qbConnectionId: qbConnectionIdOverride });
 export const loginSchema = z.object({
     email: z.string().email(),
     password: z.string().min(1),
@@ -13,16 +35,37 @@ export const invoiceListSchema = z.object({
     page: z.number().int().min(1).default(1),
     limit: z.number().int().min(1).max(100).default(100),
     status: z.enum(["pending", "manual", "auto", "failed"]).optional(),
+    qbConnectionId: qbConnectionIdOverride,
 });
-export const invoiceIdSchema = z.object({ invoiceId: z.string().min(1) });
-export const invoiceUploadSchema = z.union([
-    z.object({ filePath: z.string().min(1) }),
-    z.object({
-        fileBase64: z.string().min(1),
-        fileName: z.string().min(1),
-        mimeType: z.string().min(1).optional(),
-    }),
-]);
+export const invoiceIdSchema = z.object({ invoiceId: z.string().min(1), qbConnectionId: qbConnectionIdOverride });
+// MUST stay a flat z.object with every field optional. A z.union here
+// serializes to a top-level `anyOf`, which is illegal for an MCP/Anthropic
+// tool input_schema ("must have type 'object' and not have oneOf/anyOf/allOf
+// at the top level"). The SDK does not reject it — it silently emits
+// `{"type":"object","properties":{}}`, i.e. a tool Claude sees as taking NO
+// arguments at all. That is exactly how remote uploads broke. Which fields
+// are required depends on the source, so that is enforced at runtime in
+// resolveUploadSource() instead of in the schema.
+export const invoiceUploadSchema = z.object({
+    fileUrl: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("Public https:// URL of the invoice. The server downloads it — best option for a remote connector."),
+    filePath: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("Absolute path on the machine running the server. Local/stdio installs only; never valid for a remote connector."),
+    fileBase64: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("Base64 file bytes. Only for very small files (<8 KB); larger payloads are rejected by the MCP client before they reach the server."),
+    fileName: z.string().min(1).optional().describe("File name, e.g. invoice.pdf. Required with fileBase64."),
+    mimeType: z.string().min(1).optional().describe("Overrides the content type guessed from the file extension."),
+    qbConnectionId: qbConnectionIdOverride,
+});
 export const lineItemSchema = z.object({
     description: z.string(),
     quantity: z.number(),
@@ -49,20 +92,24 @@ export const extractedDataSchema = z.object({
 export const invoiceUpdateSchema = z.object({
     invoiceId: z.string().min(1),
     extractedData: extractedDataSchema,
+    qbConnectionId: qbConnectionIdOverride,
 });
 export const postToQbSchema = z.object({
     invoiceId: z.string().min(1),
     vendorId: z.string().min(1),
     extractedData: extractedDataSchema,
     confirm: z.boolean(),
+    qbConnectionId: qbConnectionIdOverride,
 });
 export const rejectInvoiceSchema = z.object({
     invoiceId: z.string().min(1),
     reason: z.string().optional(),
     confirm: z.boolean(),
+    qbConnectionId: qbConnectionIdOverride,
 });
 export const vendorListSchema = z.object({
     status: z.enum(["active", "inactive"]).default("active"),
+    qbConnectionId: qbConnectionIdOverride,
 });
 export const vendorCreateSchema = z.object({
     displayName: z.string().min(1),
@@ -72,6 +119,7 @@ export const vendorCreateSchema = z.object({
     address: z.string().optional(),
     glAccountId: z.string().optional(),
     taxCodeId: z.string().optional(),
+    qbConnectionId: qbConnectionIdOverride,
 });
 export const vendorUpdateSchema = z.object({
     vendorId: z.string().min(1),
@@ -82,13 +130,19 @@ export const vendorUpdateSchema = z.object({
     address: z.string().optional(),
     glAccountId: z.string().optional(),
     taxCodeId: z.string().optional(),
+    qbConnectionId: qbConnectionIdOverride,
 });
-export const vendorIdSchema = z.object({ vendorId: z.string().min(1) });
-export const deactivateVendorSchema = z.object({ vendorId: z.string().min(1), confirm: z.boolean() });
+export const vendorIdSchema = z.object({ vendorId: z.string().min(1), qbConnectionId: qbConnectionIdOverride });
+export const deactivateVendorSchema = z.object({
+    vendorId: z.string().min(1),
+    confirm: z.boolean(),
+    qbConnectionId: qbConnectionIdOverride,
+});
 export const accountCreateSchema = z.object({
     name: z.string().min(1),
     accountType: z.string().min(1),
     accountSubType: z.string().optional(),
+    qbConnectionId: qbConnectionIdOverride,
 });
 export const setActiveSchema = z.object({ qbConnectionId: z.string().min(1) });
 export const disconnectSchema = z.object({ qbConnectionId: z.string().min(1), confirm: z.boolean() });
@@ -96,8 +150,13 @@ export const connectSchema = z.object({ redirectAfter: z.string().optional() });
 export const inviteMemberSchema = z.object({
     email: z.string().email(),
     role: z.enum(["admin", "accountant", "contributor"]),
+    qbConnectionId: qbConnectionIdOverride,
 });
-export const removeMemberSchema = z.object({ memberId: z.string().min(1), confirm: z.boolean() });
+export const removeMemberSchema = z.object({
+    memberId: z.string().min(1),
+    confirm: z.boolean(),
+    qbConnectionId: qbConnectionIdOverride,
+});
 export const choosePlanSchema = z.object({
     plan: z.enum(["standard", "enterprise"]),
     billingInterval: z.enum(["monthly", "yearly"]),

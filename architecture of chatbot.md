@@ -653,13 +653,123 @@ them; ask.
   `src/store/subscription/`), but per `README.md` it's currently **UI
   mockups only — no real billing is wired up**. Gating a real feature behind
   a mock paywall may or may not be intended; confirm before adding a gate.
-- **Should conversations persist across page reloads / devices?** Phase 1
-  as described is ephemeral (client-side only, cleared on logout/company
-  switch). Real persistence would need a new Savetrix backend endpoint to
-  store conversations server-side per user — out of scope for this repo
-  alone, and a call for whoever owns that backend.
+- ~~**Should conversations persist across page reloads / devices?**~~
+  **ANSWERED — see §10.** Phase 1 was ephemeral (client-side only, cleared on
+  logout/company switch). Chat history now persists server-side, in this repo,
+  without a Savetrix backend change.
 - **Rate limits / cost budget** — concrete numbers (requests/user/day, max
   tokens/response) should come from whoever owns the OpenAI billing, not be
   invented ad hoc.
 - **Phase 2 timing and re-indexing strategy** (§2) — explicitly needs
   backend-team input; don't start it solo.
+
+---
+
+## 10. Chat history (persisted conversations)
+
+Answers §9's persistence question. Phase 1's conversation lived in Redux only
+and vanished on reload, logout, or a company switch. Users can now browse,
+reopen, and delete their past conversations, and only ever their own.
+
+### 10.1 Why it is server-side, not localStorage
+
+The obvious implementation is a `localStorage` array filtered by the signed-in
+user's email. It was rejected, and any future variant of it should be too:
+
+- **The rule can't be enforced there.** "Only your own conversations" becomes a
+  `.filter()` running on the reader's own machine, over a single key holding
+  *every* account that used that browser. Anyone with devtools reads all of it,
+  and nothing clears it at logout.
+- **It isn't persistence in the sense asked for.** It's per-browser. Signing in
+  on a second device, or after a cache clear, shows an empty history.
+- **Financial content.** These transcripts quote invoice totals, vendor names,
+  and GL detail (§5) — the same data the rest of the app never keeps in plain
+  browser storage.
+
+### 10.2 Storage
+
+One JSON document per user in a **private Vercel Blob store**
+(`scantrix-chat-history`), at `chat-history/v1/<sha256(userId)>.json`.
+
+- Blob is the only durable store this repo can use without standing up new
+  infrastructure or a marketplace account (the MCP connector is deliberately
+  stateless — `mcp/mcp-server/src/auth/tokens.ts`). Private access means blobs
+  are unreachable by URL; every read goes through a route handler that has
+  already established who is asking.
+- The path is derived from the **verified** user id, never from request input,
+  so "read another user's history" has no expressible request shape. Hashing
+  keeps ids (and email-shaped ids) out of pathnames and logs.
+- One document per user makes listing a single read and saving a single write,
+  and makes the per-user caps trivially enforceable: 50 conversations, 200
+  messages each, 8k characters per message, 1 MB per document — oldest
+  conversations drop out first.
+- Reads pass `useCache: false`. Saves overwrite the same pathname, and cached
+  private reads can serve the previous version for up to 60s — long enough to
+  show a user a list missing the message they just sent.
+- Conditional writes (`ifMatch`) guard the read-modify-write, but Blob serves a
+  **weak** etag (`W/"…"`) once a document grows, and a weak validator can never
+  satisfy `If-Match`. Treat weak as "no usable precondition" — otherwise every
+  save silently 412s once a user's history gets big. The last retry writes
+  unconditionally: losing a concurrent tab's ordering beats losing the message
+  the user just sent.
+
+### 10.3 Identity — the whole security story
+
+`src/lib/chatHistory/identity.ts`. This repo holds no signing secret for
+Savetrix tokens (§4.2), so identity is established in two steps that must stay
+in this order:
+
+1. **Vouching** — call a backend endpoint that 401s on a bad token. A forged or
+   expired token cannot survive it, because we are not the ones judging it.
+2. **Subject** — read the user id out of the vouched-for token's own payload,
+   or straight from the profile response when the backend supplies one.
+
+Decoding a JWT payload without verifying its signature is only safe *because*
+of step 1: since the backend issued the token, its payload is authentic, and an
+attacker cannot mint one naming somebody else. If either step fails to produce
+an id, the routes fail closed with 503 — never a shared or guessed bucket.
+Verified identities are cached for 60s per instance, like §7.11's rate limiter.
+
+### 10.4 Routes
+
+`/api/chat/history` (GET list, POST save) and `/api/chat/history/[id]`
+(GET one, DELETE). All four take the same `Bearer` + `X-QB-Id` headers as
+`/api/chat` and start by calling `authorizeHistoryRequest`.
+
+- A conversation id is only ever looked up **inside the caller's own
+  document**, so another user's id is simply not found — and "not yours" and
+  "doesn't exist" return an identical 404, leaving no ownership oracle.
+- Nothing in the body is trusted: a `userId`/`userEmail` there is ignored, and
+  a `conversationId` that the caller doesn't own gets a freshly minted id
+  rather than writing into it.
+- Message shape is normalised server-side. Non-`user`/`assistant` roles are
+  dropped — a stored `system` turn would otherwise be replayed as history on
+  the next `/api/chat` call.
+- The list is filtered by the active `X-QB-Id` for relevance (§7.8), which is a
+  *scoping* filter layered on per-user isolation, not a substitute for it — a
+  QuickBooks company can be shared between teammates via the invite flow, and
+  their conversations still must not mix.
+
+### 10.5 Client
+
+`src/store/chat/chatApi.ts` (thunks) + `chatSlice.ts` + `ChatHistoryList.tsx`,
+mounted as a second view inside the existing `ChatPanel`.
+
+- Saving happens **once per completed turn**, from `handleSend`'s `finally` —
+  including the failure path, so a question whose answer errored is still in the
+  user's history. The tempting "save whenever `messages` changes" effect fires
+  on every streamed token, i.e. one write per token.
+- The server mints conversation ids; the client stores whatever comes back and
+  addresses later saves with it.
+- A failed save is deliberately silent in the UI: saving is a background effect
+  and must not cover the answer the user is reading.
+- Deletes leave the list alone until the server confirms, so a failed delete
+  can't show a conversation as gone while it still exists.
+
+### 10.6 Setup
+
+The store is already created and connected, so Vercel injects
+`BLOB_READ_WRITE_TOKEN` into all three environments; `vercel env pull` is all a
+new machine needs. See `.env.local.example` for the recreate-from-scratch
+command. `npm test` covers the isolation rules end to end against the real
+store and skips itself when no store credentials are present.

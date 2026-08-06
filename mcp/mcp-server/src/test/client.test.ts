@@ -12,7 +12,10 @@ import {
   unwrapOne,
   getPagination,
 } from "../client/unwrap.js";
-import { uploadInvoice } from "../client/invoices.js";
+import { uploadInvoice, resolveUploadSource } from "../client/invoices.js";
+import { getStatus, listConnections } from "../client/quickbooks.js";
+import { toJsonSchemaCompat } from "@modelcontextprotocol/sdk/server/zod-json-schema-compat.js";
+import { invoiceUploadSchema } from "../tools/schemas.js";
 
 const makeSession = async (): Promise<SessionStore> => {
   const dir = await mkdtemp(join(tmpdir(), "savetrix-client-"));
@@ -55,6 +58,69 @@ test("client attaches Bearer token and X-QB-Id headers", async () => {
     return [200, { data: { invoices: [], pagination: {} } }];
   });
   await client.api.get("/invoices");
+  mock.restore();
+});
+
+// Regression test for a real client-reported confusion: a stale Intuit
+// access token (normal — they live 1 hour and get refreshed transparently)
+// was being summarized by the model as "Access token expired... may fail
+// until reauthorized", which a non-technical user reads as a real error.
+// getStatus/listConnections must allowlist their output rather than pass the
+// backend's raw response straight through, so token/expiry fields never
+// reach the model in the first place, regardless of what shape the backend
+// actually returns them in.
+test("getStatus strips token/expiry fields, keeping only connected + realmId", async () => {
+  const instance = axios.create();
+  const mock = new MockAdapter(instance as never);
+  const client = new SavetrixClient({
+    baseURL: "https://api.test",
+    session: await makeSession(),
+    axiosInstance: instance as never,
+  });
+  client.setTokens("at", "rt");
+  mock.onGet("/quickbooks/status").reply(200, {
+    data: {
+      connected: true,
+      realmId: "9341457544400313",
+      accessTokenExpiresAt: "2026-08-02T00:00:00Z",
+      refreshTokenExpiresAt: "2026-11-10T00:00:00Z",
+      accessToken: "super-secret-intuit-token",
+    },
+  });
+  const status = await getStatus(client, "qb-1");
+  assert.deepEqual(status, { connected: true, realmId: "9341457544400313" });
+  mock.restore();
+});
+
+test("listConnections strips token/expiry fields from each connection", async () => {
+  const instance = axios.create();
+  const mock = new MockAdapter(instance as never);
+  const client = new SavetrixClient({
+    baseURL: "https://api.test",
+    session: await makeSession(),
+    axiosInstance: instance as never,
+  });
+  client.setTokens("at", "rt");
+  mock.onGet("/qb-connections").reply(200, {
+    data: {
+      connections: [
+        {
+          _id: "conn-1",
+          name: "Ontario Inc.",
+          realmId: "9341457544400313",
+          role: "admin",
+          status: "active",
+          createdAt: "2026-01-01T00:00:00Z",
+          accessTokenExpiresAt: "2026-08-02T00:00:00Z",
+          refreshToken: "super-secret-intuit-refresh-token",
+        },
+      ],
+    },
+  });
+  const connections = (await listConnections(client)) as unknown[];
+  assert.deepEqual(connections, [
+    { id: "conn-1", name: "Ontario Inc.", realmId: "9341457544400313", role: "admin", status: "active" },
+  ]);
   mock.restore();
 });
 
@@ -148,4 +214,66 @@ test("invoice upload accepts inline base64 when the MCP server cannot access the
 
   assert.deepEqual(result, { success: true });
   mock.restore();
+});
+
+// Regression guard for the bug that broke remote uploads: a z.union here
+// serializes to a top-level `anyOf`, which the MCP SDK silently degrades to
+// `{"type":"object","properties":{}}` — a tool Claude sees as taking no
+// arguments at all. Anthropic's API also rejects top-level anyOf outright.
+test("invoice upload tool schema is a flat object with real properties", async () => {
+  const json = toJsonSchemaCompat(invoiceUploadSchema, { strictUnions: true }) as {
+    type?: string;
+    anyOf?: unknown;
+    oneOf?: unknown;
+    allOf?: unknown;
+    properties?: Record<string, unknown>;
+  };
+  assert.equal(json.type, "object", "input_schema must be type=object at the root");
+  assert.equal(json.anyOf, undefined, "top-level anyOf is rejected by the Anthropic API");
+  assert.equal(json.oneOf, undefined);
+  assert.equal(json.allOf, undefined);
+  const props = Object.keys(json.properties ?? {}).sort();
+  assert.deepEqual(props, ["fileBase64", "fileName", "filePath", "fileUrl", "mimeType", "qbConnectionId"]);
+});
+
+test("resolveUploadSource requires exactly one source", async () => {
+  await assert.rejects(resolveUploadSource({}), /No file provided/);
+  await assert.rejects(
+    resolveUploadSource({ fileUrl: "https://x.test/a.pdf", filePath: "/tmp/a.pdf" }),
+    /only one of/,
+  );
+});
+
+test("resolveUploadSource rejects oversized inline base64 with actionable guidance", async () => {
+  await assert.rejects(
+    resolveUploadSource({
+      fileBase64: Buffer.alloc(9 * 1024, 1).toString("base64"),
+      fileName: "big.pdf",
+    }),
+    /savetrix_invoice_upload_link/,
+  );
+});
+
+test("resolveUploadSource refuses fileUrl aimed at internal hosts", async () => {
+  for (const url of [
+    "http://localhost:8000/x.pdf",
+    "http://127.0.0.1/x.pdf",
+    "http://169.254.169.254/latest/meta-data/",
+    "http://10.0.0.5/x.pdf",
+    "file:///etc/passwd",
+  ]) {
+    await assert.rejects(resolveUploadSource({ fileUrl: url }), /public host|http\(s\) URL/, url);
+  }
+});
+
+test("resolveUploadSource downloads fileUrl and infers name and type", async () => {
+  const scope = new MockAdapter(axios as never);
+  scope.onGet("https://files.test/bill-42.pdf").reply(200, Buffer.from("%PDF-1.7 bytes"), {
+    "content-type": "application/pdf",
+  });
+  const resolved = await resolveUploadSource({ fileUrl: "https://files.test/bill-42.pdf" });
+  assert.equal(resolved.fileName, "bill-42.pdf");
+  assert.equal(resolved.mimeType, "application/pdf");
+  assert.ok(resolved.bytes.length > 0);
+  scope.restore();
 });
