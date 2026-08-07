@@ -17,12 +17,28 @@ import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { RunnableToolFunctionWithParse } from "openai/lib/RunnableFunction";
 
+import { CONFIRM_MARKER } from "@/lib/chatbot/confirmMarker";
 import { chatToolSchemas } from "@/lib/chatbot/toolSchemas";
 import { buildSystemPrompt, CHAT_MODEL } from "@/lib/chatbot/systemPrompt";
 import { callTool, TOOL_NAMES } from "@/lib/chatbot/tools";
 
 const MAX_HISTORY_MESSAGES = 20;
 const MAX_OUTPUT_TOKENS = 1000;
+
+// The exact-phrase instruction behind CONFIRM_MARKER ("repeat this sentence
+// verbatim") turns out to sometimes make the model repeat ITSELF — confirmed
+// live: a single completion (no tool call, no second round involved) can
+// stream the same confirmation paragraph, or just the marker line, twice in
+// a row. Since a legitimate confirmation message should only ever end with
+// this sentence once, cutting everything after the first occurrence is a
+// safe, deterministic backstop regardless of why the repeat happened.
+function truncateAfterFirstConfirmMarker(text: string): string {
+  const firstEnd = text.indexOf(CONFIRM_MARKER);
+  if (firstEnd === -1) return text;
+  const secondStart = text.indexOf(CONFIRM_MARKER, firstEnd + CONFIRM_MARKER.length);
+  if (secondStart === -1) return text;
+  return text.slice(0, firstEnd + CONFIRM_MARKER.length);
+}
 const MAX_TOOL_ROUNDTRIPS = 6;
 
 interface ChatRequestMessage {
@@ -139,38 +155,31 @@ export async function POST(request: Request) {
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      // A tool-calling turn runs multiple completion rounds (see route's
-      // MAX_TOOL_ROUNDTRIPS), and a round can emit visible text alongside a
-      // tool call — e.g. round 2 asks the user something in text while also
-      // deciding to make another (often redundant) call. Streaming every
-      // round's text live means the user sees that superseded text AND the
-      // eventual real answer restating the same thing — a visible
-      // duplicate. Round 1 streams live as before (the common case: a plain
-      // answer, or a silent tool call with no text). Once any round in this
-      // turn has produced a tool call, later rounds' text is buffered
-      // instead of streamed live, and only flushed once a round turns out to
-      // be the final one (no tool_calls) — a round that also calls a tool
-      // gets its buffered text discarded, never shown.
-      let sawToolCall = false;
+      // Buffer each completion round's text instead of streaming it live, and
+      // only flush once a round turns out to be the final one (no
+      // tool_calls) — a round that also calls a tool gets its buffered text
+      // discarded, guarding against a round's text being superseded by a
+      // later, redundant tool-calling round (a multi-round turn can have a
+      // round that writes visible text alongside a further tool call).
+      //
+      // Separately — confirmed live, not hypothetical — a SINGLE completion
+      // with no tool call at all can still repeat itself: gpt-5.4-mini's
+      // "repeat this exact sentence" instruction (CONFIRM_MARKER) sometimes
+      // makes it stream the confirmation paragraph, or just the marker line,
+      // twice in a row within one round. truncateAfterFirstConfirmMarker
+      // catches that case at flush time regardless of round structure.
       let roundBuffer = "";
 
       runner.on("content", (delta) => {
-        if (sawToolCall) {
-          roundBuffer += delta;
-        } else {
-          controller.enqueue(encoder.encode(delta));
-        }
+        roundBuffer += delta;
       });
       runner.on("message", (message) => {
         if (message.role !== "assistant") return;
         if (message.tool_calls?.length) {
-          sawToolCall = true;
           roundBuffer = "";
           return;
         }
-        if (sawToolCall && roundBuffer) {
-          controller.enqueue(encoder.encode(roundBuffer));
-        }
+        if (roundBuffer) controller.enqueue(encoder.encode(truncateAfterFirstConfirmMarker(roundBuffer)));
         roundBuffer = "";
       });
       // Structural logging only — never log full message/tool payloads,
