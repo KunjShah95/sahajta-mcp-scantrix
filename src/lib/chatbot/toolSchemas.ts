@@ -92,4 +92,241 @@ export const chatToolSchemas: ChatCompletionFunctionTool[] = [
       parameters: { type: "object", properties: {} },
     },
   },
+  // ── Write: Invoice ─────────────────────────────────────────────────────
+  {
+    type: "function",
+    function: {
+      name: "update_invoice",
+      description:
+        "Patch extracted fields on a single invoice (vendor, amount, GL account, tax code, dates, description, line items). " +
+        "Does NOT post to QuickBooks — use post_invoice_to_qb for that. Pass only the fields you want to change. " +
+        "invoiceId comes from list_invoices or get_invoice_detail.",
+      parameters: {
+        type: "object",
+        properties: {
+          invoiceId: { type: "string", description: "The invoice's id, from a prior tool result." },
+          extractedData: {
+            type: "object",
+            description: "Fields to update. Only include the fields you want to change.",
+            properties: {
+              vendorName: { type: "string" },
+              currency: { type: "string" },
+              invoiceNumber: { type: "string" },
+              invoiceDate: { type: ["string", "null"] },
+              dueDate: { type: ["string", "null"] },
+              amountBeforeTax: { type: "number" },
+              taxAmount: { type: "number" },
+              totalAmount: { type: "number" },
+              glAccountId: { type: ["string", "null"] },
+              taxCodeId: { type: ["string", "null"] },
+              description: { type: ["string", "null"] },
+              vendorAddress: { type: ["string", "null"] },
+              lineItems: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    description: { type: "string" },
+                    quantity: { type: "number" },
+                    unitPrice: { type: "number" },
+                    amount: { type: "number" },
+                    glAccountId: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+        },
+        required: ["invoiceId", "extractedData"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "post_invoice_to_qb",
+      description:
+        "Post an approved invoice to QuickBooks (sets postedStatus to 'manual'). " +
+        "Before calling this, the model MUST describe exactly what it will do and wait for the user to confirm. " +
+        "The confirm field MUST be set to true only after the user explicitly agrees — otherwise the tool returns a confirmation-required message. " +
+        "invoiceId comes from list_invoices; vendorId comes from list_vendors.",
+      parameters: {
+        type: "object",
+        properties: {
+          invoiceId: { type: "string" },
+          vendorId: { type: "string" },
+          extractedData: {
+            type: "object",
+            properties: {
+              vendorName: { type: "string" },
+              currency: { type: "string" },
+              invoiceNumber: { type: "string" },
+              invoiceDate: { type: ["string", "null"] },
+              dueDate: { type: ["string", "null"] },
+              amountBeforeTax: { type: "number" },
+              taxAmount: { type: "number" },
+              totalAmount: { type: "number" },
+              glAccountId: { type: ["string", "null"] },
+              taxCodeId: { type: ["string", "null"] },
+              description: { type: ["string", "null"] },
+              vendorAddress: { type: ["string", "null"] },
+              lineItems: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    description: { type: "string" },
+                    quantity: { type: "number" },
+                    unitPrice: { type: "number" },
+                    amount: { type: "number" },
+                    glAccountId: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+          confirm: { type: "boolean", description: "Must be true — this action posts to QuickBooks and cannot be undone." },
+        },
+        required: ["invoiceId", "vendorId", "extractedData", "confirm"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reject_invoice",
+      description:
+        "Reject an invoice (sets postedStatus to 'failed') with an optional reason. " +
+        "Before calling this, the model MUST describe exactly what it will do and wait for the user to confirm. " +
+        "The confirm field MUST be set to true only after the user explicitly agrees.",
+      parameters: {
+        type: "object",
+        properties: {
+          invoiceId: { type: "string", description: "The invoice's id, from a prior tool result." },
+          reason: { type: "string", description: "Why this invoice is being rejected (e.g. 'duplicate', 'bad scan')." },
+          confirm: { type: "boolean", description: "Must be true — this action rejects an invoice and cannot be undone." },
+        },
+        required: ["invoiceId", "confirm"],
+      },
+    },
+  },
+  // ── Write: Vendor ──────────────────────────────────────────────────────
+  {
+    type: "function",
+    function: {
+      name: "create_vendor",
+      description:
+        "Create a new vendor in QuickBooks. Pass the vendor's display name and currency (required), " +
+        "and optionally email, phone, address, default GL account, and default tax code. " +
+        "The model should fetch list_gl_accounts and list_tax_codes first so it can map the user's " +
+        "free-text account/code names to actual ids.",
+      parameters: {
+        type: "object",
+        properties: {
+          displayName: { type: "string" },
+          currency: { type: "string", description: "Currency code, e.g. 'USD'." },
+          email: { type: "string" },
+          phone: { type: "string" },
+          address: { type: "string" },
+          glAccountId: { type: "string", description: "Optional default GL account id, from list_gl_accounts." },
+          taxCodeId: { type: "string", description: "Optional default tax code id, from list_tax_codes." },
+        },
+        required: ["displayName", "currency"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_vendor",
+      description:
+        "Update an existing vendor's email, phone, address, currency, default GL account, or default tax code. " +
+        "Pass only the fields you want to change. vendorId comes from list_vendors.",
+      parameters: {
+        type: "object",
+        properties: {
+          vendorId: { type: "string" },
+          displayName: { type: "string" },
+          currency: { type: "string" },
+          email: { type: "string" },
+          phone: { type: "string" },
+          address: { type: "string" },
+          glAccountId: { type: "string" },
+          taxCodeId: { type: "string" },
+        },
+        required: ["vendorId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "deactivate_vendor",
+      description:
+        "Deactivate (soft-delete) a vendor so it no longer appears in active lists. " +
+        "Before calling this, the model MUST describe exactly what it will do and wait for the user to confirm. " +
+        "The confirm field MUST be set to true only after the user explicitly agrees.",
+      parameters: {
+        type: "object",
+        properties: {
+          vendorId: { type: "string", description: "The vendor's id, from a prior tool result." },
+          confirm: { type: "boolean", description: "Must be true — this action deactivates a vendor." },
+        },
+        required: ["vendorId", "confirm"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reactivate_vendor",
+      description:
+        "Bring a previously deactivated vendor back as active. vendorId comes from list_vendors with status='inactive'.",
+      parameters: {
+        type: "object",
+        properties: {
+          vendorId: { type: "string", description: "The vendor's id, from a prior tool result." },
+        },
+        required: ["vendorId"],
+      },
+    },
+  },
+  // ── Write: GL Account ──────────────────────────────────────────────────
+  {
+    type: "function",
+    function: {
+      name: "create_gl_account",
+      description:
+        "Create a new GL (general ledger) account in QuickBooks — e.g. a new expense category. " +
+        "Pass the account name, account type (e.g. 'Expense'), and optionally an account sub-type.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "The account name, e.g. 'Office Supplies'." },
+          accountType: { type: "string", description: "QuickBooks account type, e.g. 'Expense', 'Bank', 'Accounts Payable'." },
+          accountSubType: { type: "string", description: "Optional QuickBooks account sub-type, e.g. 'Supplies'." },
+        },
+        required: ["name", "accountType"],
+      },
+    },
+  },
+  // ── Write: Sync ────────────────────────────────────────────────────────
+  {
+    type: "function",
+    function: {
+      name: "sync_accounts",
+      description:
+        "Pull the latest GL accounts from QuickBooks into the app. Use when the user wants to refresh their account list after adding one in QuickBooks directly.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "sync_tax_codes",
+      description:
+        "Pull the latest tax codes from QuickBooks into the app. Use when the user wants to refresh their tax code list after adding one in QuickBooks directly.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
 ];
