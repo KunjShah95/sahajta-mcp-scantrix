@@ -1,14 +1,16 @@
 "use client";
 
-import { ArrowLeft, History, Plus, Puzzle, Send, X } from "lucide-react";
+import { ArrowLeft, History, Plus, Puzzle, Send, Sparkles, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { ChatHistoryList } from "@/components/chatbot/ChatHistoryList";
 import { ChatMessage } from "@/components/chatbot/ChatMessage";
+import { ChatQuickActions } from "@/components/chatbot/ChatQuickActions";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { CONFIRM_MARKER } from "@/lib/chatbot/confirmMarker";
 import { confirmDialog } from "@/lib/dialogManager";
 import { SESSION_EXPIRED, sessionEmitter } from "@/lib/sessionManager";
 import { deleteConversation, fetchConversations, openConversation, saveCurrentConversation } from "@/store/chat/chatApi";
@@ -46,8 +48,19 @@ export function ChatPanel({ companyName, onClose }: { companyName?: string; onCl
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // sendText() can be re-invoked from handlePendingConfirmation() well after
+  // the render that created its closure (it awaits a real user click on the
+  // confirm dialog) — reading `messages` straight from that stale closure
+  // would build history missing the very turn that's still in flight. This
+  // ref always holds the latest committed messages for that re-entrant call.
+  const messagesRef = useRef(messages);
 
   const streaming = status === "streaming";
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -69,16 +82,16 @@ export function ChatPanel({ companyName, onClose }: { companyName?: string; onCl
     if (view === "history") loadHistory();
   }, [view, loadHistory]);
 
-  const handleSend = async () => {
-    const text = input.trim();
+  const sendText = async (text: string) => {
     if (!text || streaming || !accessToken || !qbConnectionId) return;
 
-    const history = messages.map((m) => ({ role: m.role, content: m.content }));
+    const history = messagesRef.current.map((m) => ({ role: m.role, content: m.content }));
     setInput("");
     dispatch(sendMessage({ id: newMessageId(), role: "user", content: text }));
     const assistantId = newMessageId();
     dispatch(startAssistantMessage({ id: assistantId }));
 
+    let assistantText = "";
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -106,10 +119,14 @@ export function ChatPanel({ companyName, onClose }: { companyName?: string; onCl
         const { done, value } = await reader.read();
         if (done) break;
         const delta = decoder.decode(value, { stream: true });
-        if (delta) dispatch(appendAssistantChunk({ id: assistantId, delta }));
+        if (delta) {
+          assistantText += delta;
+          dispatch(appendAssistantChunk({ id: assistantId, delta }));
+        }
       }
 
       dispatch(streamCompleted());
+      if (assistantText.includes(CONFIRM_MARKER)) void handlePendingConfirmation(assistantText);
     } catch (err) {
       dispatch(streamFailed(err instanceof Error ? err.message : "Something went wrong. Please try again."));
     } finally {
@@ -123,6 +140,39 @@ export function ChatPanel({ companyName, onClose }: { companyName?: string; onCl
       // background effect and must never block or replace the answer on screen.
       dispatch(saveCurrentConversation());
     }
+  };
+
+  // The model paraphrases its own explanation of a pending destructive action,
+  // but is instructed (systemPrompt.ts) to always end that explanation with
+  // CONFIRM_MARKER verbatim — that's the deterministic signal sendText() above
+  // watches for. Surfacing it as a real confirmDialog(), instead of leaving
+  // the user to notice the sentence and type "yes" themselves, is the whole
+  // point: a tap they can trust beats a chat reply they have to get right.
+  const handlePendingConfirmation = async (assistantText: string) => {
+    const description = assistantText.replace(CONFIRM_MARKER, "").trim();
+    const confirmed = await confirmDialog({
+      title: "Confirm this action",
+      message: description || "This action can't be undone.",
+      confirmLabel: "Yes, proceed",
+      cancelLabel: "Cancel",
+      tone: "destructive",
+    });
+    if (confirmed) sendText("Yes, proceed.");
+  };
+
+  const handleSend = () => sendText(input.trim());
+
+  const handleQuickAction = (text: string) => {
+    setInput(text);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      const start = text.indexOf("[");
+      const end = text.indexOf("]");
+      if (start >= 0 && end > start) el.setSelectionRange(start, end + 1);
+      else el.setSelectionRange(text.length, text.length);
+    });
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -208,6 +258,7 @@ export function ChatPanel({ companyName, onClose }: { companyName?: string; onCl
 
         {view === "chat" && qbConnectionId && (
           <>
+            <ChatQuickActions disabled={streaming} onSelect={handleQuickAction} />
             {messages.length > 0 && (
               <button
                 type="button"
@@ -269,7 +320,9 @@ export function ChatPanel({ companyName, onClose }: { companyName?: string; onCl
           <div ref={listRef} className="flex-1 space-y-[var(--space-md)] overflow-y-auto px-[var(--space-lg)] py-[var(--space-md)]">
             {messages.length === 0 && (
               <p className="pt-[var(--space-xl)] text-center text-body-sm text-text-secondary">
-                Ask about invoices, vendors, GL accounts, or spend — for the currently active company only.
+                Ask me to look something up — or to make a change, like creating a vendor or posting an
+                invoice to QuickBooks. Tap <Sparkles size={14} strokeWidth={2} className="inline align-text-bottom" /> above
+                for examples. Answers only cover your currently active company.
               </p>
             )}
             {messages.map((message, index) => (
@@ -286,11 +339,12 @@ export function ChatPanel({ companyName, onClose }: { companyName?: string; onCl
           <div className="shrink-0 border-t border-border p-[var(--space-md)]">
             <div className="flex items-end gap-[var(--space-sm)]">
               <textarea
+                ref={textareaRef}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={handleKeyDown}
                 disabled={streaming || !accessToken}
-                placeholder="Ask about your invoices, vendors, spend…"
+                placeholder="Ask a question, or ask me to make a change…"
                 rows={2}
                 className="min-h-[44px] flex-1 resize-none rounded-md border border-border px-[var(--space-md)] py-[var(--space-sm)] text-body-sm text-text-primary outline-none focus:border-primary disabled:opacity-60"
               />

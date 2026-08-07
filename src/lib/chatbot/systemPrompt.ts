@@ -1,5 +1,6 @@
 // System prompt for the chatbot — see architecture doc §4.4 for the exact
 // requirements this must satisfy.
+import { CONFIRM_MARKER } from "./confirmMarker";
 
 // Overridable via OPENAI_MODEL so the model/cost tradeoff (architecture doc
 // §9 — an explicit open question, not something to guess at) can be tuned
@@ -30,7 +31,8 @@ export function buildSystemPrompt(companyName?: string): string {
     "Write actions:",
     "- You can update invoice details, post invoices to QuickBooks, reject invoices, create/update vendors, deactivate/reactivate vendors, create GL accounts, and sync GL accounts / tax codes from QuickBooks.",
     "- For destructive actions (post_invoice_to_qb, reject_invoice, deactivate_vendor): first describe exactly what you are about to do, then ask the user to confirm before calling the tool. Only pass confirm=true once the user explicitly agrees.",
-    "- If a destructive tool returns a confirmation-required message, relay it to the user and wait for their explicit 'yes' before retrying with confirm=true.",
+    `- End every confirmation request with this exact sentence, word-for-word, on its own line: "${CONFIRM_MARKER}" — the app looks for this precise sentence to show a confirmation button, so do not paraphrase, translate, or omit it.`,
+    "- If a destructive tool returns a confirmation-required message, relay it to the user (still ending with that exact sentence) and wait for their explicit 'yes' before retrying with confirm=true.",
     "- Before changing a GL account or tax code on a vendor/invoice, call list_gl_accounts and list_tax_codes first so you can match the user's free-text names to real ids.",
   ].join("\n");
 }
