@@ -139,8 +139,39 @@ export async function POST(request: Request) {
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
+      // A tool-calling turn runs multiple completion rounds (see route's
+      // MAX_TOOL_ROUNDTRIPS), and a round can emit visible text alongside a
+      // tool call — e.g. round 2 asks the user something in text while also
+      // deciding to make another (often redundant) call. Streaming every
+      // round's text live means the user sees that superseded text AND the
+      // eventual real answer restating the same thing — a visible
+      // duplicate. Round 1 streams live as before (the common case: a plain
+      // answer, or a silent tool call with no text). Once any round in this
+      // turn has produced a tool call, later rounds' text is buffered
+      // instead of streamed live, and only flushed once a round turns out to
+      // be the final one (no tool_calls) — a round that also calls a tool
+      // gets its buffered text discarded, never shown.
+      let sawToolCall = false;
+      let roundBuffer = "";
+
       runner.on("content", (delta) => {
-        controller.enqueue(encoder.encode(delta));
+        if (sawToolCall) {
+          roundBuffer += delta;
+        } else {
+          controller.enqueue(encoder.encode(delta));
+        }
+      });
+      runner.on("message", (message) => {
+        if (message.role !== "assistant") return;
+        if (message.tool_calls?.length) {
+          sawToolCall = true;
+          roundBuffer = "";
+          return;
+        }
+        if (sawToolCall && roundBuffer) {
+          controller.enqueue(encoder.encode(roundBuffer));
+        }
+        roundBuffer = "";
       });
       // Structural logging only — never log full message/tool payloads,
       // which can include invoice/banking data (architecture doc §5).

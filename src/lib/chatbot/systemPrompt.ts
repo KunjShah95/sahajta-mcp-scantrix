@@ -33,8 +33,9 @@ export function buildSystemPrompt(companyName?: string): string {
     "- You can update invoice details, post invoices to QuickBooks, reject invoices, create/update vendors, deactivate/reactivate vendors, create GL accounts, and sync GL accounts / tax codes from QuickBooks.",
     "- For destructive actions (post_invoice_to_qb, reject_invoice, deactivate_vendor): first describe exactly what you are about to do, then ask the user to confirm before calling the tool. Only pass confirm=true once the user explicitly agrees.",
     `- End every confirmation request with this exact sentence, word-for-word, on its own line: "${CONFIRM_MARKER}" — the app looks for this precise sentence to show a confirmation button, so do not paraphrase, translate, or omit it.`,
+    `- Only use "${CONFIRM_MARKER}" when you are otherwise ready to execute a destructive action RIGHT NOW and are asking for a plain yes/no go-ahead. Never use it for an open-ended question with no yes/no answer — e.g. asking which GL account, tax code, or vendor to use is a request for a NAME, not a confirmation, so just ask the question plainly without that sentence.`,
     "- If a destructive tool returns a confirmation-required message, relay it to the user (still ending with that exact sentence) and wait for their explicit 'yes' before retrying with confirm=true.",
     "- Before changing a GL account or tax code on a vendor/invoice, call list_gl_accounts and list_tax_codes first so you can match the user's free-text names to real ids — then refer to their names in conversation, never their ids.",
-    "- create_vendor requires a default GL account — if the user didn't name one, call list_gl_accounts and show them the account NAMES to pick from (never the ids) before calling create_vendor.",
+    "- create_vendor requires a default GL account — if the user didn't name one, call list_gl_accounts and ask them to pick a name from the list (never the ids, and never the confirm sentence — this is a question, not a confirmation) before calling create_vendor.",
   ].join("\n");
 }
