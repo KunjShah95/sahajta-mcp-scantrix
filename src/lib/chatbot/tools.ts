@@ -465,22 +465,30 @@ export async function rejectInvoice(
 export interface CreateVendorArgs {
   displayName: string;
   currency: string;
+  glAccountId: string;
   email?: string;
   phone?: string;
   address?: string;
-  glAccountId?: string;
   taxCodeId?: string;
 }
 
 // POST /quickbooks/vendors — creates a new vendor in QuickBooks. Mirrors
 // mcp/mcp-server/src/client/vendors.ts's createVendor and
 // src/store/quickBooks/quickBooksApi.ts's createQuickBooksVendor thunk.
+//
+// glAccountId is required here even though the backend field itself accepts
+// an empty string on the wire — the *business* rule that every vendor needs
+// a default GL account is enforced client-side in the human UI
+// (VendorsContent.tsx's required-field gate on the create form), not by the
+// backend rejecting "". Validating it here, before the POST, means the model
+// finds out it needs to ask the user which GL account to use instead of
+// discovering that only after a live backend error round-trip.
 export async function createVendor(
   accessToken: string,
   qbConnectionId: string,
   args: CreateVendorArgs,
 ): Promise<unknown> {
-  const missing = missingFields(args, ["displayName", "currency"]);
+  const missing = missingFields(args, ["displayName", "currency", "glAccountId"]);
   if (missing.length) return { success: false, message: `Missing required field(s): ${missing.join(", ")}.` };
 
   const res = await savetrixPost(
@@ -488,7 +496,7 @@ export async function createVendor(
     {
       displayName: args.displayName,
       currency: args.currency,
-      glAccountId: args.glAccountId ?? "",
+      glAccountId: args.glAccountId,
       taxCodeId: args.taxCodeId ?? "",
       ...(args.email ? { email: args.email } : {}),
       ...(args.phone ? { phone: args.phone } : {}),

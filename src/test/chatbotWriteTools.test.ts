@@ -269,6 +269,7 @@ describe("create_vendor (POST /quickbooks/vendors)", () => {
     const result = await createVendor(ACCESS_TOKEN, QB_CONNECTION_ID, {
       displayName: "Acme Ltd",
       currency: "USD",
+      glAccountId: "gl-1",
       email: "acme@example.com",
     });
 
@@ -276,7 +277,7 @@ describe("create_vendor (POST /quickbooks/vendors)", () => {
     assert.equal(path, "/quickbooks/vendors");
     assert.equal(body.displayName, "Acme Ltd");
     assert.equal(body.currency, "USD");
-    assert.equal(body.glAccountId, "");
+    assert.equal(body.glAccountId, "gl-1");
     assert.equal(body.taxCodeId, "");
     assert.equal(body.email, "acme@example.com");
     assert.equal(body.phone, undefined);
@@ -290,10 +291,23 @@ describe("create_vendor (POST /quickbooks/vendors)", () => {
     const result = (await createVendor(ACCESS_TOKEN, QB_CONNECTION_ID, {
       displayName: "",
       currency: "",
+      glAccountId: "gl-1",
     })) as ToolResult;
     assert.equal(result.success, false);
     assert.match(result.message ?? "", /displayName/);
     assert.match(result.message ?? "", /currency/);
+    assert.equal(stub.mock.calls.length, 0);
+  });
+
+  it("rejects a missing glAccountId before any network call — QuickBooks requires one for creation", async () => {
+    const stub = stubAxios("post", { data: {} });
+    const result = (await createVendor(ACCESS_TOKEN, QB_CONNECTION_ID, {
+      displayName: "Acme Ltd",
+      currency: "USD",
+      glAccountId: "",
+    })) as ToolResult;
+    assert.equal(result.success, false);
+    assert.match(result.message ?? "", /glAccountId/);
     assert.equal(stub.mock.calls.length, 0);
   });
 });
@@ -466,7 +480,7 @@ describe("callTool dispatch", () => {
 
     const result = await callTool(
       "create_vendor",
-      { displayName: "Test Co", currency: "USD" },
+      { displayName: "Test Co", currency: "USD", glAccountId: "gl-1" },
       ACCESS_TOKEN,
       QB_CONNECTION_ID,
     );

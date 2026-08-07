@@ -216,22 +216,22 @@ export const chatToolSchemas: ChatCompletionFunctionTool[] = [
     function: {
       name: "create_vendor",
       description:
-        "Create a new vendor in QuickBooks. Pass the vendor's display name and currency (required), " +
-        "and optionally email, phone, address, default GL account, and default tax code. " +
-        "The model should fetch list_gl_accounts and list_tax_codes first so it can map the user's " +
-        "free-text account/code names to actual ids.",
+        "Create a new vendor in QuickBooks. Requires display name, currency, AND a default GL account — " +
+        "QuickBooks rejects vendor creation without one, same rule the app's own 'add vendor' form enforces. " +
+        "Call list_gl_accounts first and ask the user which account to use if they didn't already say. " +
+        "Tax code, email, phone, and address are optional.",
       parameters: {
         type: "object",
         properties: {
           displayName: { type: "string" },
           currency: { type: "string", description: "Currency code, e.g. 'USD'." },
+          glAccountId: { type: "string", description: "Required default GL account id, from list_gl_accounts." },
           email: { type: "string" },
           phone: { type: "string" },
           address: { type: "string" },
-          glAccountId: { type: "string", description: "Optional default GL account id, from list_gl_accounts." },
           taxCodeId: { type: "string", description: "Optional default tax code id, from list_tax_codes." },
         },
-        required: ["displayName", "currency"],
+        required: ["displayName", "currency", "glAccountId"],
       },
     },
   },

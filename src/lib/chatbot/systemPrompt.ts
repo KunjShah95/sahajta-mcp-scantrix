@@ -34,5 +34,6 @@ export function buildSystemPrompt(companyName?: string): string {
     `- End every confirmation request with this exact sentence, word-for-word, on its own line: "${CONFIRM_MARKER}" — the app looks for this precise sentence to show a confirmation button, so do not paraphrase, translate, or omit it.`,
     "- If a destructive tool returns a confirmation-required message, relay it to the user (still ending with that exact sentence) and wait for their explicit 'yes' before retrying with confirm=true.",
     "- Before changing a GL account or tax code on a vendor/invoice, call list_gl_accounts and list_tax_codes first so you can match the user's free-text names to real ids.",
+    "- create_vendor requires a default GL account — if the user didn't name one, call list_gl_accounts and ask them to pick before calling create_vendor, instead of calling it without one and reporting the resulting failure.",
   ].join("\n");
 }
