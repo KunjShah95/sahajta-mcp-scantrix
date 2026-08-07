@@ -149,7 +149,11 @@ export function ChatPanel({ companyName, onClose }: { companyName?: string; onCl
   // the user to notice the sentence and type "yes" themselves, is the whole
   // point: a tap they can trust beats a chat reply they have to get right.
   const handlePendingConfirmation = async (assistantText: string) => {
-    const description = assistantText.replace(CONFIRM_MARKER, "").trim();
+    // Split/join (not a single .replace()) because the underlying multi-round
+    // tool-calling stream sometimes emits this exact sentence more than once
+    // in the same turn — seen live in production — and a plain .replace()
+    // only strips the first occurrence, leaving a stray copy in the dialog.
+    const description = assistantText.split(CONFIRM_MARKER).join("").replace(/\n{3,}/g, "\n\n").trim();
     const confirmed = await confirmDialog({
       title: "Confirm this action",
       message: description || "This action can't be undone.",
