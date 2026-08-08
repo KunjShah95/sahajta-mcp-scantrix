@@ -1,54 +1,28 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Info, XCircle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import {
-  CONFIRM_REQUEST,
-  ConfirmRequest,
-  TOAST_REQUEST,
-  ToastRequest,
-  dialogEmitter,
-} from "@/lib/dialogManager";
+import { CONFIRM_REQUEST, ConfirmRequest, dialogEmitter } from "@/lib/dialogManager";
 import { Button } from "@/components/ui/Button";
-
-const TOAST_DURATION_MS = 4000;
-
-const TOAST_ICON = {
-  success: CheckCircle2,
-  error: XCircle,
-  info: Info,
-} as const;
-
-const TOAST_ICON_CLASS = {
-  success: "text-success",
-  error: "text-error",
-  info: "text-trust-navy",
-} as const;
 
 // Single global subscriber for src/lib/dialogManager.ts's emitter — mounted
 // once in Providers so every route (including auth pages) can call
-// confirmDialog()/showToast() from a plain event handler with no context
-// wiring at the call site. Replaces every window.alert/window.confirm in
-// the app; see DESIGN_ASSUMPTIONS.md D1.3.
+// confirmDialog() from a plain event handler with no context wiring at the
+// call site. Replaces window.confirm; see DESIGN_ASSUMPTIONS.md D1.3.
+// showToast() is handled separately by NotificationBell (preview bubble +
+// dropdown history) — this host used to also render a bottom-corner toast
+// for the same event, which meant every showToast() call showed up twice on
+// screen at once; that duplicate rendering was removed here.
 export function DialogHost() {
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
-  const [toasts, setToasts] = useState<ToastRequest[]>([]);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const onConfirm = (request: ConfirmRequest) => setConfirmRequest(request);
-    const onToast = (request: ToastRequest) => {
-      setToasts((prev) => [...prev, request]);
-      setTimeout(() => {
-        setToasts((prev) => prev.filter((t) => t.id !== request.id));
-      }, TOAST_DURATION_MS);
-    };
     dialogEmitter.on(CONFIRM_REQUEST, onConfirm);
-    dialogEmitter.on(TOAST_REQUEST, onToast);
     return () => {
       dialogEmitter.off(CONFIRM_REQUEST, onConfirm);
-      dialogEmitter.off(TOAST_REQUEST, onToast);
     };
   }, []);
 
@@ -109,23 +83,6 @@ export function DialogHost() {
           </div>
         </div>
       )}
-
-      <div className="fixed bottom-[var(--space-lg)] left-[var(--space-lg)] right-[var(--space-lg)] z-[100] flex flex-col gap-[var(--space-sm)] lg:left-auto lg:w-full lg:max-w-sm">
-        {toasts.map((toast) => {
-          const Icon = TOAST_ICON[toast.tone];
-          return (
-            <div
-              key={toast.id}
-              role="status"
-              aria-live="polite"
-              className="flex items-start gap-[var(--space-sm)] rounded-lg border border-border bg-white p-[var(--space-md)] shadow-xl"
-            >
-              <Icon size={18} strokeWidth={2} className={`mt-0.5 shrink-0 ${TOAST_ICON_CLASS[toast.tone]}`} />
-              <p className="text-body-sm font-medium text-text-primary">{toast.message}</p>
-            </div>
-          );
-        })}
-      </div>
     </>
   );
 }

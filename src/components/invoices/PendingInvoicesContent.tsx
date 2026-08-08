@@ -1,35 +1,26 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ArrowRight, CheckCircle2, Info, RefreshCw } from "lucide-react";
-import { useEffect } from "react";
+import { ChevronRight, FileX2, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { getInvoices } from "@/store/invoice/invoiceApi";
 import { setSelectedInvoice } from "@/store/invoice/invoiceSlice";
 import { clearCreatedVendor, clearSelectedVendor } from "@/store/vendor/vendorSlice";
 import type { InvoiceRecord } from "@/store/invoice/invoiceSlice";
-import { translateInvoiceReason } from "@/lib/invoiceDisplay";
+import {
+  INVOICE_STATUS_THEME,
+  getInvoiceAmount,
+  getInvoicePostedDate,
+  getInvoiceTitle,
+  translateInvoiceReason,
+} from "@/lib/invoiceDisplay";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { SkeletonListRows } from "@/components/ui/Skeleton";
+import { SelectedInvoiceCard, vendorInitials } from "@/components/invoices/SelectedInvoiceCard";
 
-function getInvoiceTitle(invoice: InvoiceRecord): string {
-  const vendor = invoice.extractedData?.vendorName;
-  if (vendor) return vendor;
-  return invoice.file?.originalName?.replace(/\.pdf$/i, "").replace(/%20/g, " ") || "Unknown Vendor";
-}
-
-function getInvoiceNumber(invoice: InvoiceRecord): string | null {
-  const num = invoice.extractedData?.invoiceNumber;
-  return num ? `#${num}` : null;
-}
-
-function getInvoiceAmount(invoice: InvoiceRecord): string | null {
-  const amount = invoice.extractedData?.totalAmount;
-  const currency = invoice.extractedData?.currency || "";
-  if (!amount) return null;
-  return `${currency} ${amount}`;
-}
+const PENDING_THEME = INVOICE_STATUS_THEME.pending;
 
 // Show only the single most important issue — reason first, then missing fields.
 function getPrimaryIssue(invoice: InvoiceRecord): string | null {
@@ -43,12 +34,22 @@ function getPrimaryIssue(invoice: InvoiceRecord): string | null {
   return null;
 }
 
+// Same table + selected-invoice-panel format as InvoiceListContent, scoped to
+// pendingInvoices only and stripped of what doesn't apply here: no stat
+// tiles (this list is a single status, a dollar total wouldn't mean much),
+// no search/sort/status/vendor/currency filter bar, and no
+// OutcomeMixCard/TopVendorsCard default sidebar — just the list and, once a
+// row is selected, its detail panel.
 export function PendingInvoicesContent() {
   const dispatch = useAppDispatch();
   const router = useRouter();
 
   const { pendingInvoices, loading, error } = useAppSelector((state) => state.invoice);
   const qbConnectionId = useAppSelector((state) => state.quickBooks.qbConnectionId);
+  const glAccounts = useAppSelector((state) => state.quickBooks.accounts);
+  const taxCodes = useAppSelector((state) => state.quickBooks.taxCodes);
+
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
 
   const refetch = () => {
     dispatch(getInvoices());
@@ -65,100 +66,163 @@ export function PendingInvoicesContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qbConnectionId]);
 
-  const handleOpenInvoice = (invoice: InvoiceRecord) => {
+  // Pending invoices always go to the editable review screen, never the
+  // read-only detail page — matches handleOpenInvoice's own special-case for
+  // "pending" elsewhere, except here it's the only case since this list is
+  // pending-only.
+  const handleOpenFullDetails = (invoice: InvoiceRecord) => {
     dispatch(clearSelectedVendor());
     dispatch(clearCreatedVendor());
     dispatch(setSelectedInvoice(invoice));
     router.push(`/invoices/${invoice._id}/review`);
   };
 
+  const selectedInvoice = selectedInvoiceId
+    ? pendingInvoices.find((invoice) => invoice._id === selectedInvoiceId) || null
+    : null;
+
   const total = pendingInvoices.length;
 
   return (
     <div>
-      <div className="flex items-center gap-[var(--space-md)] bg-primary px-[var(--space-lg)] py-[var(--space-md)]">
-        <div className="flex-1">
-          <h1 className="text-h3 font-extrabold text-white">Pending Reviews</h1>
-          <p className="mt-[2px] text-body-sm text-white/80">
-            {total} invoice{total !== 1 ? "s" : ""} need attention
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={refetch}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-white lg:h-9 lg:w-9"
-          aria-label="Refresh"
-        >
-          <RefreshCw size={18} strokeWidth={2} />
-        </button>
-      </div>
-
-      <div className="mx-auto max-w-2xl p-[var(--space-lg)]">
-        {loading ? (
-          <SkeletonListRows count={4} className="py-[var(--space-sm)]" />
-        ) : error ? (
-          <ErrorState message="Couldn't load pending invoices." onRetry={refetch} />
-        ) : pendingInvoices.length === 0 ? (
-          <div className="mt-[var(--space-xl)] flex flex-col items-center px-[var(--space-lg)] text-center">
-            <span className="mb-[var(--space-md)] flex h-18 w-18 items-center justify-center rounded-full bg-primary/10">
-              <CheckCircle2 size={32} strokeWidth={1.75} className="text-primary" />
-            </span>
-            <p className="text-h3 font-extrabold text-text-primary">All caught up</p>
-            <p className="mt-[var(--space-sm)] text-body-sm text-text-secondary">
-              No pending invoices right now. New ones will appear here automatically.
+      <div className="mx-auto max-w-6xl p-[var(--space-lg)]">
+        {/* Ported from VendorsContent's page heading — plain h1 + subtitle +
+            right-aligned action button, instead of this screen's previous
+            full-bleed colored banner. */}
+        <div className="flex items-center justify-between gap-[var(--space-md)]">
+          <div className="min-w-0">
+            <h1 className="text-h2 font-bold text-trust-navy">Pending Reviews</h1>
+            <p className="mt-[var(--space-xs)] text-body-sm text-text-secondary">
+              {total} invoice{total !== 1 ? "s" : ""} need attention
             </p>
-            <button
-              type="button"
-              onClick={refetch}
-              className="mt-[var(--space-lg)] flex items-center gap-[var(--space-xs)] rounded-md border-2 border-primary px-[var(--space-lg)] py-[var(--space-sm)] font-bold text-primary"
-            >
-              <RefreshCw size={16} strokeWidth={2.25} />
-              Refresh
-            </button>
           </div>
-        ) : (
-          <div className="flex flex-col gap-[var(--space-sm)]">
-            {pendingInvoices.map((invoice) => {
-              const invoiceNumber = getInvoiceNumber(invoice);
-              const amount = getInvoiceAmount(invoice);
-              const issue = getPrimaryIssue(invoice);
-              return (
-                <button
-                  key={invoice._id}
-                  type="button"
-                  onClick={() => handleOpenInvoice(invoice)}
-                  className="overflow-hidden rounded-lg border border-border bg-white text-left shadow-sm"
-                >
-                  <div className="p-[var(--space-md)]">
-                    <div className="flex items-center justify-between gap-[var(--space-sm)]">
-                      <p className="truncate font-bold text-text-primary">{getInvoiceTitle(invoice)}</p>
-                      <span className="shrink-0 rounded-md bg-[#EEF6FF] px-[var(--space-sm)] py-[2px] text-caption font-bold text-[#3B82F6]">
-                        PENDING
+          <button
+            type="button"
+            onClick={refetch}
+            aria-label="Refresh"
+            title="Refresh"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border bg-white text-trust-navy transition-opacity hover:bg-background-alt"
+          >
+            <RefreshCw size={18} strokeWidth={2.25} />
+          </button>
+        </div>
+
+        <div className="mt-[var(--space-lg)] grid gap-[var(--space-lg)] lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
+          <div className="rounded-lg border border-border bg-white">
+            {!loading && !error && pendingInvoices.length > 0 && (
+              <div className="hidden gap-[var(--space-sm)] px-[var(--space-md)] pb-[var(--space-sm)] pt-[var(--space-md)] text-caption font-bold uppercase tracking-wide text-text-secondary lg:grid lg:grid-cols-[40px_2fr_1fr_1fr_1fr_24px]">
+                <span />
+                <span>Vendor / Invoice</span>
+                <span>Received</span>
+                <span>Status</span>
+                <span className="text-right">Amount</span>
+                <span />
+              </div>
+            )}
+
+            {loading ? (
+              <div className="p-[var(--space-md)]">
+                <SkeletonListRows count={4} />
+              </div>
+            ) : error ? (
+              <div className="p-[var(--space-md)]">
+                <ErrorState message="Couldn't load pending invoices." onRetry={refetch} />
+              </div>
+            ) : pendingInvoices.length === 0 ? (
+              <div className="flex flex-col items-center py-[var(--space-xl)] text-center">
+                <span className="mb-[var(--space-md)] flex h-24 w-24 items-center justify-center rounded-full bg-background-alt">
+                  <FileX2 size={40} strokeWidth={1.5} className="text-text-secondary" />
+                </span>
+                <p className="text-h3 font-extrabold text-text-primary">All caught up</p>
+                <p className="mt-[var(--space-xs)] max-w-sm text-body-sm text-text-secondary">
+                  No pending invoices right now. New ones will appear here automatically.
+                </p>
+              </div>
+            ) : (
+              <div>
+                {pendingInvoices.map((invoice) => {
+                  const issue = getPrimaryIssue(invoice);
+                  const confidence =
+                    invoice.confidenceScore != null ? `${Math.round(Number(invoice.confidenceScore))}%` : null;
+                  const isSelected = invoice._id === selectedInvoiceId;
+                  return (
+                    <button
+                      key={invoice._id}
+                      type="button"
+                      onClick={() => setSelectedInvoiceId(invoice._id)}
+                      className={`flex w-full items-start gap-[var(--space-sm)] border-b border-border px-[var(--space-md)] py-[var(--space-sm)] text-left last:border-b-0 lg:grid lg:grid-cols-[40px_2fr_1fr_1fr_1fr_24px] lg:items-center ${
+                        isSelected ? "bg-primary-50" : "hover:bg-background-alt"
+                      }`}
+                    >
+                      <span
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-caption font-bold ${PENDING_THEME.cardBgClass} ${PENDING_THEME.accentTextClass}`}
+                      >
+                        {vendorInitials(invoice)}
                       </span>
-                    </div>
-                    <div className="mt-[var(--space-xs)] flex items-center gap-[var(--space-xs)] text-body-sm font-semibold text-text-secondary">
-                      {invoiceNumber && <span>{invoiceNumber}</span>}
-                      {invoiceNumber && amount && <span className="text-border">&middot;</span>}
-                      {amount ? <span>{amount}</span> : <span className="italic text-text-secondary/70">Amount not extracted</span>}
-                    </div>
-                    {issue && (
-                      <div className="mt-[var(--space-sm)] flex items-start gap-[var(--space-xs)] rounded-md border border-[#FDE68A] bg-[#FFFBEB] px-[var(--space-sm)] py-[var(--space-xs)]">
-                        <Info size={14} strokeWidth={2.25} className="mt-0.5 shrink-0 text-[#B45309]" />
-                        <span className="text-caption font-semibold text-[#92400E]">{issue}</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between border-t border-[#F3F3F3] bg-[#FAFAFA] px-[var(--space-md)] py-[var(--space-sm)]">
-                    <span className="text-body-sm font-bold text-primary">Review Invoice</span>
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <ArrowRight size={16} strokeWidth={2.25} />
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-semibold text-text-primary">
+                          {getInvoiceTitle(invoice)}
+                        </span>
+                        {issue ? (
+                          <span className="block truncate text-caption text-error">{issue}</span>
+                        ) : confidence ? (
+                          <span className="block truncate text-caption text-text-secondary">
+                            {confidence} confidence
+                          </span>
+                        ) : null}
+                        <span className="mt-[var(--space-xs)] flex flex-wrap items-center gap-x-[var(--space-sm)] gap-y-[2px] lg:hidden">
+                          <span
+                            className={`inline-flex w-fit items-center rounded-pill px-[var(--space-sm)] py-[2px] text-caption font-bold ${PENDING_THEME.badgeClass}`}
+                          >
+                            {PENDING_THEME.label}
+                          </span>
+                          <span className="text-caption text-text-secondary">{getInvoicePostedDate(invoice)}</span>
+                          <span className="ml-auto font-bold text-text-primary">{getInvoiceAmount(invoice)}</span>
+                        </span>
+                      </span>
+                      <span className="hidden text-body-sm text-text-secondary lg:block">
+                        {getInvoicePostedDate(invoice)}
+                      </span>
+                      <span className="hidden lg:block">
+                        <span
+                          className={`inline-flex w-fit items-center rounded-pill px-[var(--space-sm)] py-[2px] text-caption font-bold ${PENDING_THEME.badgeClass}`}
+                        >
+                          {PENDING_THEME.label}
+                        </span>
+                      </span>
+                      <span className="hidden text-right font-bold text-text-primary lg:block">
+                        {getInvoiceAmount(invoice)}
+                      </span>
+                      <ChevronRight
+                        size={18}
+                        strokeWidth={2}
+                        className="mt-[2px] shrink-0 justify-self-end text-text-secondary lg:mt-0"
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
+
+          <aside className="flex flex-col gap-[var(--space-md)]">
+            {selectedInvoice ? (
+              <SelectedInvoiceCard
+                invoice={selectedInvoice}
+                theme={PENDING_THEME}
+                glAccounts={glAccounts}
+                taxCodes={taxCodes}
+                issueMessage={getPrimaryIssue(selectedInvoice) ?? undefined}
+                onViewFullDetails={() => handleOpenFullDetails(selectedInvoice)}
+                onClose={() => setSelectedInvoiceId(null)}
+              />
+            ) : (
+              <div className="hidden items-center justify-center rounded-lg border border-dashed border-border p-[var(--space-lg)] text-center text-body-sm text-text-secondary lg:flex">
+                Select an invoice to preview its details.
+              </div>
+            )}
+          </aside>
+        </div>
       </div>
     </div>
   );

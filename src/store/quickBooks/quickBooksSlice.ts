@@ -69,6 +69,7 @@ interface QuickBooksState {
   statusError: string | null;
   autoPostEnabled: boolean;
   lineItemWiseEnabled: boolean;
+  attachInvoiceCopyEnabled: boolean;
   vendors: Vendor[];
   vendorsLoading: boolean;
   vendorsError: string | null;
@@ -91,6 +92,9 @@ const initialState: QuickBooksState = {
   // these settings — see qb_connection.model.js.
   autoPostEnabled: true,
   lineItemWiseEnabled: true,
+  // Defaults on — attaching the scanned invoice copy to the QuickBooks bill
+  // is the existing behavior; this is an opt-out, not an opt-in.
+  attachInvoiceCopyEnabled: true,
   vendors: [],
   vendorsLoading: false,
   vendorsError: null,
@@ -194,6 +198,7 @@ const quickBooksSlice = createSlice({
         state.realmId = qbData?.realmId ?? "";
         state.autoPostEnabled = qbData?.autoPostEnabled ?? true;
         state.lineItemWiseEnabled = qbData?.lineItemWiseEnabled ?? true;
+        state.attachInvoiceCopyEnabled = qbData?.attachInvoiceCopyEnabled ?? true;
         // The backend's status response never echoes back qbConnectionId,
         // so use the one this request was made WITH (action.meta.arg) — that's
         // the connection being switched to. Falling back to the response
@@ -217,6 +222,7 @@ const quickBooksSlice = createSlice({
       const data = action.payload?.data;
       if (data?.autoPostEnabled !== undefined) state.autoPostEnabled = data.autoPostEnabled;
       if (data?.lineItemWiseEnabled !== undefined) state.lineItemWiseEnabled = data.lineItemWiseEnabled;
+      if (data?.attachInvoiceCopyEnabled !== undefined) state.attachInvoiceCopyEnabled = data.attachInvoiceCopyEnabled;
     });
 
     // ── Vendors ────────────────────────────────────────────────────────

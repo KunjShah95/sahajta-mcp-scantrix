@@ -112,6 +112,7 @@ interface UpdateQuickBooksSettingsPayload {
   accessToken: string;
   autoPostEnabled?: boolean;
   lineItemWiseEnabled?: boolean;
+  attachInvoiceCopyEnabled?: boolean;
 }
 
 export const updateQuickBooksSettings = createAsyncThunk(
@@ -122,6 +123,7 @@ export const updateQuickBooksSettings = createAsyncThunk(
     const body: Record<string, boolean> = {};
     if (data.autoPostEnabled !== undefined) body.autoPostEnabled = data.autoPostEnabled;
     if (data.lineItemWiseEnabled !== undefined) body.lineItemWiseEnabled = data.lineItemWiseEnabled;
+    if (data.attachInvoiceCopyEnabled !== undefined) body.attachInvoiceCopyEnabled = data.attachInvoiceCopyEnabled;
     try {
       console.log("========== UPDATE QB SETTINGS REQUEST ==========");
       const response = await api.patch("/quickbooks/settings", body, {
