@@ -9,7 +9,9 @@ import { requireConfirm } from "../tools/gates.js";
 import { buildServer, registerSavetrixTools } from "../tools/index.js";
 import { SavetrixClient } from "../client/savetrixClient.js";
 import { MemorySessionStore } from "../session.js";
+import * as S from "../tools/schemas.js";
 import type { Config } from "../config.js";
+import type { ToolHostCapabilities } from "../tools/index.js";
 
 const testConfig: Config = {
   apiUrl: "https://api.test",
@@ -19,6 +21,23 @@ const testConfig: Config = {
   remote: false,
   configFilePath: "does/not/matter.json",
   allowedHosts: [],
+};
+
+/** Advertised input properties for one tool, as a client actually sees them. */
+const advertisedProps = async (host: ToolHostCapabilities): Promise<string[]> => {
+  const client = new SavetrixClient({
+    baseURL: "https://api.test",
+    session: new MemorySessionStore(),
+  });
+  const server = new McpServer({ name: "test", version: "0.0.0" });
+  registerSavetrixTools(server, client, host);
+  const mcpClient = new Client({ name: "test", version: "0.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await server.connect(serverTransport);
+  await mcpClient.connect(clientTransport);
+  const tool = (await mcpClient.listTools()).tools.find((t) => t.name === "savetrix_invoice_upload");
+  const schema = tool?.inputSchema as { properties?: Record<string, unknown> } | undefined;
+  return Object.keys(schema?.properties ?? {}).sort();
 };
 
 test("requireConfirm rejects without confirm:true and passes with it", () => {
@@ -131,4 +150,49 @@ test("an explicit qbConnectionId argument overrides the default active company",
     "explicit qbConnectionId argument must win over resolveQbId()'s backend-derived default",
   );
   mock.restore();
+});
+
+// filePath on the remote connector is an arbitrary read of the connector's
+// OWN container (it can never see the user's machine), and that container's
+// environment holds SAVETRIX_TOKEN_SECRET. createUploadLink is supplied only
+// by remoteServer.ts, so it is what distinguishes the two modes.
+test("the remote connector does not advertise filePath on savetrix_invoice_upload", async () => {
+  const props = await advertisedProps({
+    createUploadLink: async () => "https://connector.test/upload?t=x",
+  });
+  assert.ok(!props.includes("filePath"), "remote mode must not advertise a container-filesystem read");
+  assert.ok(props.includes("fileUrl"), "fileUrl is the remote transport and must survive");
+});
+
+test("a local/stdio install still advertises filePath", async () => {
+  const props = await advertisedProps({});
+  assert.deepEqual(props, ["fileBase64", "fileName", "filePath", "fileUrl", "mimeType", "qbConnectionId"]);
+});
+
+// Defense in depth behind encodeURIComponent: that encodes `/` but NOT `.`,
+// so an id is only safe if the traversal characters never get that far.
+test("id schemas reject traversal-shaped values", () => {
+  for (const bad of ["../../users/me", "..", "..%2F..", "a/b", "a\\b", "a?b", "a#b", "a.b", "x".repeat(129), ""]) {
+    assert.equal(S.invoiceIdSchema.safeParse({ invoiceId: bad }).success, false, `invoiceId ${bad}`);
+    assert.equal(S.vendorIdSchema.safeParse({ vendorId: bad }).success, false, `vendorId ${bad}`);
+    assert.equal(S.setActiveSchema.safeParse({ qbConnectionId: bad }).success, false, `qbConnectionId ${bad}`);
+    assert.equal(
+      S.removeMemberSchema.safeParse({ memberId: bad, confirm: true }).success,
+      false,
+      `memberId ${bad}`,
+    );
+    assert.equal(
+      S.invoiceListSchema.safeParse({ qbConnectionId: bad }).success,
+      false,
+      `qbConnectionId override ${bad}`,
+    );
+  }
+});
+
+test("id schemas still accept the id shapes the backend really returns", () => {
+  for (const good of ["68b3f2c1a4d5e6f708192a3b", "9341457544400313", "qb-1", "conn_1", "1"]) {
+    assert.equal(S.invoiceIdSchema.safeParse({ invoiceId: good }).success, true, good);
+    assert.equal(S.setActiveSchema.safeParse({ qbConnectionId: good }).success, true, good);
+    assert.equal(S.invoiceListSchema.safeParse({ qbConnectionId: good }).success, true, good);
+  }
 });

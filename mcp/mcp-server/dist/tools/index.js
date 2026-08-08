@@ -103,6 +103,12 @@ const uploadHelp = async (host) => {
 };
 export const registerSavetrixTools = (server, client, host = {}) => {
     const run = withClient(client);
+    // createUploadLink is supplied only by remoteServer.ts, so its presence is
+    // what tells this registration apart from a local/stdio install. On the
+    // remote connector filePath can only reach the connector's own container,
+    // so it is dropped from the advertised schema AND refused at runtime.
+    const isRemote = Boolean(host.createUploadLink);
+    const uploadSchema = (isRemote ? S.invoiceUploadRemoteSchema : S.invoiceUploadSchema);
     // ── Onboarding ────────────────────────────────────────────────────────
     server.registerTool("savetrix_get_started", {
         title: "Get started / sign in",
@@ -272,14 +278,14 @@ export const registerSavetrixTools = (server, client, host = {}) => {
             "so never pass a path from a chat sandbox (e.g. /mnt/user-data/...). " +
             "fileBase64 is for tiny files only. " +
             "If you have none of those, call this with no arguments (or use savetrix_invoice_upload_link) to get a browser upload link for the user.",
-        inputSchema: S.invoiceUploadSchema,
+        inputSchema: uploadSchema,
     }, async (a) => {
         applyQbOverride(client, a);
         const hasSource = Boolean(a.fileUrl || a.filePath || a.fileBase64);
         if (!hasSource)
             return md(await uploadHelp(host));
         try {
-            return text(await invoicesClient.uploadInvoice(client, a));
+            return text(await invoicesClient.uploadInvoice(client, a, { allowFilePath: !isRemote }));
         }
         catch (error) {
             const guide = await authGuidance(client, error);

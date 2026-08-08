@@ -47,7 +47,7 @@ export const updateVendor = async (
   for (const key of ["displayName", "currency", "email", "phone", "address", "glAccountId", "taxCodeId"] as const) {
     if (fields[key] !== undefined) body[key] = fields[key] as string;
   }
-  const res = await client.api.patch(`/quickbooks/vendors/${vendorId}`, body);
+  const res = await client.api.patch(`/quickbooks/vendors/${encodeURIComponent(vendorId)}`, body);
   return res.data;
 };
 
@@ -55,7 +55,7 @@ export const deactivateVendor = async (
   client: SavetrixClient,
   vendorId: string,
 ): Promise<unknown> => {
-  const res = await client.api.delete(`/quickbooks/vendors/${vendorId}`);
+  const res = await client.api.delete(`/quickbooks/vendors/${encodeURIComponent(vendorId)}`);
   return res.data;
 };
 
@@ -63,6 +63,6 @@ export const reactivateVendor = async (
   client: SavetrixClient,
   vendorId: string,
 ): Promise<unknown> => {
-  const res = await client.api.post(`/quickbooks/vendors/${vendorId}/reactivate`, {});
+  const res = await client.api.post(`/quickbooks/vendors/${encodeURIComponent(vendorId)}/reactivate`, {});
   return res.data;
 };

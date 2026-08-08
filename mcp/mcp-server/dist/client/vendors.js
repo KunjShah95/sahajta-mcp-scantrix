@@ -24,14 +24,14 @@ export const updateVendor = async (client, args) => {
         if (fields[key] !== undefined)
             body[key] = fields[key];
     }
-    const res = await client.api.patch(`/quickbooks/vendors/${vendorId}`, body);
+    const res = await client.api.patch(`/quickbooks/vendors/${encodeURIComponent(vendorId)}`, body);
     return res.data;
 };
 export const deactivateVendor = async (client, vendorId) => {
-    const res = await client.api.delete(`/quickbooks/vendors/${vendorId}`);
+    const res = await client.api.delete(`/quickbooks/vendors/${encodeURIComponent(vendorId)}`);
     return res.data;
 };
 export const reactivateVendor = async (client, vendorId) => {
-    const res = await client.api.post(`/quickbooks/vendors/${vendorId}/reactivate`, {});
+    const res = await client.api.post(`/quickbooks/vendors/${encodeURIComponent(vendorId)}/reactivate`, {});
     return res.data;
 };

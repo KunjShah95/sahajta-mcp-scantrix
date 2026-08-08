@@ -254,3 +254,78 @@ test("the remote connector refuses to boot without a token secret", () => {
     /SAVETRIX_PUBLIC_URL/,
   );
 });
+
+// ── Production audit regressions ─────────────────────────────────────────
+
+test("an expired or malformed access token gets 401 + a challenge, never 500", async () => {
+  const { baseUrl, close } = await startServer(makeConfig({}));
+  try {
+    // jose's own errors (JWTExpired, JWEDecryptionFailed) used to escape
+    // verifyAccessToken, and the SDK only maps InvalidTokenError to 401 — so
+    // an ordinary 8-hour expiry surfaced as an opaque 500 with no
+    // WWW-Authenticate, and the client had no way to know it should re-auth.
+    const expired = await encryptToken(
+      TOKEN_SECRET,
+      "access",
+      { session: { client_id: "c1", st_at: "a", st_rt: "r", userId: "u1" } },
+      -60,
+    );
+    for (const token of [expired, "not-a-real-token", "a.b.c"]) {
+      const res = await withHost(baseUrl, "/mcp", "connector.test", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+      });
+      assert.equal(res.status, 401, `token ${token.slice(0, 12)} should be 401`);
+      assert.match(String(res.header("www-authenticate")), /resource_metadata=/);
+    }
+  } finally {
+    await close();
+  }
+});
+
+test("X-Forwarded-Host cannot smuggle a foreign origin into discovery", async () => {
+  const { baseUrl, close } = await startServer(
+    makeConfig({ allowedHosts: ["old-alias.vercel.app"] }),
+  );
+  try {
+    // The allowlist reads req.hostname (X-Forwarded-Host under trust proxy)
+    // while the advertised URL used to be built from the raw Host header —
+    // two different values, so passing the check on one and publishing the
+    // other pointed the victim's OAuth flow at an attacker's origin.
+    const res = await withHost(baseUrl, "/.well-known/oauth-authorization-server", "evil.example", {
+      headers: { "X-Forwarded-Host": "old-alias.vercel.app" },
+    });
+    const meta = res.json();
+    for (const value of [meta.issuer, meta.authorization_endpoint, meta.token_endpoint]) {
+      assert.doesNotMatch(String(value), /evil\.example/, "must never advertise the raw Host");
+    }
+    // Port smuggling on an otherwise-allowlisted name is dropped too.
+    const ported = await withHost(baseUrl, "/.well-known/oauth-protected-resource/mcp", "old-alias.vercel.app:1337");
+    assert.doesNotMatch(String(ported.json().resource), /1337/);
+  } finally {
+    await close();
+  }
+});
+
+test("GET and DELETE /mcp are 405, not an SSE stream nothing can write to", async () => {
+  const { baseUrl, close } = await startServer(makeConfig({}));
+  try {
+    const token = await encryptToken(
+      TOKEN_SECRET,
+      "access",
+      { session: { client_id: "c1", st_at: "a", st_rt: "r", userId: "u1" } },
+      3600,
+    );
+    for (const method of ["GET", "DELETE"]) {
+      const res = await withHost(baseUrl, "/mcp", "connector.test", {
+        method,
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      assert.equal(res.status, 405, `${method} /mcp`);
+      assert.equal(res.header("allow"), "POST");
+    }
+  } finally {
+    await close();
+  }
+});

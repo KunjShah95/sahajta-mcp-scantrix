@@ -12,7 +12,8 @@ import {
   unwrapOne,
   getPagination,
 } from "../client/unwrap.js";
-import { uploadInvoice, resolveUploadSource } from "../client/invoices.js";
+import { uploadInvoice, resolveUploadSource, getInvoice } from "../client/invoices.js";
+import { deactivateVendor } from "../client/vendors.js";
 import { getStatus, listConnections } from "../client/quickbooks.js";
 import { toJsonSchemaCompat } from "@modelcontextprotocol/sdk/server/zod-json-schema-compat.js";
 import { invoiceUploadSchema } from "../tools/schemas.js";
@@ -20,6 +21,19 @@ import { invoiceUploadSchema } from "../tools/schemas.js";
 const makeSession = async (): Promise<SessionStore> => {
   const dir = await mkdtemp(join(tmpdir(), "savetrix-client-"));
   return new SessionStore(join(dir, "session.json"));
+};
+
+/**
+ * Resolve a captured request config the way axios's http adapter does —
+ * combineURLs, then hand the result to WHATWG URL. That last step is the one
+ * that used to collapse "../.." out of the path, so a traversal assertion is
+ * only meaningful if the test reproduces it.
+ */
+const resolvedPath = (config: { baseURL?: string; url?: string }): string => {
+  const url = String(config.url ?? "");
+  if (/^https?:\/\//i.test(url)) return new URL(url).pathname;
+  const base = String(config.baseURL ?? "").replace(/\/+$/, "");
+  return new URL(`${base}/${url.replace(/^\/+/, "")}`).pathname;
 };
 
 test("unwrapList normalizes data.data.invoices / data.items / plain arrays", () => {
@@ -121,6 +135,42 @@ test("listConnections strips token/expiry fields from each connection", async ()
   assert.deepEqual(connections, [
     { id: "conn-1", name: "Ontario Inc.", realmId: "9341457544400313", role: "admin", status: "active" },
   ]);
+  mock.restore();
+});
+
+// Regression test for a proven path traversal: model-supplied ids were
+// interpolated raw into the request path, and because the final URL goes
+// through WHATWG URL normalization, an invoiceId of "../../users/me" escaped
+// both /invoices/ and the /api base — arbitrary GET/PATCH/DELETE against the
+// whole backend under the signed-in user's credentials. encodeURIComponent at
+// every interpolation site is what keeps the segment a segment.
+test("a traversal-shaped id stays inside its own path segment", async () => {
+  const instance = axios.create({ baseURL: "https://api.test/api" });
+  const mock = new MockAdapter(instance as never);
+  const client = new SavetrixClient({
+    baseURL: "https://api.test/api",
+    session: await makeSession(),
+    axiosInstance: instance as never,
+  });
+  client.setTokens("at", "rt");
+  client.setActiveQbId("qb-1");
+
+  const paths: string[] = [];
+  mock.onAny().reply((config) => {
+    paths.push(resolvedPath(config));
+    return [200, { data: {} }];
+  });
+
+  await getInvoice(client, "../../users/me");
+  await deactivateVendor(client, "../../../admin/users");
+
+  assert.deepEqual(paths, [
+    "/api/invoices/..%2F..%2Fusers%2Fme",
+    "/api/quickbooks/vendors/..%2F..%2F..%2Fadmin%2Fusers",
+  ]);
+  for (const path of paths) {
+    assert.ok(!/\/users\/me$|\/admin\//.test(path), `escaped its base: ${path}`);
+  }
   mock.restore();
 });
 
@@ -261,9 +311,51 @@ test("resolveUploadSource refuses fileUrl aimed at internal hosts", async () => 
     "http://169.254.169.254/latest/meta-data/",
     "http://10.0.0.5/x.pdf",
     "file:///etc/passwd",
+    // IPv4-mapped IPv6. Same address to the network stack, but it matches
+    // none of the dotted-quad patterns until it is folded back to IPv4 —
+    // and the URL parser rewrites the readable form into the hex one, so
+    // both spellings have to be covered.
+    "http://[::ffff:169.254.169.254]/latest/meta-data/",
+    "http://[::ffff:a9fe:a9fe]/latest/meta-data/",
+    "http://[0:0:0:0:0:ffff:127.0.0.1]/x.pdf",
   ]) {
     await assert.rejects(resolveUploadSource({ fileUrl: url }), /public host|http\(s\) URL/, url);
   }
+});
+
+// assertFetchableUrl only ever sees the FIRST url, so following redirects
+// meant a public host answering 302 -> http://169.254.169.254/ walked past
+// the entire deny-list above. Proven end-to-end before the fix.
+test("resolveUploadSource does not follow a redirect toward an internal address", async () => {
+  const scope = new MockAdapter(axios as never);
+  let sawMaxRedirects: number | undefined;
+  scope.onGet("https://files.test/share-link.pdf").reply((config) => {
+    sawMaxRedirects = config.maxRedirects;
+    return [302, "", { location: "http://169.254.169.254/latest/meta-data/iam/" }];
+  });
+  await assert.rejects(
+    resolveUploadSource({ fileUrl: "https://files.test/share-link.pdf" }),
+    /redirected \(HTTP 302\)/,
+  );
+  assert.equal(sawMaxRedirects, 0, "axios must be told not to follow redirects at all");
+  scope.restore();
+});
+
+// On the remote connector the only filesystem in reach is the connector's own
+// container, so a filePath read is an arbitrary read of the deployment —
+// /proc/self/environ carries SAVETRIX_TOKEN_SECRET, the key that encrypts
+// every OAuth artifact this server issues.
+test("resolveUploadSource refuses filePath when the caller disallows it", async () => {
+  await assert.rejects(
+    resolveUploadSource({ filePath: "/proc/self/environ" }, { allowFilePath: false }),
+    /not accepted by this connector/,
+  );
+  // Local/stdio installs still read real files, and a missing one still fails
+  // as a plain filesystem error rather than a policy error.
+  await assert.rejects(
+    resolveUploadSource({ filePath: "/definitely/not/here.pdf" }),
+    /ENOENT|no such file/i,
+  );
 });
 
 test("resolveUploadSource downloads fileUrl and infers name and type", async () => {
