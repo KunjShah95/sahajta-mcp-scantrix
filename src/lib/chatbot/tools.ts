@@ -37,6 +37,27 @@ const PAGE_LIMIT = 100;
 // mitigation from architecture doc §7.11.
 const MAX_RESULTS_RETURNED = 20;
 
+// Ids that end up as URL PATH segments come from the model, which means they
+// are ultimately influenced by OCR'd invoice text an outsider can author.
+// Interpolating one raw is a path-traversal primitive: axios resolves the URL
+// through WHATWG `URL`, which collapses dot segments, so an id of
+// "../../users/me" escapes both `/invoices/` and the `/api` base and turns a
+// scoped tool into arbitrary backend access under the caller's own token.
+// encodeURIComponent alone is not enough — it leaves "." untouched — so the
+// shape is validated first and the value encoded second.
+const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
+
+class UnsafeIdError extends Error {}
+
+function pathSegment(value: string, field: string): string {
+  if (!SAFE_ID.test(value)) {
+    throw new UnsafeIdError(
+      `Invalid ${field}. Ids must come from a prior tool result and contain only letters, digits, hyphens or underscores.`,
+    );
+  }
+  return encodeURIComponent(value);
+}
+
 function savetrixGet<T>(
   path: string,
   accessToken: string,
@@ -177,6 +198,22 @@ async function fetchAllInvoices(
   return invoices;
 }
 
+// "2026-01-31" parses as UTC midnight, so comparing an invoice timestamped
+// later that day with `date > to` silently drops the whole final day of any
+// range — "spend in January" quietly omitted January 31st. A date-only bound
+// is therefore widened to the END of that day; a full timestamp is respected
+// as given.
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseRangeStart(value: string | undefined): Date | null {
+  return value ? new Date(value) : null;
+}
+
+function parseRangeEnd(value: string | undefined): Date | null {
+  if (!value) return null;
+  return new Date(DATE_ONLY.test(value) ? `${value}T23:59:59.999Z` : value);
+}
+
 function withinRange(dateStr: string | undefined, from: Date | null, to: Date | null): boolean {
   if (!from && !to) return true;
   if (!dateStr) return false;
@@ -211,8 +248,8 @@ export async function listInvoices(
   args: ListInvoicesArgs,
 ): Promise<ListInvoicesResult> {
   const invoices = await fetchAllInvoices(accessToken, qbConnectionId, args.status);
-  const from = args.fromDate ? new Date(args.fromDate) : null;
-  const to = args.toDate ? new Date(args.toDate) : null;
+  const from = parseRangeStart(args.fromDate);
+  const to = parseRangeEnd(args.toDate);
   const vendorQuery = args.vendorName?.trim().toLowerCase();
 
   const filtered = invoices.filter((invoice) => {
@@ -239,7 +276,7 @@ export async function getInvoiceDetail(
 ): Promise<InvoiceDetailChatContext | { error: string }> {
   try {
     const res = await savetrixGet<{ data?: { invoice?: InvoiceRecord } | InvoiceRecord }>(
-      `/invoices/${args.invoiceId}`,
+      `/invoices/${pathSegment(args.invoiceId, "invoiceId")}`,
       accessToken,
       qbConnectionId,
     );
@@ -279,8 +316,8 @@ export async function summarizeSpend(
   args: SummarizeSpendArgs,
 ): Promise<{ groups: SpendGroup[] }> {
   const invoices = await fetchAllInvoices(accessToken, qbConnectionId);
-  const from = args.fromDate ? new Date(args.fromDate) : null;
-  const to = args.toDate ? new Date(args.toDate) : null;
+  const from = parseRangeStart(args.fromDate);
+  const to = parseRangeEnd(args.toDate);
 
   const filtered = invoices.filter((invoice) =>
     withinRange(invoice.extractedData?.invoiceDate || invoice.createdAt, from, to),
@@ -390,7 +427,7 @@ export async function updateInvoice(
   if (missing.length) return { success: false, message: `Missing required field(s): ${missing.join(", ")}.` };
 
   const res = await savetrixPatch(
-    `/invoices/${args.invoiceId}`,
+    `/invoices/${pathSegment(args.invoiceId, "invoiceId")}`,
     { extractedData: args.extractedData },
     accessToken,
     qbConnectionId,
@@ -421,7 +458,7 @@ export async function postInvoiceToQuickBooks(
   if (missing.length) return { success: false, message: `Missing required field(s): ${missing.join(", ")}.` };
 
   const res = await savetrixPatch(
-    `/invoices/${args.invoiceId}`,
+    `/invoices/${pathSegment(args.invoiceId, "invoiceId")}`,
     { vendorId: args.vendorId, postedStatus: "manual", extractedData: args.extractedData },
     accessToken,
     qbConnectionId,
@@ -451,7 +488,7 @@ export async function rejectInvoice(
   if (missing.length) return { success: false, message: `Missing required field(s): ${missing.join(", ")}.` };
 
   const res = await savetrixPatch(
-    `/invoices/${args.invoiceId}`,
+    `/invoices/${pathSegment(args.invoiceId, "invoiceId")}`,
     { postedStatus: "failed", ...(args.reason ? { reason: args.reason } : {}) },
     accessToken,
     qbConnectionId,
@@ -536,7 +573,7 @@ export async function updateVendor(
   for (const key of ["displayName", "currency", "email", "phone", "address", "glAccountId", "taxCodeId"] as const) {
     if (fields[key] !== undefined) body[key] = fields[key] as string;
   }
-  const res = await savetrixPatch(`/quickbooks/vendors/${vendorId}`, body, accessToken, qbConnectionId);
+  const res = await savetrixPatch(`/quickbooks/vendors/${pathSegment(vendorId, "vendorId")}`, body, accessToken, qbConnectionId);
   const vendor = unwrapWriteResult(res.data, ["vendor"]);
   return isVendor(vendor) ? toVendorChatContext(vendor) : { success: true };
 }
@@ -561,7 +598,7 @@ export async function deactivateVendor(
   const missing = missingFields(args, ["vendorId"]);
   if (missing.length) return { success: false, message: `Missing required field(s): ${missing.join(", ")}.` };
 
-  await savetrixDelete(`/quickbooks/vendors/${args.vendorId}`, accessToken, qbConnectionId);
+  await savetrixDelete(`/quickbooks/vendors/${pathSegment(args.vendorId, "vendorId")}`, accessToken, qbConnectionId);
   return { success: true, vendorId: args.vendorId, status: "inactive" };
 }
 
@@ -581,7 +618,7 @@ export async function reactivateVendor(
   const missing = missingFields(args, ["vendorId"]);
   if (missing.length) return { success: false, message: `Missing required field(s): ${missing.join(", ")}.` };
 
-  const res = await savetrixPost(`/quickbooks/vendors/${args.vendorId}/reactivate`, {}, accessToken, qbConnectionId);
+  const res = await savetrixPost(`/quickbooks/vendors/${pathSegment(args.vendorId, "vendorId")}/reactivate`, {}, accessToken, qbConnectionId);
   const vendor = unwrapWriteResult(res.data, ["vendor"]);
   return isVendor(vendor) ? toVendorChatContext(vendor) : { success: true, vendorId: args.vendorId, status: "active" };
 }
@@ -615,13 +652,32 @@ export async function createGLAccount(
   return isGLAccount(account) ? toGLAccountChatContext(account) : { success: true };
 }
 
+// The sync endpoints answer with a counts summary, but nothing guaranteed
+// that — if the backend also echoes the synced records, returning its payload
+// verbatim would forward raw GLAccount/TaxCode rows (qbConnectionId, realmId,
+// qbAccountId, isDeleted) to the model, which is exactly what context.ts
+// exists to prevent. Allow-list the scalar counters instead of trusting the
+// shape (architecture doc §4.5).
+const SYNC_COUNT_KEYS = ["synced", "added", "updated", "removed", "deactivated", "total"] as const;
+
+function toSyncSummary(raw: unknown): Record<string, number | string> {
+  if (!raw || typeof raw !== "object") return { success: "ok" };
+  const source = raw as Record<string, unknown>;
+  const summary: Record<string, number | string> = {};
+  for (const key of SYNC_COUNT_KEYS) {
+    if (typeof source[key] === "number") summary[key] = source[key] as number;
+  }
+  if (typeof source.message === "string") summary.message = source.message;
+  return Object.keys(summary).length ? summary : { success: "ok" };
+}
+
 // POST /quickbooks/accounts/sync — pulls the latest GL accounts from
 // QuickBooks into the app's own store. Non-destructive (no data lost), so no
 // confirm gate. Not in the standalone MCP connector's public tool set today,
 // but mirrors savetrix_account_sync there for parity.
 export async function syncGLAccounts(accessToken: string, qbConnectionId: string): Promise<unknown> {
   const res = await savetrixPost("/quickbooks/accounts/sync", {}, accessToken, qbConnectionId);
-  return unwrapWriteResult(res.data, []);
+  return toSyncSummary(unwrapWriteResult(res.data, []));
 }
 
 // POST /quickbooks/taxcodes/sync — pulls the latest tax codes from
@@ -629,7 +685,7 @@ export async function syncGLAccounts(accessToken: string, qbConnectionId: string
 // savetrix_taxcode_sync in the standalone MCP connector.
 export async function syncTaxCodes(accessToken: string, qbConnectionId: string): Promise<unknown> {
   const res = await savetrixPost("/quickbooks/taxcodes/sync", {}, accessToken, qbConnectionId);
-  return unwrapWriteResult(res.data, []);
+  return toSyncSummary(unwrapWriteResult(res.data, []));
 }
 
 // Type guards gate which shrink-to-chat-context mapper applies to a write
@@ -691,13 +747,50 @@ function extractErrorMessage(error: unknown): string {
 // Every branch is caught individually so one failed Savetrix call becomes a
 // plain-language tool result the model can relay ("couldn't find that"),
 // never a crash of the whole streaming response.
+// Tools whose effects a user cannot undo from the chat panel. `confirm: true`
+// alone does NOT authorize these — see the gate in callTool below.
+export const DESTRUCTIVE_TOOLS: ReadonlySet<string> = new Set([
+  "post_invoice_to_qb",
+  "reject_invoice",
+  "deactivate_vendor",
+]);
+
+export interface CallToolOptions {
+  /**
+   * True only when the CLIENT reports that the human accepted the confirmation
+   * dialog on this turn. Set from the request body, never from anything the
+   * model produced.
+   */
+  userConfirmed?: boolean;
+}
+
 export async function callTool(
   name: string,
   args: Record<string, unknown>,
   accessToken: string,
   qbConnectionId: string,
+  options: CallToolOptions = {},
 ): Promise<unknown> {
   try {
+    // `requireConfirm` inside each destructive tool checks `args.confirm`,
+    // which the MODEL writes — so on its own it authorizes nothing. Probing
+    // this with the real prompt and schemas, the model set confirm:true and
+    // executed a write on the very first turn (user said "I confirm, just do
+    // it") with no dialog ever shown, and after a generic "Yes, proceed."
+    // resolved an ambiguous vendor name to one of two near-identical records
+    // on its own. So the human's actual click, reported by the client and
+    // checked here, is the authorization; the model's flag is only a hint
+    // about intent. Fails closed: no click, no write.
+    if (DESTRUCTIVE_TOOLS.has(name) && args.confirm === true && options.userConfirmed !== true) {
+      return {
+        success: false,
+        confirmationRequired: true,
+        message:
+          `Action "${name}" needs the user to confirm it in the app before it can run. ` +
+          "Describe exactly what you are about to do and ask them to confirm, then try again.",
+      };
+    }
+
     switch (name as ToolName) {
       case "list_invoices":
         return await listInvoices(accessToken, qbConnectionId, args as ListInvoicesArgs);

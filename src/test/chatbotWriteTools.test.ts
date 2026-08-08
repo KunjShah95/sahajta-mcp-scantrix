@@ -555,3 +555,113 @@ describe("callTool dispatch", () => {
     }
   });
 });
+
+// ── Security regressions (added after the production audit) ──────────────
+//
+// Each of these covers a defect that was verified to be exploitable against
+// the deployed system, so they exist to make sure it cannot come back.
+
+describe("path traversal in model-supplied ids", () => {
+  // Ids reach these tools from the model, which is influenced by OCR'd
+  // invoice text an outsider can author. axios resolves the request URL
+  // through WHATWG URL, which collapses "..", so an unencoded id escaped both
+  // /invoices/ and the /api base and reached arbitrary backend endpoints.
+  const TRAVERSAL = "../../users/me";
+
+  it("rejects a traversing invoiceId before any network call", async () => {
+    const stub = stubAxios("patch", { data: {} });
+    const result = (await callTool(
+      "reject_invoice",
+      { invoiceId: TRAVERSAL, confirm: true },
+      ACCESS_TOKEN,
+      QB_CONNECTION_ID,
+      { userConfirmed: true },
+    )) as ToolResult;
+    assert.equal(result.success, false);
+    assert.match(result.message ?? "", /Invalid invoiceId/);
+    assert.equal(stub.mock.calls.length, 0);
+  });
+
+  it("rejects a traversing vendorId before any network call", async () => {
+    const stub = stubAxios("delete", { data: {} });
+    const result = (await callTool(
+      "deactivate_vendor",
+      { vendorId: "../../../api/invoices/x", confirm: true },
+      ACCESS_TOKEN,
+      QB_CONNECTION_ID,
+      { userConfirmed: true },
+    )) as ToolResult;
+    assert.equal(result.success, false);
+    assert.match(result.message ?? "", /Invalid vendorId/);
+    assert.equal(stub.mock.calls.length, 0);
+  });
+
+  it("still allows ordinary ids through, url-encoded", async () => {
+    const stub = stubAxios("patch", { data: { data: { invoice: { _id: "inv-1" } } } });
+    await callTool(
+      "reject_invoice",
+      { invoiceId: "inv-1", confirm: true },
+      ACCESS_TOKEN,
+      QB_CONNECTION_ID,
+      { userConfirmed: true },
+    );
+    const [path] = stub.mock.calls[0] as [string];
+    assert.equal(path, "/invoices/inv-1");
+  });
+});
+
+describe("destructive actions require a real user confirmation", () => {
+  // requireConfirm only inspects args.confirm, which the MODEL writes. Probing
+  // the live prompt showed the model setting confirm:true and executing a
+  // write on the first turn with no dialog ever shown. The human's click,
+  // reported by the client, is the actual authorization.
+  const DESTRUCTIVE: [ToolName, Record<string, unknown>, "patch" | "delete"][] = [
+    ["reject_invoice", { invoiceId: "inv-1", confirm: true }, "patch"],
+    ["deactivate_vendor", { vendorId: "ven-1", confirm: true }, "delete"],
+  ];
+
+  for (const [tool, args, method] of DESTRUCTIVE) {
+    it(`${tool}: confirm:true alone does NOT execute without the user's click`, async () => {
+      const stub = stubAxios(method, { data: {} });
+      const result = (await callTool(tool, args, ACCESS_TOKEN, QB_CONNECTION_ID)) as ToolResult;
+      assert.equal(result.success, false);
+      assert.equal(result.confirmationRequired, true);
+      assert.equal(stub.mock.calls.length, 0, "must not reach the backend");
+    });
+
+    it(`${tool}: executes once the user has confirmed in the app`, async () => {
+      const stub = stubAxios(method, { data: { data: {} } });
+      await callTool(tool, args, ACCESS_TOKEN, QB_CONNECTION_ID, { userConfirmed: true });
+      assert.equal(stub.mock.calls.length, 1);
+    });
+  }
+
+  it("a non-destructive tool is unaffected by the gate", async () => {
+    const stub = stubAxios("post", { data: { data: { synced: 1 } } });
+    await callTool("sync_accounts", {}, ACCESS_TOKEN, QB_CONNECTION_ID);
+    assert.equal(stub.mock.calls.length, 1);
+  });
+});
+
+describe("sync tools do not forward raw backend records to the model", () => {
+  it("keeps only scalar counters, dropping internal record fields", async () => {
+    stubAxios("post", {
+      data: {
+        data: {
+          synced: 3,
+          added: 1,
+          accounts: [{ _id: "gl-1", qbConnectionId: "qb-1", realmId: "123", isDeleted: false }],
+        },
+      },
+    });
+    const result = (await syncGLAccounts(ACCESS_TOKEN, QB_CONNECTION_ID)) as Record<string, unknown>;
+    assert.deepEqual(result, { synced: 3, added: 1 });
+    assert.equal("accounts" in result, false, "raw records must not reach the model");
+  });
+
+  it("falls back to a safe stub when the shape is unrecognised", async () => {
+    stubAxios("post", { data: { data: { accounts: [{ _id: "tc-1", realmId: "123" }] } } });
+    const result = (await syncTaxCodes(ACCESS_TOKEN, QB_CONNECTION_ID)) as Record<string, unknown>;
+    assert.deepEqual(result, { success: "ok" });
+  });
+});

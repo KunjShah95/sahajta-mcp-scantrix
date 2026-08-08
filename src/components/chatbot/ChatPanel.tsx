@@ -82,7 +82,11 @@ export function ChatPanel({ companyName, onClose }: { companyName?: string; onCl
     if (view === "history") loadHistory();
   }, [view, loadHistory]);
 
-  const sendText = async (text: string) => {
+  // `opts.userConfirmed` is set ONLY by handlePendingConfirmation, i.e. only
+  // when the human actually accepted the dialog. The server treats it as the
+  // authorization for a destructive tool — the model's own `confirm: true`
+  // argument is not sufficient on its own (see src/lib/chatbot/tools.ts).
+  const sendText = async (text: string, opts: { userConfirmed?: boolean } = {}) => {
     if (!text || streaming || !accessToken || !qbConnectionId) return;
 
     const history = messagesRef.current.map((m) => ({ role: m.role, content: m.content }));
@@ -100,7 +104,12 @@ export function ChatPanel({ companyName, onClose }: { companyName?: string; onCl
           Authorization: `Bearer ${accessToken}`,
           "X-QB-Id": qbConnectionId,
         },
-        body: JSON.stringify({ message: text, history, companyName }),
+        body: JSON.stringify({
+          message: text,
+          history,
+          companyName,
+          ...(opts.userConfirmed ? { userConfirmed: true } : {}),
+        }),
       });
 
       if (!res.ok) {
@@ -161,7 +170,7 @@ export function ChatPanel({ companyName, onClose }: { companyName?: string; onCl
       cancelLabel: "Cancel",
       tone: "destructive",
     });
-    if (confirmed) sendText("Yes, proceed.");
+    if (confirmed) sendText("Yes, proceed.", { userConfirmed: true });
   };
 
   const handleSend = () => sendText(input.trim());

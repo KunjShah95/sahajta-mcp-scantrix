@@ -17,6 +17,7 @@ import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { RunnableToolFunctionWithParse } from "openai/lib/RunnableFunction";
 
+import { resolveChatUser } from "@/lib/chatHistory/identity";
 import { CONFIRM_MARKER } from "@/lib/chatbot/confirmMarker";
 import { chatToolSchemas } from "@/lib/chatbot/toolSchemas";
 import { buildSystemPrompt, CHAT_MODEL } from "@/lib/chatbot/systemPrompt";
@@ -50,6 +51,12 @@ interface ChatRequestBody {
   message: string;
   history?: ChatRequestMessage[];
   companyName?: string;
+  /**
+   * Set by the client only when the human accepted the confirmation dialog
+   * immediately before this turn. This — not the model's own `confirm: true`
+   * argument — is what authorizes a destructive tool (see callTool).
+   */
+  userConfirmed?: boolean;
 }
 
 // Best-effort, single-instance-only rate limit — see architecture doc §7.11.
@@ -57,6 +64,11 @@ interface ChatRequestBody {
 // abuse that lands repeatedly on the same warm instance. A real per-user
 // cap needs a shared store (e.g. Redis) and is called out as an open
 // question (§9) for whoever owns the rate-limit budget.
+//
+// Keyed on the VERIFIED user id, not the raw bearer token: keying on the
+// token let anyone mint a fresh bucket per request by varying a string they
+// chose themselves, which made the cap meaningless against the case it
+// exists for. It also kept live credentials in instance memory.
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 10;
 const requestTimestamps = new Map<string, number[]>();
@@ -87,7 +99,21 @@ export async function POST(request: Request) {
     return Response.json({ error: "Missing X-QB-Id header. Connect QuickBooks first." }, { status: 400 });
   }
 
-  if (isRateLimited(accessToken)) {
+  // Until now this route only checked that an Authorization header EXISTED —
+  // any string ran a full OpenAI completion before the first tool call failed,
+  // making /api/chat an unauthenticated inference proxy billed to us. The
+  // history routes already verified properly; this brings chat in line with
+  // them (src/lib/chatHistory/apiAuth.ts).
+  const identity = await resolveChatUser(accessToken);
+  if (identity.kind === "unauthenticated") {
+    return Response.json({ error: "Session expired. Please sign in again." }, { status: 401 });
+  }
+  if (identity.kind === "unavailable") {
+    console.log("[chat] identity unavailable:", identity.reason);
+    return Response.json({ error: "Chat is temporarily unavailable. Please try again." }, { status: 503 });
+  }
+
+  if (isRateLimited(identity.userId)) {
     return Response.json({ error: "Too many requests. Please slow down." }, { status: 429 });
   }
 
@@ -134,7 +160,9 @@ export async function POST(request: Request) {
         if (!TOOL_NAMES.includes(tool.function.name as (typeof TOOL_NAMES)[number])) {
           return { error: `Unknown tool: ${tool.function.name}` };
         }
-        return callTool(tool.function.name, args, accessToken, qbConnectionId);
+        return callTool(tool.function.name, args, accessToken, qbConnectionId, {
+          userConfirmed: body.userConfirmed === true,
+        });
       },
     },
   }));
@@ -169,6 +197,7 @@ export async function POST(request: Request) {
       // twice in a row within one round. truncateAfterFirstConfirmMarker
       // catches that case at flush time regardless of round structure.
       let roundBuffer = "";
+      let emittedAnything = false;
 
       runner.on("content", (delta) => {
         roundBuffer += delta;
@@ -179,7 +208,10 @@ export async function POST(request: Request) {
           roundBuffer = "";
           return;
         }
-        if (roundBuffer) controller.enqueue(encoder.encode(truncateAfterFirstConfirmMarker(roundBuffer)));
+        if (roundBuffer) {
+          controller.enqueue(encoder.encode(truncateAfterFirstConfirmMarker(roundBuffer)));
+          emittedAnything = true;
+        }
         roundBuffer = "";
       });
       // Structural logging only — never log full message/tool payloads,
@@ -195,7 +227,22 @@ export async function POST(request: Request) {
       runner
         .done()
         .then(() => {
-          if (!streamErrored) controller.close();
+          if (streamErrored) return;
+          // runTools() stops after maxChatCompletions rounds by simply
+          // RETURNING — it does not throw (verified in the SDK's
+          // AbstractChatCompletionRunner). So a turn where every round called
+          // a tool ends with zero bytes written, and the user is left staring
+          // at an empty assistant bubble even though tool calls, possibly
+          // including writes, already ran. Say so instead of showing nothing.
+          if (!emittedAnything) {
+            controller.enqueue(
+              encoder.encode(
+                "I wasn't able to finish that request — it needed more steps than I'm allowed to take in one go. " +
+                  "Some of those steps may already have run, so please check the relevant invoice or vendor before retrying.",
+              ),
+            );
+          }
+          controller.close();
         })
         .catch(() => {
           // Already surfaced via the 'error' listener above.
