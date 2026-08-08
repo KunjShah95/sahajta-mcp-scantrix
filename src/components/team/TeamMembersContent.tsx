@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ChevronRight, RefreshCw, UserX, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { confirmDialog, showToast } from "@/lib/dialogManager";
 import { capitalizeWords } from "@/lib/textFormat";
@@ -61,6 +61,7 @@ const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.
 export function TeamMembersContent() {
   const dispatch = useAppDispatch();
   const accessToken = useAppSelector((state) => state.auth.user?.data?.accessToken);
+  const authUser = useAppSelector((state) => state.auth.user?.data?.user);
   const qbConnectionId = useAppSelector((state) => state.quickBooks.qbConnectionId);
 
   const [loadingConnections, setLoadingConnections] = useState(true);
@@ -91,6 +92,26 @@ export function TeamMembersContent() {
     if (currentRole === "admin") return memberRole !== "admin";
     return false;
   };
+
+  const currentUserEmail = authUser?.email?.toLowerCase();
+  const isSelf = (member: QBMember) =>
+    !!currentUserEmail && (member.userId?.email || member.invitedEmail || "").toLowerCase() === currentUserEmail;
+
+  // The members endpoint only returns invited teammates, not the connection
+  // owner/accountant viewing this page — so without this, a solo owner sees
+  // an empty team list despite clearly having access themselves.
+  const displayMembers = useMemo(() => {
+    if (!currentUserEmail || members.some(isSelf)) return members;
+    const self: QBMember = {
+      _id: "__self__",
+      invitedEmail: authUser?.email || "",
+      role: currentRole,
+      inviteStatus: "accepted",
+      userId: { firstName: authUser?.firstName || "", lastName: authUser?.lastName || "", email: authUser?.email || "" },
+    };
+    return [self, ...members];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [members, currentUserEmail, currentRole, authUser]);
 
   const fetchConnections = useCallback(async () => {
     if (!accessToken) {
@@ -250,100 +271,110 @@ export function TeamMembersContent() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl p-[var(--space-lg)]">
+    <div className="mx-auto max-w-5xl p-[var(--space-lg)]">
       <h1 className="text-h2 font-bold text-trust-navy">Team Members</h1>
 
-      <p className="mb-[var(--space-sm)] mt-[var(--space-lg)] text-caption font-bold uppercase tracking-wide text-text-secondary">
-        Active company
-      </p>
-      <Card className="flex items-center justify-between gap-[var(--space-sm)]">
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-bold text-text-primary">{activeConnection.name}</p>
-          <p className="truncate text-caption text-text-secondary">Realm ID: {activeConnection.realmId}</p>
-        </div>
-        <span className={`shrink-0 rounded-pill px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold ${(ROLE_META[currentRole] || ROLE_FALLBACK).className}`}>
-          {(ROLE_META[currentRole] || ROLE_FALLBACK).label}
-        </span>
-      </Card>
-
-      <p className="mb-[var(--space-sm)] mt-[var(--space-lg)] text-caption font-bold uppercase tracking-wide text-text-secondary">
-        Team access
-      </p>
-      {canInvite ? (
-        <button type="button" onClick={openInviteSheet} className="w-full text-left">
-          <Card className="flex items-center justify-between gap-[var(--space-sm)] hover:bg-background-alt">
-            <div className="min-w-0 flex-1">
-              <p className="font-bold text-text-primary">Invite a team member</p>
-              <p className="text-caption text-text-secondary">Send an email invite with a role for this company.</p>
+      <div className="mt-[var(--space-lg)] grid grid-cols-1 gap-[var(--space-lg)] lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+        <div>
+          <p className="mb-[var(--space-sm)] text-caption font-bold uppercase tracking-wide text-text-secondary">
+            Members{displayMembers.length > 0 ? ` (${displayMembers.length})` : ""}
+          </p>
+          {membersLoading ? (
+            <SkeletonListRows count={3} />
+          ) : membersError ? (
+            <ErrorState message={membersError} onRetry={() => fetchMembers(activeConnection._id)} />
+          ) : displayMembers.length === 0 ? (
+            <Card className="text-body-sm text-text-secondary">No team members yet. Invited teammates will show up here.</Card>
+          ) : (
+            <div className="flex flex-col gap-[var(--space-xs)]">
+              {displayMembers.map((member) => {
+                const meta = ROLE_META[member.role] || ROLE_FALLBACK;
+                const self = isSelf(member);
+                const pending = !self && member.inviteStatus && member.inviteStatus !== "accepted";
+                const removable = !self && canRemoveRole(member.role);
+                const isRemoving = removingId === member._id;
+                const isResending = resendingId === member._id;
+                return (
+                  <Card key={member._id} className="flex items-center justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-text-primary">
+                        {memberDisplayName(member)}
+                        {self && <span className="text-text-secondary"> (You)</span>}
+                      </p>
+                      {member.userId && (
+                        <p className="truncate text-caption text-text-secondary">{member.userId.email}</p>
+                      )}
+                      {pending && <p className="text-caption font-semibold text-warning">Invite pending</p>}
+                    </div>
+                    <span className={`mr-[var(--space-sm)] rounded-pill px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold ${meta.className}`}>
+                      {meta.label}
+                    </span>
+                    {pending && canInvite && (
+                      <button
+                        type="button"
+                        onClick={() => handleResendInvite(member)}
+                        disabled={isResending}
+                        aria-label={`Resend invite to ${member.invitedEmail}`}
+                        title="Resend invite"
+                        className="mr-[var(--space-xs)] flex h-10 shrink-0 items-center gap-1 rounded-md px-[var(--space-sm)] text-caption font-bold text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60 lg:h-8"
+                      >
+                        <RefreshCw size={14} strokeWidth={2.25} className={isResending ? "animate-spin" : ""} />
+                        Resend
+                      </button>
+                    )}
+                    {removable && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMember(member)}
+                        disabled={isRemoving}
+                        className="flex h-10 w-10 items-center justify-center rounded-md bg-error/10 text-error disabled:opacity-60 lg:h-8 lg:w-8"
+                        aria-label={`Remove ${memberDisplayName(member)}`}
+                      >
+                        {isRemoving ? "…" : <UserX size={16} strokeWidth={2} />}
+                      </button>
+                    )}
+                  </Card>
+                );
+              })}
             </div>
-            <ChevronRight size={18} strokeWidth={2} className="shrink-0 text-primary" />
-          </Card>
-        </button>
-      ) : (
-        <Card className="text-body-sm text-text-secondary">
-          Only the owner or an admin of {activeConnection.name} can invite new team members. You currently have{" "}
-          {(ROLE_META[currentRole] || ROLE_FALLBACK).label.toLowerCase()} access.
-        </Card>
-      )}
-
-      <p className="mb-[var(--space-sm)] mt-[var(--space-lg)] text-caption font-bold uppercase tracking-wide text-text-secondary">
-        Members{members.length > 0 ? ` (${members.length})` : ""}
-      </p>
-      {membersLoading ? (
-        <SkeletonListRows count={3} />
-      ) : membersError ? (
-        <ErrorState message={membersError} onRetry={() => fetchMembers(activeConnection._id)} />
-      ) : members.length === 0 ? (
-        <Card className="text-body-sm text-text-secondary">No team members yet. Invited teammates will show up here.</Card>
-      ) : (
-        <div className="flex flex-col gap-[var(--space-xs)]">
-          {members.map((member) => {
-            const meta = ROLE_META[member.role] || ROLE_FALLBACK;
-            const pending = member.inviteStatus && member.inviteStatus !== "accepted";
-            const removable = canRemoveRole(member.role);
-            const isRemoving = removingId === member._id;
-            const isResending = resendingId === member._id;
-            return (
-              <Card key={member._id} className="flex items-center justify-between">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-text-primary">{memberDisplayName(member)}</p>
-                  {member.userId && (
-                    <p className="truncate text-caption text-text-secondary">{member.userId.email}</p>
-                  )}
-                  {pending && <p className="text-caption font-semibold text-warning">Invite pending</p>}
-                </div>
-                <span className={`mr-[var(--space-sm)] rounded-pill px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold ${meta.className}`}>
-                  {meta.label}
-                </span>
-                {pending && canInvite && (
-                  <button
-                    type="button"
-                    onClick={() => handleResendInvite(member)}
-                    disabled={isResending}
-                    aria-label={`Resend invite to ${member.invitedEmail}`}
-                    title="Resend invite"
-                    className="mr-[var(--space-xs)] flex h-10 shrink-0 items-center gap-1 rounded-md px-[var(--space-sm)] text-caption font-bold text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60 lg:h-8"
-                  >
-                    <RefreshCw size={14} strokeWidth={2.25} className={isResending ? "animate-spin" : ""} />
-                    Resend
-                  </button>
-                )}
-                {removable && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveMember(member)}
-                    disabled={isRemoving}
-                    className="flex h-10 w-10 items-center justify-center rounded-md bg-error/10 text-error disabled:opacity-60 lg:h-8 lg:w-8"
-                    aria-label={`Remove ${memberDisplayName(member)}`}
-                  >
-                    {isRemoving ? "…" : <UserX size={16} strokeWidth={2} />}
-                  </button>
-                )}
-              </Card>
-            );
-          })}
+          )}
         </div>
-      )}
+
+        <div>
+          <p className="mb-[var(--space-sm)] text-caption font-bold uppercase tracking-wide text-text-secondary">
+            Active company
+          </p>
+          <Card className="flex items-center justify-between gap-[var(--space-sm)]">
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-bold text-text-primary">{activeConnection.name}</p>
+              <p className="truncate text-caption text-text-secondary">Realm ID: {activeConnection.realmId}</p>
+            </div>
+            <span className={`shrink-0 rounded-pill px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold ${(ROLE_META[currentRole] || ROLE_FALLBACK).className}`}>
+              {(ROLE_META[currentRole] || ROLE_FALLBACK).label}
+            </span>
+          </Card>
+
+          <p className="mb-[var(--space-sm)] mt-[var(--space-lg)] text-caption font-bold uppercase tracking-wide text-text-secondary">
+            Team access
+          </p>
+          {canInvite ? (
+            <button type="button" onClick={openInviteSheet} className="w-full text-left">
+              <Card className="flex items-center justify-between gap-[var(--space-sm)] hover:bg-background-alt">
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-text-primary">Invite a team member</p>
+                  <p className="text-caption text-text-secondary">Send an email invite with a role for this company.</p>
+                </div>
+                <ChevronRight size={18} strokeWidth={2} className="shrink-0 text-primary" />
+              </Card>
+            </button>
+          ) : (
+            <Card className="text-body-sm text-text-secondary">
+              Only the owner or an admin of {activeConnection.name} can invite new team members. You currently have{" "}
+              {(ROLE_META[currentRole] || ROLE_FALLBACK).label.toLowerCase()} access.
+            </Card>
+          )}
+        </div>
+      </div>
 
       {sheetVisible && (
         <div className="fixed inset-0 z-50 flex cursor-pointer items-end justify-center bg-black/40 sm:items-center" onClick={() => !sending && setSheetVisible(false)}>

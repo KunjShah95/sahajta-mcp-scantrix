@@ -14,7 +14,7 @@ import { confirmDialog, showToast } from "@/lib/dialogManager";
 import {
   INVOICE_DETAIL_THEME,
   formatDetailAmount,
-  formatDetailDate,
+  formatDetailDateTime,
   getDetailInvoiceUrl,
   resolveInvoiceDetailType,
   safeDetailValue,
@@ -392,7 +392,7 @@ export function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
                             <p className="text-caption text-text-secondary">
                               {changedByName && `By ${changedByName}`}
                               {changedByName && entry.changedAt && "  ·  "}
-                              {entry.changedAt && formatDetailDate(entry.changedAt)}
+                              {entry.changedAt && formatDetailDateTime(entry.changedAt)}
                             </p>
                           )}
                           {entryReason && (

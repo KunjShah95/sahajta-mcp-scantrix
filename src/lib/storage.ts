@@ -212,6 +212,30 @@ export const clearPendingInviteToken = async () => {
 };
 
 // ==============================
+// GOOGLE DRIVE CONNECTED-AT (client-side approximation — the backend's
+// /google-drive/status response only ever returns {connected}, no
+// timestamp, so this is stamped locally the first time a connection is
+// observed. Accurate for connections made going forward; for an account
+// that was already connected before this existed, it just starts counting
+// from whenever it's first checked, which is the best available proxy
+// without backend support.)
+// ==============================
+
+const DRIVE_CONNECTED_AT_KEY = "driveConnectedAt";
+
+export const getDriveConnectedAt = (): string | null => {
+  return getItem(DRIVE_CONNECTED_AT_KEY);
+};
+
+export const setDriveConnectedAt = (isoDate: string): void => {
+  setItem(DRIVE_CONNECTED_AT_KEY, isoDate);
+};
+
+export const clearDriveConnectedAt = (): void => {
+  removeItem(DRIVE_CONNECTED_AT_KEY);
+};
+
+// ==============================
 // SIDEBAR PINNED (UI preference, not session data — kept synchronous
 // since AppShell reads it once on mount to set local component state,
 // unlike the async token/user helpers above which mirror AsyncStorage's

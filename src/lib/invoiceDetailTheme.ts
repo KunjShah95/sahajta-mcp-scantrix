@@ -106,6 +106,22 @@ export function formatDetailDate(dateStr?: string | null): string {
   return parsed.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
+// Status-history entries carry a real changedAt timestamp (unlike invoiceDate/
+// dueDate, which are day-only business dates) — use this wherever a status
+// history entry's time is shown, not formatDetailDate.
+export function formatDetailDateTime(dateStr?: string | null): string {
+  if (!dateStr) return "—";
+  const parsed = new Date(dateStr);
+  if (Number.isNaN(parsed.getTime())) return dateStr;
+  return parsed.toLocaleString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export function formatDetailAmount(amount?: number | string | null, currency?: string): string {
   if (amount === undefined || amount === null || amount === "") return "—";
   const num = Number(amount);

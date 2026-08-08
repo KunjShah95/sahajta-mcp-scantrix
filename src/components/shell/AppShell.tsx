@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Bell,
   Check,
   ChevronDown,
   ChevronsLeft,
@@ -26,6 +25,7 @@ import { ReactNode, useEffect, useRef, useState } from "react";
 import { ChatWidget } from "@/components/chatbot/ChatWidget";
 import { ExpandTransitionOverlay } from "@/components/shell/ExpandTransitionOverlay";
 import { GlobalSearchBar } from "@/components/shell/GlobalSearchBar";
+import { NotificationBell } from "@/components/shell/NotificationBell";
 import { getSidebarPinned, setSidebarPinned } from "@/lib/storage";
 import { capitalizeWords, normalizePhotoURL } from "@/lib/textFormat";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -94,7 +94,7 @@ function NavLink({
 // languages. One is picked per session (see the mount effect below) instead
 // of continuously rotating, so the header doesn't just say the same thing on
 // every login/refresh without being distracting while you're working.
-const ROTATING_GREETING_WORDS = ["Hola", "Namaste", "Bonjour", "Ciao", "Hallo", "Konnichiwa"];
+const ROTATING_GREETING_WORDS = ["Hola", "Namaste", "Bonjour", "Ciao", "Hallo"];
 const GREETING_ROTATION_COUNT = ROTATING_GREETING_WORDS.length + 1;
 
 function timeOfDayGreeting(): string {
@@ -395,6 +395,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </button>
                 {switcherOpen && (
                   <div className="absolute left-0 top-full z-10 mt-[var(--space-xs)] w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-white p-[var(--space-xs)] shadow-md">
+                    {/* Caret is part of this panel, not separately positioned
+                        against the trigger button — so it's welded to
+                        wherever the dropdown itself ends up (its width is
+                        capped by max-w-[calc(100vw-2rem)] on narrow screens),
+                        instead of drifting out of sync with it. */}
+                    <span className="absolute -top-1.5 left-4 h-3 w-3 rotate-45 border-l border-t border-border bg-white" />
                     {connectedAccounts.map((connection) => {
                       const isActive = connection._id === qbConnectionId;
                       return (
@@ -433,13 +439,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
             <ChatWidget companyName={activeConnection?.name} />
 
-            <button
-              type="button"
-              aria-label="Notifications"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border text-text-secondary hover:bg-background-alt"
-            >
-              <Bell size={18} strokeWidth={2} />
-            </button>
+            <NotificationBell />
           </div>
         </header>
 

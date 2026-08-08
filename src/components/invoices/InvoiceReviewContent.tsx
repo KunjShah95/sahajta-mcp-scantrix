@@ -21,7 +21,7 @@ import {
 import { setSelectedVendor } from "@/store/vendor/vendorSlice";
 import { CURRENCY_OPTIONS } from "@/lib/currencies";
 import { confirmDialog, showToast } from "@/lib/dialogManager";
-import { formatDetailAmount, formatDetailDate, resolveInvoiceDetailType } from "@/lib/invoiceDetailTheme";
+import { formatDetailAmount, formatDetailDateTime, resolveInvoiceDetailType } from "@/lib/invoiceDetailTheme";
 import { getUserDisplayName, translateInvoiceReason } from "@/lib/invoiceDisplay";
 import { getReviewTheme } from "@/lib/invoiceReviewTheme";
 import { taxCodeId as getTaxCodeId, taxCodeName as getTaxCodeName } from "@/lib/quickbooks/taxCode";
@@ -906,7 +906,7 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
                             <p className="text-caption text-text-secondary">
                               {changedByName && `By ${changedByName}`}
                               {changedByName && entry.changedAt && "  ·  "}
-                              {entry.changedAt && formatDetailDate(entry.changedAt)}
+                              {entry.changedAt && formatDetailDateTime(entry.changedAt)}
                             </p>
                           )}
                           {entryReason && (
@@ -1036,29 +1036,14 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
           onClick={() => setShowConfidenceInfo(false)}
         >
           <div className="w-full max-w-md cursor-auto rounded-2xl bg-white p-[var(--space-lg)]" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-h3 font-extrabold text-text-primary">Confidence Score Calculation</h2>
+            <h2 className="text-h3 font-extrabold text-text-primary">Confidence Score</h2>
             <p className="mt-[var(--space-sm)] text-body-sm text-text-secondary">
-              Every invoice starts with a confidence score of <strong>100%</strong>.
+              This score reflects how confident Scantrix is in the data extracted from your scanned invoice — things
+              like the vendor, amounts, and invoice number.
             </p>
-            <div className="my-[var(--space-md)] h-px bg-border" />
-            {[
-              ["Vendor Name", "Missing, similar or new vendor detected"],
-              ["Currency", "Currency could not be extracted"],
-              ["Invoice Number", "Missing or duplicate invoice number"],
-              ["Amount Before Tax", "Amount before tax is missing"],
-              ["Tax Amount", "Tax amount is missing"],
-            ].map(([field, reason]) => (
-              <div key={field} className="mb-[var(--space-sm)]">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-text-primary">{field}</span>
-                  <span className="font-extrabold text-error">-10</span>
-                </div>
-                <p className="text-caption text-text-secondary">{reason}</p>
-              </div>
-            ))}
             <p className="mt-[var(--space-md)] rounded-md bg-background-alt p-[var(--space-sm)] text-center text-caption text-text-secondary">
               Higher confidence scores indicate greater accuracy of extracted invoice data and require less manual
-              review.
+              review. If a field looks off, you can always correct it below before posting.
             </p>
             <button
               type="button"

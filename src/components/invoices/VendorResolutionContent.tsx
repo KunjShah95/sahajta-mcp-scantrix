@@ -185,7 +185,13 @@ export function VendorResolutionContent({ invoiceId }: { invoiceId: string }) {
   };
 
   return (
-    <div className="flex h-screen flex-col bg-background-alt">
+    // h-full, not h-screen — this renders inside AppShell's <main>, which is
+    // already shorter than the viewport (a top bar sits above it) and is
+    // itself scrollable. h-screen made this box taller than main's box,
+    // so main had to scroll to reach the "Use this vendor" footer below;
+    // h-full matches main's actual box so the footer stays pinned in view
+    // and only the middle content scrolls.
+    <div className="flex h-full flex-col bg-background-alt">
       <div className="flex h-14 shrink-0 items-center justify-between bg-primary px-[var(--space-md)]">
         <button type="button" onClick={() => router.back()} aria-label="Back" className="-m-2 p-2 text-white">
           <ChevronLeft size={26} strokeWidth={2.25} />

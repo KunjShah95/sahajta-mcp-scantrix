@@ -15,8 +15,6 @@ import { showToast } from "@/lib/dialogManager";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 
 import { GoogleSignInButton } from "./GoogleSignInButton";
-import { AppleSignInButton } from "./AppleSignInButton";
-import { MicrosoftSignInButton } from "./MicrosoftSignInButton";
 
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
@@ -202,8 +200,6 @@ export function LoginForm() {
             </div>
 
             <GoogleSignInButton onSuccess={goToDashboard} onError={setFormError} />
-            <MicrosoftSignInButton onSuccess={goToDashboard} onError={setFormError} />
-            <AppleSignInButton onSuccess={goToDashboard} onError={setFormError} />
           </form>
         </Card>
       </div>

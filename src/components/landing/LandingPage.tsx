@@ -145,15 +145,16 @@ function IntegrationStrip() {
             <BrandIcon name="quickbooks" size={18} /> QuickBooks
             <span className="rounded-pill bg-[#E8F7F1] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[color:var(--lp-auto)]">Live</span>
           </span>
-          <span className="inline-flex items-center gap-2 text-[14px] font-semibold text-text-secondary opacity-70">
+          <span className="inline-flex items-center gap-2 text-[14px] font-semibold text-trust-navy">
             <BrandIcon name="google-drive" size={17} /> Google Drive
+            <span className="rounded-pill bg-[#E8F7F1] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[color:var(--lp-auto)]">Live</span>
           </span>
           <span className="inline-flex items-center gap-2 text-[14px] font-semibold text-text-secondary opacity-70">
             <BrandIcon name="zoho" size={17} /> Zoho Books
             <span className="rounded-pill bg-background-alt px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-text-secondary">Soon</span>
           </span>
           <span className="inline-flex items-center gap-2 text-[14px] font-semibold text-text-secondary opacity-70">
-            Tally
+            <BrandIcon name="sage" size={17} /> Sage Intacct
             <span className="rounded-pill bg-background-alt px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-text-secondary">Soon</span>
           </span>
         </div>
