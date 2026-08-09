@@ -45,46 +45,20 @@ export const registerUser = createAsyncThunk(
     thunkAPI
   ) => {
     try {
-      console.log(
-        "========== API REQUEST =========="
-      );
 
-      console.log(
-        "POST /auth/register"
-      );
 
       console.log("Request Body:");
 
-      console.log(
-        JSON.stringify(
-          userData,
-          null,
-          2
-        )
-      );
 
       const response = await api.post(
         "/auth/register",
         userData
       );
 
-      console.log(
-        "========== API SUCCESS RESPONSE =========="
-      );
 
-      console.log(
-        JSON.stringify(
-          response.data,
-          null,
-          2
-        )
-      );
 
       return response.data;
     } catch (error: any) {
-      console.log(
-        "========== API ERROR =========="
-      );
 
       console.log(error);
 
@@ -122,30 +96,15 @@ export const verifyRegisterOtp = createAsyncThunk(
     thunkAPI
   ) => {
     try {
-      console.log(
-        "========== VERIFY REGISTER OTP API REQUEST =========="
-      );
 
-      console.log(
-        "POST /auth/verify-register"
-      );
 
-      console.log(
-        JSON.stringify(data, null, 2)
-      );
 
       const response = await api.post(
         "/auth/verify-register",
         data
       );
 
-      console.log(
-        "========== VERIFY REGISTER OTP API SUCCESS =========="
-      );
 
-      console.log(
-        JSON.stringify(response.data, null, 2)
-      );
 
       // Defensively reset any QB session data left over from a previous
       // user on this browser before this session saves its own tokens or
@@ -187,9 +146,6 @@ export const verifyRegisterOtp = createAsyncThunk(
 
       return response.data;
     } catch (error: any) {
-      console.log(
-        "========== VERIFY REGISTER OTP API ERROR =========="
-      );
 
       console.log(error);
 
@@ -222,32 +178,17 @@ export const resendRegisterOtp = createAsyncThunk(
     thunkAPI
   ) => {
     try {
-      console.log(
-        "========== RESEND REGISTER OTP API REQUEST =========="
-      );
 
-      console.log(
-        JSON.stringify(data, null, 2)
-      );
 
       const response = await api.post(
         "/auth/resend-register-otp",
         data
       );
 
-      console.log(
-        "========== RESEND REGISTER OTP API SUCCESS =========="
-      );
 
-      console.log(
-        JSON.stringify(response.data, null, 2)
-      );
 
       return response.data;
     } catch (error: any) {
-      console.log(
-        "========== RESEND REGISTER OTP API ERROR =========="
-      );
 
       console.log(error);
 
@@ -281,40 +222,17 @@ export const loginUser = createAsyncThunk(
     thunkAPI
   ) => {
     try {
-      console.log(
-        "========== LOGIN API REQUEST =========="
-      );
 
-      console.log(
-        "POST /auth/login"
-      );
 
       console.log("Request Body:");
 
-      console.log(
-        JSON.stringify(
-          userData,
-          null,
-          2
-        )
-      );
 
       const response = await api.post(
         "/auth/login",
         userData
       );
 
-      console.log(
-        "========== LOGIN API SUCCESS =========="
-      );
 
-      console.log(
-        JSON.stringify(
-          response.data,
-          null,
-          2
-        )
-      );
 
       // Defensively reset any QB session data left over from a previous
       // user on this browser before this session saves its own tokens or
@@ -363,9 +281,6 @@ export const loginUser = createAsyncThunk(
 
       return response.data;
     } catch (error: any) {
-      console.log(
-        "========== LOGIN API ERROR =========="
-      );
 
       console.log(error);
 
@@ -402,9 +317,6 @@ export const logoutUser = createAsyncThunk(
     thunkAPI
   ) => {
     try {
-      console.log(
-        "========== LOGOUT API REQUEST =========="
-      );
 
       const response = await api.post(
         "/auth/logout",
@@ -455,36 +367,18 @@ export const forgotPassword = createAsyncThunk(
     thunkAPI
   ) => {
     try {
-      console.log(
-        "========== FORGOT PASSWORD API REQUEST =========="
-      );
 
-      console.log(
-        "POST /auth/forgot-password"
-      );
 
-      console.log(
-        JSON.stringify(data, null, 2)
-      );
 
       const response = await api.post(
         "/auth/forgot-password",
         data
       );
 
-      console.log(
-        "========== FORGOT PASSWORD API SUCCESS =========="
-      );
 
-      console.log(
-        JSON.stringify(response.data, null, 2)
-      );
 
       return response.data;
     } catch (error: any) {
-      console.log(
-        "========== FORGOT PASSWORD API ERROR =========="
-      );
 
       console.log(error);
 
@@ -524,26 +418,14 @@ export const resetPassword = createAsyncThunk(
     thunkAPI
   ) => {
     try {
-      console.log(
-        "========== RESET PASSWORD API REQUEST =========="
-      );
 
-      console.log(
-        "POST /auth/reset-password"
-      );
 
       const response = await api.post(
         "/auth/reset-password",
         data
       );
 
-      console.log(
-        "========== RESET PASSWORD API SUCCESS =========="
-      );
 
-      console.log(
-        JSON.stringify(response.data, null, 2)
-      );
 
       // Defensively reset any QB session data left over from a previous
       // user on this browser before this session saves its own tokens or
@@ -571,9 +453,6 @@ export const resetPassword = createAsyncThunk(
 
       return response.data;
     } catch (error: any) {
-      console.log(
-        "========== RESET PASSWORD API ERROR =========="
-      );
 
       console.log(error);
 
@@ -698,13 +577,7 @@ export const updateUserProfile = createAsyncThunk(
     try {
       const { userId, accessToken, ...fields } = data;
 
-      console.log(
-        "========== UPDATE USER PROFILE API REQUEST =========="
-      );
 
-      console.log(
-        JSON.stringify(fields, null, 2)
-      );
 
       const response = await api.patch(
         `/users/${userId}`,
@@ -716,13 +589,7 @@ export const updateUserProfile = createAsyncThunk(
         }
       );
 
-      console.log(
-        "========== UPDATE USER PROFILE API SUCCESS =========="
-      );
 
-      console.log(
-        JSON.stringify(response.data, null, 2)
-      );
 
       // Keep localStorage in sync — AuthGate's restoreUser() reads straight
       // from there on every fresh page load, not from this thunk's return
@@ -743,9 +610,6 @@ export const updateUserProfile = createAsyncThunk(
 
       return response.data;
     } catch (error: any) {
-      console.log(
-        "========== UPDATE USER PROFILE API ERROR =========="
-      );
 
       console.log(error);
 
@@ -777,27 +641,12 @@ export const googleLogin = createAsyncThunk(
     thunkAPI
   ) => {
     try {
-      console.log(
-        "========== GOOGLE LOGIN API REQUEST =========="
-      );
 
-      console.log(
-        "POST /auth/google-login"
-      );
 
-      console.log(
-        JSON.stringify(data, null, 2)
-      );
 
       const response = await api.post("/auth/google", data);
 
-      console.log(
-        "========== GOOGLE LOGIN API SUCCESS =========="
-      );
 
-      console.log(
-        JSON.stringify(response.data, null, 2)
-      );
 
       // Defensively reset any QB session data left over from a previous
       // user on this browser before this session saves its own tokens or
@@ -835,9 +684,6 @@ export const googleLogin = createAsyncThunk(
 
       return response.data;
     } catch (error: any) {
-      console.log(
-        "========== GOOGLE LOGIN API ERROR =========="
-      );
 
       console.log(error);
 
@@ -869,26 +715,14 @@ export const appleLogin = createAsyncThunk(
     thunkAPI
   ) => {
     try {
-      console.log(
-        "========== APPLE LOGIN API REQUEST =========="
-      );
 
-      console.log(
-        JSON.stringify(data, null, 2)
-      );
 
       const response = await api.post(
         "/auth/apple",
         data
       );
 
-      console.log(
-        "========== APPLE LOGIN API SUCCESS =========="
-      );
 
-      console.log(
-        JSON.stringify(response.data, null, 2)
-      );
 
       // Defensively reset any QB session data left over from a previous
       // user on this browser before this session saves its own tokens or
@@ -917,9 +751,6 @@ export const appleLogin = createAsyncThunk(
 
       return response.data;
     } catch (error: any) {
-      console.log(
-        "========== APPLE LOGIN API ERROR =========="
-      );
 
       console.log(error);
 
@@ -965,27 +796,12 @@ export const microsoftLogin = createAsyncThunk(
     thunkAPI
   ) => {
     try {
-      console.log(
-        "========== MICROSOFT LOGIN API REQUEST =========="
-      );
 
-      console.log(
-        "POST /auth/microsoft"
-      );
 
-      console.log(
-        JSON.stringify(data, null, 2)
-      );
 
       const response = await api.post("/auth/microsoft", data);
 
-      console.log(
-        "========== MICROSOFT LOGIN API SUCCESS =========="
-      );
 
-      console.log(
-        JSON.stringify(response.data, null, 2)
-      );
 
       // Defensively reset any QB session data left over from a previous
       // user on this browser before this session saves its own tokens or
@@ -1015,9 +831,6 @@ export const microsoftLogin = createAsyncThunk(
 
       return response.data;
     } catch (error: any) {
-      console.log(
-        "========== MICROSOFT LOGIN API ERROR =========="
-      );
 
       console.log(error);
 
