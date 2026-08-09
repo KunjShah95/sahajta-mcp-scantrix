@@ -92,6 +92,7 @@ export const extractedDataSchema = z.object({
 export const invoiceUpdateSchema = z.object({
     invoiceId: z.string().min(1),
     extractedData: extractedDataSchema,
+    confirm: z.boolean(),
     qbConnectionId: qbConnectionIdOverride,
 });
 export const postToQbSchema = z.object({
@@ -150,6 +151,7 @@ export const connectSchema = z.object({ redirectAfter: z.string().optional() });
 export const inviteMemberSchema = z.object({
     email: z.string().email(),
     role: z.enum(["admin", "accountant", "contributor"]),
+    confirm: z.boolean(),
     qbConnectionId: qbConnectionIdOverride,
 });
 export const removeMemberSchema = z.object({

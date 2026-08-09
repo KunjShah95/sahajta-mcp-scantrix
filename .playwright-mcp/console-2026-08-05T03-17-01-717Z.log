@@ -1,0 +1,166 @@
+[    3541ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[    3619ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[    6682ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[    7770ms] [LOG] [Fast Refresh] done in 1189ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   90333ms] [LOG] ========== LOGIN API REQUEST ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   90333ms] [LOG] POST /auth/login @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   90334ms] [LOG] Request Body: @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   90334ms] [LOG] {
+  "email": "sahajta@scantrix.ai",
+  "password": "123456"
+} @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   90343ms] [LOG] ========== API REQUEST ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   90343ms] [LOG] POST https://api.savetrix.com/api/auth/login @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   90580ms] [LOG] ========== LOGIN API SUCCESS ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   90580ms] [LOG] {
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "user": {
+      "_id": "6a6b273be39b7366b5fbe5fb",
+      "firstName": "Pranamya",
+      "lastName": "Jain",
+      "email": "sahajta@scantrix.ai",
+      "phone": "+918233520234",
+      "icon": null,
+      "isActive": true,
+      "isEmailVerified": true,
+      "onBoardingCompleted": false,
+      "hasPassword": true,
+      "authProvider": "email"
+    },
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNmIyNzNiZTM5YjczNjZiNWZiZTVmYiIsImlzQWN0aXZlIjp0cnVlLCJpYXQiOjE3ODU4OTk5MTEsImV4cCI6MTc4NjUwNDcxMX0.9v0bMjiQDQZ3Bv_pOQNcAvMvm4dJCmwetpp-_sDHFCo",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNmIyNzNiZTM5YjczNjZiNWZiZTVmYiIsImlhdCI6MTc4NTg5OTkxMSwiZXhwIjoxNzg2NTA0NzExfQ.RIldy3lj6EK_-4S7XN8gfFKxZgAcB3GJW1LXFauT2Pw"
+  },
+  "statusCode": 200
+} @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   90701ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92100ms] [LOG] [Fast Refresh] done in 1501ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92257ms] [LOG] ========== GET MY QB CONNECTIONS REQUEST ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92259ms] [LOG] ========== GET MY QB CONNECTIONS REQUEST ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92261ms] [LOG] ========== GET MY QB CONNECTIONS REQUEST ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92262ms] [LOG] ========== GET MY QB CONNECTIONS REQUEST ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92280ms] [LOG] ========== API REQUEST ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92280ms] [LOG] GET https://api.savetrix.com/api/qb-connections @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92280ms] [LOG] ========== API REQUEST ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92280ms] [LOG] GET https://api.savetrix.com/api/qb-connections @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92280ms] [LOG] ========== API REQUEST ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92280ms] [LOG] GET https://api.savetrix.com/api/qb-connections @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92280ms] [LOG] ========== API REQUEST ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92281ms] [LOG] GET https://api.savetrix.com/api/qb-connections @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92315ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92347ms] [LOG] ========== GET MY QB CONNECTIONS SUCCESS ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92347ms] [LOG] {
+  "success": true,
+  "message": "QB connections fetched",
+  "data": {
+    "connections": []
+  },
+  "statusCode": 200
+} @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92349ms] [LOG] GET MY CONNECTIONS PAYLOAD: {
+  "success": true,
+  "message": "QB connections fetched",
+  "data": {
+    "connections": []
+  },
+  "statusCode": 200
+} @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92375ms] [LOG] ========== GET MY QB CONNECTIONS SUCCESS ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92375ms] [LOG] {
+  "success": true,
+  "message": "QB connections fetched",
+  "data": {
+    "connections": []
+  },
+  "statusCode": 200
+} @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92375ms] [LOG] GET MY CONNECTIONS PAYLOAD: {
+  "success": true,
+  "message": "QB connections fetched",
+  "data": {
+    "connections": []
+  },
+  "statusCode": 200
+} @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92395ms] [LOG] ========== GET MY QB CONNECTIONS SUCCESS ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92395ms] [LOG] {
+  "success": true,
+  "message": "QB connections fetched",
+  "data": {
+    "connections": []
+  },
+  "statusCode": 200
+} @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92395ms] [LOG] GET MY CONNECTIONS PAYLOAD: {
+  "success": true,
+  "message": "QB connections fetched",
+  "data": {
+    "connections": []
+  },
+  "statusCode": 200
+} @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92418ms] [LOG] ========== GET MY QB CONNECTIONS SUCCESS ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92418ms] [LOG] {
+  "success": true,
+  "message": "QB connections fetched",
+  "data": {
+    "connections": []
+  },
+  "statusCode": 200
+} @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92418ms] [LOG] GET MY CONNECTIONS PAYLOAD: {
+  "success": true,
+  "message": "QB connections fetched",
+  "data": {
+    "connections": []
+  },
+  "statusCode": 200
+} @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[   92492ms] [LOG] [Fast Refresh] done in 278ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  161166ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  164676ms] [LOG] [Fast Refresh] done in 3621ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  164717ms] [LOG] ========== GET MY QB CONNECTIONS REQUEST ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  164719ms] [LOG] ========== GET MY QB CONNECTIONS REQUEST ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  164719ms] [LOG] ========== API REQUEST ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  164720ms] [LOG] GET https://api.savetrix.com/api/qb-connections @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  164720ms] [LOG] ========== API REQUEST ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  164720ms] [LOG] GET https://api.savetrix.com/api/qb-connections @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  164763ms] [LOG] ========== GET MY QB CONNECTIONS SUCCESS ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  164763ms] [LOG] {
+  "success": true,
+  "message": "QB connections fetched",
+  "data": {
+    "connections": []
+  },
+  "statusCode": 200
+} @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  164764ms] [LOG] GET MY CONNECTIONS PAYLOAD: {
+  "success": true,
+  "message": "QB connections fetched",
+  "data": {
+    "connections": []
+  },
+  "statusCode": 200
+} @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  164784ms] [LOG] ========== GET MY QB CONNECTIONS SUCCESS ========== @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  164784ms] [LOG] {
+  "success": true,
+  "message": "QB connections fetched",
+  "data": {
+    "connections": []
+  },
+  "statusCode": 200
+} @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  164784ms] [LOG] GET MY CONNECTIONS PAYLOAD: {
+  "success": true,
+  "message": "QB connections fetched",
+  "data": {
+    "connections": []
+  },
+  "statusCode": 200
+} @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  185655ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  185656ms] [LOG] [Fast Refresh] done in 106ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  254303ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489
+[  254304ms] [LOG] [Fast Refresh] done in 103ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2489

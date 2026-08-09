@@ -306,9 +306,14 @@ export const registerSavetrixTools = (server, client, host = {}) => {
     });
     server.registerTool("savetrix_invoice_update", {
         title: "Update invoice details",
-        description: "Patch extracted details on an invoice before posting (e.g. correct vendor, amount, GL account/category, tax code).",
+        description: "Patch extracted details on an invoice before posting (e.g. correct vendor, amount, GL account/category, tax code). Destructive: requires confirm=true.",
         inputSchema: S.invoiceUpdateSchema,
-    }, run((c, a) => invoicesClient.updateInvoiceExtractedData(c, a)));
+    }, run((c, a) => {
+        const gate = requireConfirm(a, "update invoice details");
+        if (!gate.ok)
+            throw new Error(gate.message);
+        return invoicesClient.updateInvoiceExtractedData(c, a);
+    }));
     server.registerTool("savetrix_invoice_post_to_qb", {
         title: "Post invoice to QuickBooks",
         description: "Send an approved invoice into QuickBooks and mark it posted. Destructive: requires confirm=true.",
@@ -464,9 +469,14 @@ export const registerSavetrixTools = (server, client, host = {}) => {
     }, run((c) => teamClient.listTeamMembers(c)));
     server.registerTool("savetrix_team_invite", {
         title: "Invite team member",
-        description: "Invite someone to the team with a role: admin, accountant, or contributor.",
+        description: "Invite someone to the team with a role: admin, accountant, or contributor. Destructive: requires confirm=true.",
         inputSchema: S.inviteMemberSchema,
-    }, run((c, a) => teamClient.inviteTeamMember(c, a)));
+    }, run((c, a) => {
+        const gate = requireConfirm(a, "invite team member");
+        if (!gate.ok)
+            throw new Error(gate.message);
+        return teamClient.inviteTeamMember(c, a);
+    }));
     server.registerTool("savetrix_team_remove", {
         title: "Remove team member",
         description: "Remove a member from the team by member id. Destructive: requires confirm=true.",

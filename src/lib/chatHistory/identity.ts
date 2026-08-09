@@ -137,6 +137,9 @@ function pickUserId(payload: unknown): string | null {
  * Only ever consumed after the backend has vouched for the token — see the
  * file header. Returns null for opaque (non-JWT) tokens, which is fine: the
  * caller then reports "unavailable" rather than inventing an id.
+ *
+ * Prefers the 'sub' claim (per-user by OAuth spec) over payload fields.
+ * Falls back to pickUserId only if sub is absent.
  */
 function decodeJwtSubject(accessToken: string): string | null {
   const segments = accessToken.split(".");
@@ -145,7 +148,12 @@ function decodeJwtSubject(accessToken: string): string | null {
     const json = Buffer.from(segments[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
     const payload: unknown = JSON.parse(json);
     const sub = (payload as Record<string, unknown> | null)?.sub;
-    return pickUserId(payload) ?? (typeof sub === "string" && sub.trim() ? sub.trim() : null);
+    // OAuth spec: 'sub' is the canonical per-user subject. Use it if present.
+    if (typeof sub === "string" && sub.trim()) return sub.trim();
+    // Fallback: use pickUserId's probing of nested structures for non-JWT tokens
+    // or JWTs without a sub claim. This preserves backward compatibility while
+    // still preferring sub when available (which is the safer choice).
+    return pickUserId(payload);
   } catch {
     return null;
   }

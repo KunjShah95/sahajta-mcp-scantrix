@@ -1,0 +1,48 @@
+- generic [active] [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e7] [cursor=pointer]
+  - alert [ref=e11]: GL Account & TaxCode — Scantrix
+  - generic [ref=e609]:
+    - complementary [ref=e610]:
+      - link "Go to dashboard" [ref=e612] [cursor=pointer]:
+        - /url: /dashboard
+        - generic [ref=e613]: Scantrix
+      - generic [ref=e614]: Create
+      - navigation [ref=e619]:
+        - link "Dashboard" [ref=e620] [cursor=pointer]:
+          - /url: /dashboard
+        - link "Invoices" [ref=e627] [cursor=pointer]:
+          - /url: /invoices
+        - link "Team" [ref=e632] [cursor=pointer]:
+          - /url: /team
+        - link "Vendors" [ref=e639] [cursor=pointer]:
+          - /url: /vendors
+        - link "GL Account & TaxCode" [ref=e645] [cursor=pointer]:
+          - /url: /gl-tax-codes
+        - link "Integrations" [ref=e649] [cursor=pointer]:
+          - /url: /accounting-software
+        - link "Subscription" [ref=e653] [cursor=pointer]:
+          - /url: /subscription
+        - button "Collapse sidebar" [ref=e657]
+      - generic [ref=e662]:
+        - link "Pranamya" [ref=e663] [cursor=pointer]:
+          - /url: /profile
+          - generic [ref=e664]: P
+          - text: Pranamya
+        - button "Logout" [ref=e665]
+    - generic [ref=e669]:
+      - banner [ref=e670]:
+        - heading "Bonjour, Pranamya" [level=2] [ref=e671]
+        - generic [ref=e672]:
+          - combobox [ref=e678]
+          - button "Open chat assistant" [ref=e679]
+          - dialog "Chat assistant" [ref=e683]:
+            - generic [ref=e684]:
+              - button "Back to chat" [ref=e717]
+              - heading "Chat History" [level=2] [ref=e720]
+              - button "Close chat" [ref=e721]
+            - paragraph [ref=e726]: No previous conversations for this company.
+          - button "Notifications" [ref=e705]
+      - main [ref=e709]:
+        - generic [ref=e711]:
+          - paragraph [ref=e715]: No company connected
+          - paragraph [ref=e716]: Connect a QuickBooks company before managing GL accounts and tax codes.
