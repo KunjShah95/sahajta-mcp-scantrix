@@ -100,6 +100,7 @@ export const chatToolSchemas: ChatCompletionFunctionTool[] = [
       description:
         "Patch extracted fields on a single invoice (vendor, amount, GL account, tax code, dates, description, line items). " +
         "Does NOT post to QuickBooks — use post_invoice_to_qb for that. Pass only the fields you want to change. " +
+        "Before calling this, describe exactly what you will do and wait for user confirmation. Then pass confirm=true or confirmationToken. " +
         "invoiceId comes from list_invoices or get_invoice_detail.",
       parameters: {
         type: "object",
@@ -136,6 +137,8 @@ export const chatToolSchemas: ChatCompletionFunctionTool[] = [
               },
             },
           },
+          confirm: { type: "boolean", description: "Legacy: set to true only after explicit user confirmation (deprecated; use confirmationToken instead)." },
+          confirmationToken: { type: "string", description: "Server-minted token from a prior rejection response. Binds confirmation to this exact action." },
         },
         required: ["invoiceId", "extractedData"],
       },
@@ -148,7 +151,7 @@ export const chatToolSchemas: ChatCompletionFunctionTool[] = [
       description:
         "Post an approved invoice to QuickBooks (sets postedStatus to 'manual'). " +
         "Before calling this, the model MUST describe exactly what it will do and wait for the user to confirm. " +
-        "The confirm field MUST be set to true only after the user explicitly agrees — otherwise the tool returns a confirmation-required message. " +
+        "Then pass either confirm=true (legacy) or the confirmationToken from a prior rejection response (new, safer). " +
         "invoiceId comes from list_invoices; vendorId comes from list_vendors.",
       parameters: {
         type: "object",
@@ -185,9 +188,10 @@ export const chatToolSchemas: ChatCompletionFunctionTool[] = [
               },
             },
           },
-          confirm: { type: "boolean", description: "Must be true — this action posts to QuickBooks and cannot be undone." },
+          confirm: { type: "boolean", description: "Legacy: set to true only after explicit user confirmation (deprecated; use confirmationToken instead)." },
+          confirmationToken: { type: "string", description: "Server-minted token from a prior rejection response. Binds confirmation to this exact action." },
         },
-        required: ["invoiceId", "vendorId", "extractedData", "confirm"],
+        required: ["invoiceId", "vendorId", "extractedData"],
       },
     },
   },
@@ -197,16 +201,16 @@ export const chatToolSchemas: ChatCompletionFunctionTool[] = [
       name: "reject_invoice",
       description:
         "Reject an invoice (sets postedStatus to 'failed') with an optional reason. " +
-        "Before calling this, the model MUST describe exactly what it will do and wait for the user to confirm. " +
-        "The confirm field MUST be set to true only after the user explicitly agrees.",
+        "Before calling this, describe exactly what you will do and wait for user confirmation. Then pass confirm=true or confirmationToken.",
       parameters: {
         type: "object",
         properties: {
           invoiceId: { type: "string", description: "The invoice's id, from a prior tool result." },
           reason: { type: "string", description: "Why this invoice is being rejected (e.g. 'duplicate', 'bad scan')." },
-          confirm: { type: "boolean", description: "Must be true — this action rejects an invoice and cannot be undone." },
+          confirm: { type: "boolean", description: "Legacy: set to true only after explicit user confirmation (deprecated; use confirmationToken instead)." },
+          confirmationToken: { type: "string", description: "Server-minted token from a prior rejection response. Binds confirmation to this exact action." },
         },
-        required: ["invoiceId", "confirm"],
+        required: ["invoiceId"],
       },
     },
   },
@@ -264,15 +268,15 @@ export const chatToolSchemas: ChatCompletionFunctionTool[] = [
       name: "deactivate_vendor",
       description:
         "Deactivate (soft-delete) a vendor so it no longer appears in active lists. " +
-        "Before calling this, the model MUST describe exactly what it will do and wait for the user to confirm. " +
-        "The confirm field MUST be set to true only after the user explicitly agrees.",
+        "Before calling this, describe exactly what you will do and wait for user confirmation. Then pass confirm=true or confirmationToken.",
       parameters: {
         type: "object",
         properties: {
           vendorId: { type: "string", description: "The vendor's id, from a prior tool result." },
-          confirm: { type: "boolean", description: "Must be true — this action deactivates a vendor." },
+          confirm: { type: "boolean", description: "Legacy: set to true only after explicit user confirmation (deprecated; use confirmationToken instead)." },
+          confirmationToken: { type: "string", description: "Server-minted token from a prior rejection response. Binds confirmation to this exact action." },
         },
-        required: ["vendorId", "confirm"],
+        required: ["vendorId"],
       },
     },
   },

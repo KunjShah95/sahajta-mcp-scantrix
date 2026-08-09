@@ -28,6 +28,7 @@ import {
   type TaxCodeChatContext,
   type VendorChatContext,
 } from "./context";
+import { mintConsentToken, verifyConsentToken } from "./consentTokens";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.savetrix.com/api";
 
@@ -104,23 +105,54 @@ function savetrixDelete<T>(path: string, accessToken: string, qbConnectionId: st
 }
 
 // ── Confirmation gate ───────────────────────────────────────────────────────
-// Destructive actions (post to QB, reject, deactivate, delete) require confirm=true.
-// Mirrors mcp/mcp-server/src/tools/gates.ts requireConfirm. When the gate fails
-// we return a structured message the model relays to the user, who then re-issues
-// the same tool call with confirm: true — the model retains the args from the
-// previous attempt in its context.
+// Destructive actions (post to QB, reject, deactivate, delete) require either:
+// 1. confirm=true (legacy, model-controlled — security risk, deprecated)
+// 2. confirmationToken bound to this exact (tool, args) pair (new, safe)
+//
+// When gate fails, return a structured message with a minted token. The model
+// relays this to the user; if they approve, the model calls the tool again
+// with the same token. Server validates token matches current tool+args.
 export interface ConfirmGateResult {
   ok: boolean;
   message?: string;
+  confirmationToken?: string;
 }
 
-export function requireConfirm(args: { confirm?: boolean }, action: string): ConfirmGateResult {
+export function requireConfirm(
+  args: { confirm?: boolean; confirmationToken?: string },
+  action: string,
+  toolName?: string,
+  requestSalt?: string,
+): ConfirmGateResult {
+  // Token-based confirmation (new, safer).
+  if (args.confirmationToken && toolName && requestSalt) {
+    const isValid = verifyConsentToken(args.confirmationToken, toolName, args, requestSalt);
+    if (isValid) return { ok: true };
+    // Token present but invalid — don't fall through to confirm check.
+    return {
+      ok: false,
+      message: `Confirmation token expired or invalid. Please re-request confirmation.`,
+    };
+  }
+
+  // Confirm flag (legacy, model-controlled).
   if (args.confirm !== true) {
+    // Generate new token for this tool+args, if possible.
+    let token: string | undefined;
+    if (toolName && requestSalt) {
+      try {
+        token = mintConsentToken(toolName, args, requestSalt);
+      } catch {
+        // Token generation failed — fall back to legacy flow.
+      }
+    }
+
     return {
       ok: false,
       message:
         `Action "${action}" modifies data and requires explicit confirmation. ` +
         `Please confirm you want to do this, then I'll proceed.`,
+      confirmationToken: token,
     };
   }
   return { ok: true };
@@ -365,11 +397,17 @@ export interface UpdateInvoiceArgs {
 // amount, GL account, tax code, line items, dates, etc.) without posting it.
 // Mirrors mcp/mcp-server/src/client/invoices.ts updateInvoiceExtractedData and
 // src/store/invoice/invoiceApi.ts updateInvoiceExtractedData thunk.
+// Destructive: requires confirm=true or valid confirmationToken.
 export async function updateInvoice(
   accessToken: string,
   qbConnectionId: string,
-  args: UpdateInvoiceArgs,
+  args: UpdateInvoiceArgs & { confirm?: boolean; confirmationToken?: string },
+  requestSalt?: string,
 ): Promise<unknown> {
+  if (!requestSalt) requestSalt = deriveRequestSalt(accessToken);
+  const gate = gateConfirmation(args, "update_invoice", "update invoice details", requestSalt);
+  if (!gate.ok) return gate;
+
   const res = await savetrixPatch<{ data?: unknown }>(
     `/invoices/${args.invoiceId}`,
     { extractedData: args.extractedData },
@@ -394,9 +432,11 @@ export async function postInvoiceToQuickBooks(
   accessToken: string,
   qbConnectionId: string,
   args: PostInvoiceToQbArgs,
+  requestSalt?: string,
 ): Promise<unknown> {
-  const gate = requireConfirm(args, "post invoice to QuickBooks");
-  if (!gate.ok) return { success: false, message: gate.message, confirmationRequired: true };
+  if (!requestSalt) requestSalt = deriveRequestSalt(accessToken);
+  const gate = gateConfirmation(args, "post_invoice_to_qb", "post invoice to QuickBooks", requestSalt);
+  if (!gate.ok) return gate;
 
   const res = await savetrixPatch<{ data?: unknown }>(
     `/invoices/${args.invoiceId}`,
@@ -425,9 +465,11 @@ export async function rejectInvoice(
   accessToken: string,
   qbConnectionId: string,
   args: RejectInvoiceArgs,
+  requestSalt?: string,
 ): Promise<unknown> {
-  const gate = requireConfirm(args, "reject invoice");
-  if (!gate.ok) return { success: false, message: gate.message, confirmationRequired: true };
+  if (!requestSalt) requestSalt = deriveRequestSalt(accessToken);
+  const gate = gateConfirmation(args, "reject_invoice", "reject invoice", requestSalt);
+  if (!gate.ok) return gate;
 
   const res = await savetrixPatch<{ data?: unknown }>(
     `/invoices/${args.invoiceId}`,
@@ -519,9 +561,11 @@ export async function deactivateVendor(
   accessToken: string,
   qbConnectionId: string,
   args: DeactivateVendorArgs,
+  requestSalt?: string,
 ): Promise<unknown> {
-  const gate = requireConfirm(args, "deactivate vendor");
-  if (!gate.ok) return { success: false, message: gate.message, confirmationRequired: true };
+  if (!requestSalt) requestSalt = deriveRequestSalt(accessToken);
+  const gate = gateConfirmation(args, "deactivate_vendor", "deactivate vendor", requestSalt);
+  if (!gate.ok) return gate;
 
   const res = await savetrixDelete<{ data?: unknown }>(
     `/quickbooks/vendors/${args.vendorId}`,
@@ -624,12 +668,45 @@ export type ToolName = (typeof TOOL_NAMES)[number];
 // Every branch is caught individually so one failed Savetrix call becomes a
 // plain-language tool result the model can relay ("couldn't find that"),
 // never a crash of the whole streaming response.
+/**
+ * Per-request salt for consent token signing. Prevents token reuse across
+ * different API calls. Derived from accessToken + timestamp for uniqueness.
+ */
+function deriveRequestSalt(accessToken: string): string {
+  const timestamp = Math.floor(Date.now() / 1000);
+  return `${accessToken.slice(0, 16)}:${timestamp}`;
+}
+
+/**
+ * Wrapper for destructive-action confirmation gates. Handles both legacy
+ * confirm flag and new token-based confirmation. Returns { ok: true } if
+ * confirmed, or a rejection response with minted token if needed.
+ */
+function gateConfirmation(
+  args: { confirm?: boolean; confirmationToken?: string },
+  toolName: string,
+  action: string,
+  requestSalt: string,
+): ConfirmGateResult & { success?: false; confirmationRequired?: boolean } {
+  const gate = requireConfirm(args, action, toolName, requestSalt);
+  if (gate.ok) return { ok: true };
+  // Return rejection in the same format as tool functions.
+  return {
+    ok: false,
+    message: gate.message ?? `Action "${action}" requires confirmation.`,
+    success: false,
+    confirmationRequired: true,
+    confirmationToken: gate.confirmationToken,
+  };
+}
+
 export async function callTool(
   name: string,
   args: Record<string, unknown>,
   accessToken: string,
   qbConnectionId: string,
 ): Promise<unknown> {
+  const requestSalt = deriveRequestSalt(accessToken);
   try {
     switch (name as ToolName) {
       case "list_invoices":
@@ -646,17 +723,17 @@ export async function callTool(
         return await listTaxCodes(accessToken, qbConnectionId);
       // ── write tools ───────────────────────────────────────────────────────
       case "update_invoice":
-          return await updateInvoice(accessToken, qbConnectionId, args as unknown as UpdateInvoiceArgs);
+          return await updateInvoice(accessToken, qbConnectionId, args as unknown as UpdateInvoiceArgs & { confirm?: boolean; confirmationToken?: string }, requestSalt);
         case "post_invoice_to_qb":
-          return await postInvoiceToQuickBooks(accessToken, qbConnectionId, args as unknown as PostInvoiceToQbArgs);
+          return await postInvoiceToQuickBooks(accessToken, qbConnectionId, args as unknown as PostInvoiceToQbArgs, requestSalt);
         case "reject_invoice":
-          return await rejectInvoice(accessToken, qbConnectionId, args as unknown as RejectInvoiceArgs);
+          return await rejectInvoice(accessToken, qbConnectionId, args as unknown as RejectInvoiceArgs, requestSalt);
         case "create_vendor":
           return await createVendor(accessToken, qbConnectionId, args as unknown as CreateVendorArgs);
         case "update_vendor":
           return await updateVendor(accessToken, qbConnectionId, args as unknown as UpdateVendorArgs);
         case "deactivate_vendor":
-          return await deactivateVendor(accessToken, qbConnectionId, args as unknown as DeactivateVendorArgs);
+          return await deactivateVendor(accessToken, qbConnectionId, args as unknown as DeactivateVendorArgs, requestSalt);
         case "reactivate_vendor":
           return await reactivateVendor(accessToken, qbConnectionId, args as unknown as ReactivateVendorArgs);
         case "create_gl_account":
