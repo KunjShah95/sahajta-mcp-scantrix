@@ -16,6 +16,7 @@ import axios from "axios";
 import type { ExtractedData, InvoiceRecord } from "@/store/invoice/invoiceSlice";
 import type { GLAccount, TaxCode, Vendor } from "@/store/quickBooks/quickBooksSlice";
 import { getInvoiceStatus } from "@/lib/invoiceDisplay";
+import { ConsumedOperations, mintConsentTicket, verifyConsentTicket } from "./consent";
 import {
   toGLAccountChatContext,
   toInvoiceChatContext,
@@ -762,6 +763,25 @@ export interface CallToolOptions {
    * model produced.
    */
   userConfirmed?: boolean;
+  /**
+   * Id of the HTTP request being served. Consent tickets record the request
+   * that minted them and are refused inside that same request, so the model
+   * cannot mint one and spend it without the turn ending first.
+   */
+  requestId?: string;
+  /** Request-scoped guard against the same write running twice in one turn. */
+  consumed?: ConsumedOperations;
+  /**
+   * Consent ticket the CLIENT sent back with this request, having received it
+   * out of band on the turn where confirmation was requested. Never sourced
+   * from model output.
+   */
+  confirmedTicket?: string;
+  /**
+   * Tickets minted while serving this request, for the route to hand to the
+   * client. Only the first is used — one pending confirmation at a time.
+   */
+  pendingTickets?: string[];
 }
 
 export async function callTool(
@@ -781,14 +801,56 @@ export async function callTool(
     // on its own. So the human's actual click, reported by the client and
     // checked here, is the authorization; the model's flag is only a hint
     // about intent. Fails closed: no click, no write.
-    if (DESTRUCTIVE_TOOLS.has(name) && args.confirm === true && options.userConfirmed !== true) {
-      return {
-        success: false,
-        confirmationRequired: true,
-        message:
-          `Action "${name}" needs the user to confirm it in the app before it can run. ` +
-          "Describe exactly what you are about to do and ask them to confirm, then try again.",
-      };
+    if (DESTRUCTIVE_TOOLS.has(name)) {
+      const requestId = options.requestId ?? "";
+      // Factor 1 — the human actually clicked. Not expressible by the model.
+      if (options.userConfirmed !== true) {
+        const ticket = requestId ? mintConsentTicket(name, args, accessToken, requestId) : undefined;
+        if (ticket) options.pendingTickets?.push(ticket);
+        return {
+          success: false,
+          confirmationRequired: true,
+          message:
+            `Action "${name}" needs the user to confirm it in the app before it can run. ` +
+            "Describe exactly what you are about to do — naming the specific record — then ask them to confirm. " +
+            "When they confirm, call this tool again with exactly the same arguments you just described.",
+        };
+      }
+
+      // Factor 2 — the arguments are the ones that were described to them.
+      // Without this, a click meant for "deactivate Acme Corp" authorizes
+      // whatever the model passes next.
+      const verdict = verifyConsentTicket(
+        options.confirmedTicket,
+        name,
+        args,
+        accessToken,
+        requestId,
+      );
+      if (!verdict.ok) {
+        const ticket = requestId ? mintConsentTicket(name, args, accessToken, requestId) : undefined;
+        if (ticket) options.pendingTickets?.push(ticket);
+        return {
+          success: false,
+          confirmationRequired: true,
+          message:
+            verdict.reason === "mismatch"
+              ? "That confirmation was for a different record or different details than the ones you just sent. " +
+                "Describe the exact change you want to make now and ask the user to confirm it again."
+              : verdict.reason === "expired"
+                ? "That confirmation has expired. Please ask the user to confirm again."
+                : "This action still needs the user's confirmation for these exact details.",
+        };
+      }
+
+      // Single-use within the turn: the model does sometimes repeat a call,
+      // and a repeated post-to-QuickBooks is a duplicate bill.
+      if (options.consumed && !options.consumed.claim(name, args)) {
+        return {
+          success: false,
+          message: "That action was already carried out in this turn — not repeating it.",
+        };
+      }
     }
 
     switch (name as ToolName) {

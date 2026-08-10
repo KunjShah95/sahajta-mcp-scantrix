@@ -17,8 +17,11 @@ import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { RunnableToolFunctionWithParse } from "openai/lib/RunnableFunction";
 
+import { randomUUID } from "node:crypto";
+
 import { resolveChatUser } from "@/lib/chatHistory/identity";
-import { CONFIRM_MARKER } from "@/lib/chatbot/confirmMarker";
+import { ConsumedOperations } from "@/lib/chatbot/consent";
+import { CONFIRM_MARKER, CONSENT_FRAME_PREFIX, CONSENT_FRAME_SUFFIX } from "@/lib/chatbot/confirmMarker";
 import { chatToolSchemas } from "@/lib/chatbot/toolSchemas";
 import { buildSystemPrompt, CHAT_MODEL } from "@/lib/chatbot/systemPrompt";
 import { callTool, TOOL_NAMES } from "@/lib/chatbot/tools";
@@ -57,6 +60,11 @@ interface ChatRequestBody {
    * argument — is what authorizes a destructive tool (see callTool).
    */
   userConfirmed?: boolean;
+  /**
+   * Consent ticket the client received out of band when confirmation was
+   * requested, echoed back on the turn where the user accepted the dialog.
+   */
+  confirmationToken?: string;
 }
 
 // Best-effort, single-instance-only rate limit — see architecture doc §7.11.
@@ -141,6 +149,13 @@ export async function POST(request: Request) {
     { role: "user", content: body.message },
   ];
 
+  // Identifies this HTTP request for consent-ticket binding: a ticket minted
+  // while serving a request is refused within that same request, so the model
+  // cannot mint one and immediately spend it (see lib/chatbot/consent.ts).
+  const requestId = randomUUID();
+  const consumed = new ConsumedOperations();
+  const pendingTickets: string[] = [];
+
   // Every tool call closes over THIS request's accessToken/qbConnectionId —
   // never a shared/service credential (architecture doc §5, §7.3).
   const tools: RunnableToolFunctionWithParse<Record<string, unknown>, unknown>[] = chatToolSchemas.map((tool) => ({
@@ -162,6 +177,10 @@ export async function POST(request: Request) {
         }
         return callTool(tool.function.name, args, accessToken, qbConnectionId, {
           userConfirmed: body.userConfirmed === true,
+          requestId,
+          consumed,
+          confirmedTicket: typeof body.confirmationToken === "string" ? body.confirmationToken : undefined,
+          pendingTickets,
         });
       },
     },
@@ -240,6 +259,15 @@ export async function POST(request: Request) {
                 "I wasn't able to finish that request — it needed more steps than I'm allowed to take in one go. " +
                   "Some of those steps may already have run, so please check the relevant invoice or vendor before retrying.",
               ),
+            );
+          }
+          // Hand the client the ticket for the operation the user is being
+          // asked about. It travels outside the model's context on purpose —
+          // the client stores it and returns it with the confirming turn, so
+          // the write that runs is provably the one the dialog described.
+          if (pendingTickets.length > 0) {
+            controller.enqueue(
+              encoder.encode(`${CONSENT_FRAME_PREFIX}${pendingTickets[0]}${CONSENT_FRAME_SUFFIX}`),
             );
           }
           controller.close();

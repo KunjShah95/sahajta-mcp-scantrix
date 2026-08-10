@@ -10,7 +10,7 @@ import { ChatQuickActions } from "@/components/chatbot/ChatQuickActions";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { CONFIRM_MARKER } from "@/lib/chatbot/confirmMarker";
+import { CONFIRM_MARKER, CONSENT_FRAME_PREFIX, CONSENT_FRAME_SUFFIX } from "@/lib/chatbot/confirmMarker";
 import { confirmDialog } from "@/lib/dialogManager";
 import { SESSION_EXPIRED, sessionEmitter } from "@/lib/sessionManager";
 import { deleteConversation, fetchConversations, openConversation, saveCurrentConversation } from "@/store/chat/chatApi";
@@ -28,6 +28,20 @@ let nextMessageId = 0;
 const newMessageId = () => `chat-${Date.now()}-${++nextMessageId}`;
 
 type View = "chat" | "history";
+
+// The server appends the consent ticket as a U+001F-delimited control frame
+// after the assistant's text (see /api/chat). It must never be rendered.
+const CONSENT_FRAME_RE = new RegExp(`${CONSENT_FRAME_PREFIX}([^${CONSENT_FRAME_SUFFIX}]*)${CONSENT_FRAME_SUFFIX}`);
+
+function extractConsentTicket(text: string): string | undefined {
+  return CONSENT_FRAME_RE.exec(text)?.[1] || undefined;
+}
+
+function stripConsentFrame(text: string): string {
+  // Removes a complete frame, and also any dangling prefix from a chunk that
+  // split mid-frame.
+  return text.replace(CONSENT_FRAME_RE, "").split(CONSENT_FRAME_PREFIX)[0];
+}
 
 export function ChatPanel({ companyName, onClose }: { companyName?: string; onClose: () => void }) {
   const dispatch = useAppDispatch();
@@ -86,7 +100,7 @@ export function ChatPanel({ companyName, onClose }: { companyName?: string; onCl
   // when the human actually accepted the dialog. The server treats it as the
   // authorization for a destructive tool — the model's own `confirm: true`
   // argument is not sufficient on its own (see src/lib/chatbot/tools.ts).
-  const sendText = async (text: string, opts: { userConfirmed?: boolean } = {}) => {
+  const sendText = async (text: string, opts: { userConfirmed?: boolean; confirmationToken?: string } = {}) => {
     if (!text || streaming || !accessToken || !qbConnectionId) return;
 
     const history = messagesRef.current.map((m) => ({ role: m.role, content: m.content }));
@@ -109,6 +123,7 @@ export function ChatPanel({ companyName, onClose }: { companyName?: string; onCl
           history,
           companyName,
           ...(opts.userConfirmed ? { userConfirmed: true } : {}),
+          ...(opts.confirmationToken ? { confirmationToken: opts.confirmationToken } : {}),
         }),
       });
 
@@ -130,12 +145,19 @@ export function ChatPanel({ companyName, onClose }: { companyName?: string; onCl
         const delta = decoder.decode(value, { stream: true });
         if (delta) {
           assistantText += delta;
-          dispatch(appendAssistantChunk({ id: assistantId, delta }));
+          // The consent frame is a control message, not content. Buffer it out
+          // rather than rendering it: it arrives only at the very end, so
+          // holding back any partial frame costs nothing visually.
+          const visible = stripConsentFrame(delta);
+          if (visible) dispatch(appendAssistantChunk({ id: assistantId, delta: visible }));
         }
       }
 
       dispatch(streamCompleted());
-      if (assistantText.includes(CONFIRM_MARKER)) void handlePendingConfirmation(assistantText);
+      const ticket = extractConsentTicket(assistantText);
+      if (assistantText.includes(CONFIRM_MARKER)) {
+        void handlePendingConfirmation(stripConsentFrame(assistantText), ticket);
+      }
     } catch (err) {
       dispatch(streamFailed(err instanceof Error ? err.message : "Something went wrong. Please try again."));
     } finally {
@@ -157,7 +179,7 @@ export function ChatPanel({ companyName, onClose }: { companyName?: string; onCl
   // watches for. Surfacing it as a real confirmDialog(), instead of leaving
   // the user to notice the sentence and type "yes" themselves, is the whole
   // point: a tap they can trust beats a chat reply they have to get right.
-  const handlePendingConfirmation = async (assistantText: string) => {
+  const handlePendingConfirmation = async (assistantText: string, confirmationToken?: string) => {
     // Split/join (not a single .replace()) because the underlying multi-round
     // tool-calling stream sometimes emits this exact sentence more than once
     // in the same turn — seen live in production — and a plain .replace()
@@ -170,7 +192,7 @@ export function ChatPanel({ companyName, onClose }: { companyName?: string; onCl
       cancelLabel: "Cancel",
       tone: "destructive",
     });
-    if (confirmed) sendText("Yes, proceed.", { userConfirmed: true });
+    if (confirmed) sendText("Yes, proceed.", { userConfirmed: true, confirmationToken });
   };
 
   const handleSend = () => sendText(input.trim());

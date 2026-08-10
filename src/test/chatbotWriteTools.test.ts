@@ -13,6 +13,7 @@ import { afterEach, describe, it } from "node:test";
 
 import axios from "axios";
 
+import { ConsumedOperations, mintConsentTicket } from "../lib/chatbot/consent";
 import {
   callTool,
   createGLAccount,
@@ -561,6 +562,17 @@ describe("callTool dispatch", () => {
 // Each of these covers a defect that was verified to be exploitable against
 // the deployed system, so they exist to make sure it cannot come back.
 
+// Destructive tools now need BOTH the human's click (userConfirmed) and a
+// consent ticket bound to these exact args, minted in an EARLIER request.
+// This helper produces a legitimately confirmed call.
+function confirmed(tool: ToolName, args: Record<string, unknown>) {
+  const ticket = mintConsentTicket(tool, args, ACCESS_TOKEN, "req-earlier");
+  return {
+    args: { ...args },
+    options: { userConfirmed: true, requestId: "req-now", consumed: new ConsumedOperations(), confirmedTicket: ticket },
+  };
+}
+
 describe("path traversal in model-supplied ids", () => {
   // Ids reach these tools from the model, which is influenced by OCR'd
   // invoice text an outsider can author. axios resolves the request URL
@@ -570,12 +582,13 @@ describe("path traversal in model-supplied ids", () => {
 
   it("rejects a traversing invoiceId before any network call", async () => {
     const stub = stubAxios("patch", { data: {} });
+    const c = confirmed("reject_invoice", { invoiceId: TRAVERSAL, confirm: true });
     const result = (await callTool(
       "reject_invoice",
-      { invoiceId: TRAVERSAL, confirm: true },
+      c.args,
       ACCESS_TOKEN,
       QB_CONNECTION_ID,
-      { userConfirmed: true },
+      c.options,
     )) as ToolResult;
     assert.equal(result.success, false);
     assert.match(result.message ?? "", /Invalid invoiceId/);
@@ -584,12 +597,13 @@ describe("path traversal in model-supplied ids", () => {
 
   it("rejects a traversing vendorId before any network call", async () => {
     const stub = stubAxios("delete", { data: {} });
+    const c = confirmed("deactivate_vendor", { vendorId: "../../../api/invoices/x", confirm: true });
     const result = (await callTool(
       "deactivate_vendor",
-      { vendorId: "../../../api/invoices/x", confirm: true },
+      c.args,
       ACCESS_TOKEN,
       QB_CONNECTION_ID,
-      { userConfirmed: true },
+      c.options,
     )) as ToolResult;
     assert.equal(result.success, false);
     assert.match(result.message ?? "", /Invalid vendorId/);
@@ -598,13 +612,8 @@ describe("path traversal in model-supplied ids", () => {
 
   it("still allows ordinary ids through, url-encoded", async () => {
     const stub = stubAxios("patch", { data: { data: { invoice: { _id: "inv-1" } } } });
-    await callTool(
-      "reject_invoice",
-      { invoiceId: "inv-1", confirm: true },
-      ACCESS_TOKEN,
-      QB_CONNECTION_ID,
-      { userConfirmed: true },
-    );
+    const c = confirmed("reject_invoice", { invoiceId: "inv-1", confirm: true });
+    await callTool("reject_invoice", c.args, ACCESS_TOKEN, QB_CONNECTION_ID, c.options);
     const [path] = stub.mock.calls[0] as [string];
     assert.equal(path, "/invoices/inv-1");
   });
@@ -631,7 +640,8 @@ describe("destructive actions require a real user confirmation", () => {
 
     it(`${tool}: executes once the user has confirmed in the app`, async () => {
       const stub = stubAxios(method, { data: { data: {} } });
-      await callTool(tool, args, ACCESS_TOKEN, QB_CONNECTION_ID, { userConfirmed: true });
+      const c = confirmed(tool, args);
+      await callTool(tool, c.args, ACCESS_TOKEN, QB_CONNECTION_ID, c.options);
       assert.equal(stub.mock.calls.length, 1);
     });
   }
