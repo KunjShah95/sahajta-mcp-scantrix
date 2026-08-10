@@ -1,4 +1,5 @@
 import type { SavetrixClient } from "./savetrixClient.js";
+import { unwrapList } from "./unwrap.js";
 
 interface RawQbData {
   _id?: string;
@@ -33,7 +34,9 @@ const toConnectionSummary = (raw: RawQbData) => ({
 
 export const listConnections = async (client: SavetrixClient): Promise<unknown> => {
   const res = await client.api.get("/qb-connections");
-  const connections: RawQbData[] = res.data?.data?.connections ?? [];
+  // `?? []` here had the same failure mode as unwrapList's old default: a 200
+  // carrying {success:false,...} became "you have no QuickBooks companies".
+  const connections = unwrapList<RawQbData>(res, ["connections"], "QuickBooks connections");
   return connections.map(toConnectionSummary);
 };
 

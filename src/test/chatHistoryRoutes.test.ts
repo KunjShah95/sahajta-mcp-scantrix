@@ -320,7 +320,9 @@ describe("chat history routes", { skip: HAS_STORE ? false : "BLOB_READ_WRITE_TOK
     // read, but Blob switches to a WEAK validator as a document grows, and a
     // weak validator can never satisfy If-Match — so every save after that
     // point failed with a write conflict and the user silently stopped
-    // accumulating history. See isStrongEtag in lib/chatHistory/store.ts.
+    // accumulating history. See isWeakEtag / writeWithMergeRepair in
+    // lib/chatHistory/store.ts; the interleaving this can't arrange against a
+    // live store is covered in chatHistoryConcurrency.test.ts.
     await deleteAllConversations(ALICE).catch(() => {});
 
     for (let turn = 0; turn < 4; turn += 1) {
