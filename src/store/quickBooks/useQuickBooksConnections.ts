@@ -18,8 +18,13 @@ export interface QBConnection {
   role: string;
   createdAt: string;
   updatedAt?: string;
-  /** Backend derives this from isDeleted — absent on older cached data, treat as active. */
-  status?: "active" | "disconnected";
+  /**
+   * Backend derives this from isDeleted/needsReconnect — absent on older cached
+   * data, treat as active. "reconnect_required" means Intuit revoked/expired
+   * the refresh token; the connection still exists but needs the user to
+   * re-authorize before it'll work again.
+   */
+  status?: "active" | "disconnected" | "reconnect_required";
 }
 
 // Shared between QuickBooksConnectContent (the dedicated /quickbooks page)

@@ -214,6 +214,7 @@ export function AccountingSoftwaresContent() {
   const selectedConnection: QBConnection | null =
     detail?.type === "connection" ? connections.find((c) => c._id === detail.id) || null : null;
   const isSelectedDisconnected = selectedConnection?.status === "disconnected";
+  const isSelectedReconnectRequired = selectedConnection?.status === "reconnect_required";
 
   const closeDetail = () => setDetail(null);
 
@@ -357,6 +358,7 @@ export function AccountingSoftwaresContent() {
                 ) : (
                   activeConnections.map((connection) => {
                     const isActive = connection._id === activeConnectionId;
+                    const needsReconnect = connection.status === "reconnect_required";
                     const isSelected = detail?.type === "connection" && detail.id === connection._id;
                     return (
                       <ConnectedRow
@@ -364,8 +366,14 @@ export function AccountingSoftwaresContent() {
                         icon={<BrandIcon name="quickbooks" size={28} />}
                         name={connection.name}
                         description="QuickBooks Online"
-                        badgeLabel={isActive ? "Active" : "Connected"}
-                        badgeClassName={isActive ? "bg-success/10 text-success" : "bg-background-alt text-text-secondary"}
+                        badgeLabel={needsReconnect ? "Reconnect required" : isActive ? "Active" : "Connected"}
+                        badgeClassName={
+                          needsReconnect
+                            ? "bg-warning/10 text-text-primary"
+                            : isActive
+                              ? "bg-success/10 text-success"
+                              : "bg-background-alt text-text-secondary"
+                        }
                         selected={isSelected}
                         onClick={() => setDetail({ type: "connection", id: connection._id })}
                       />
@@ -507,9 +515,11 @@ export function AccountingSoftwaresContent() {
               subtitle={
                 isSelectedDisconnected
                   ? "Disconnected"
-                  : selectedConnection._id === activeConnectionId
-                    ? "Active connection"
-                    : "Inactive"
+                  : isSelectedReconnectRequired
+                    ? "Needs reconnect"
+                    : selectedConnection._id === activeConnectionId
+                      ? "Active connection"
+                      : "Inactive"
               }
               onClose={closeDetail}
             >
