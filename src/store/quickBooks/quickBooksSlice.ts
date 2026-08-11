@@ -197,7 +197,6 @@ const quickBooksSlice = createSlice({
       .addCase(getQuickBooksStatus.fulfilled, (state, action) => {
         state.statusLoading = false;
         state.statusError = null;
-        console.log("QB STATUS PAYLOAD:", JSON.stringify(action.payload, null, 2));
         const qbData = action.payload?.data ?? action.payload;
         state.connected = qbData?.connected ?? false;
         state.disconnectReason = qbData?.connected ? null : qbData?.reason ?? null;
