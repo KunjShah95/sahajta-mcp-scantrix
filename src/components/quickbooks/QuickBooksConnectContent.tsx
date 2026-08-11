@@ -55,6 +55,7 @@ export function QuickBooksConnectContent() {
 
           {connections.map((connection) => {
             const isActive = connection._id === activeConnectionId;
+            const needsReconnect = connection.status === "reconnect_required";
             const date = new Date(connection.createdAt).toLocaleDateString("en-US", {
               month: "short",
               day: "numeric",
@@ -66,10 +67,12 @@ export function QuickBooksConnectContent() {
                 className={`flex flex-col items-start gap-[var(--space-sm)] lg:flex-row lg:items-center lg:justify-between ${isActive ? "border-primary" : ""}`}
               >
                 <div className="flex min-w-0 items-center gap-[var(--space-sm)]">
-                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${isActive ? "bg-primary" : "bg-border"}`} />
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${needsReconnect ? "bg-warning" : isActive ? "bg-primary" : "bg-border"}`} />
                   <div className="min-w-0">
                     <p className="truncate font-bold text-text-primary">{connection.name}</p>
-                    <p className="truncate text-caption text-text-secondary">Connected {date}</p>
+                    <p className={`truncate text-caption ${needsReconnect ? "font-semibold text-warning" : "text-text-secondary"}`}>
+                      {needsReconnect ? "Needs reconnect — QuickBooks revoked access" : `Connected ${date}`}
+                    </p>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-[var(--space-sm)]">

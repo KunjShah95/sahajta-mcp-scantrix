@@ -67,6 +67,10 @@ interface QuickBooksState {
   hasExplicitSelection: boolean;
   statusLoading: boolean;
   statusError: string | null;
+  // From /quickbooks/status's `reason` when connected is false — e.g.
+  // "session_expired" or "reconnect_required" — lets the UI show a specific
+  // message/action instead of a generic "not connected" banner.
+  disconnectReason: string | null;
   autoPostEnabled: boolean;
   lineItemWiseEnabled: boolean;
   attachInvoiceCopyEnabled: boolean;
@@ -88,6 +92,7 @@ const initialState: QuickBooksState = {
   hasExplicitSelection: false,
   statusLoading: false,
   statusError: null,
+  disconnectReason: null,
   // Default true matches the backend's default for connections that predate
   // these settings — see qb_connection.model.js.
   autoPostEnabled: true,
@@ -195,6 +200,7 @@ const quickBooksSlice = createSlice({
         console.log("QB STATUS PAYLOAD:", JSON.stringify(action.payload, null, 2));
         const qbData = action.payload?.data ?? action.payload;
         state.connected = qbData?.connected ?? false;
+        state.disconnectReason = qbData?.connected ? null : qbData?.reason ?? null;
         state.realmId = qbData?.realmId ?? "";
         state.autoPostEnabled = qbData?.autoPostEnabled ?? true;
         state.lineItemWiseEnabled = qbData?.lineItemWiseEnabled ?? true;

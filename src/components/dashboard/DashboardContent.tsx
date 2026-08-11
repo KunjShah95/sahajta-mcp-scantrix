@@ -280,7 +280,8 @@ export function DashboardContent() {
     loading: invoiceLoading,
     error: invoiceError,
   } = useAppSelector((state) => state.invoice);
-  const { connected, statusLoading, qbConnectionId } = useAppSelector((state) => state.quickBooks);
+  const { connected, statusLoading, qbConnectionId, disconnectReason } = useAppSelector((state) => state.quickBooks);
+  const needsReconnect = disconnectReason === "reconnect_required";
 
   // Connected to at least one company but haven't picked one yet via the
   // top-bar switcher — qbConnectionId only ever starts/goes blank while
@@ -351,7 +352,12 @@ export function DashboardContent() {
     if (!accessToken || connectingQB) return;
     setConnectingQB(true);
     try {
-      const result = await dispatch(connectQuickBooks({ accessToken }));
+      // A revoked/invalid refresh token still occupies this connection's
+      // slot, so a plain (no qbConnectionId) connect would 402 on the slot
+      // check — re-auth the SAME connection instead of starting a new one.
+      const result = await dispatch(
+        connectQuickBooks(needsReconnect && qbConnectionId ? { accessToken, qbConnectionId } : { accessToken }),
+      );
       if (connectQuickBooks.fulfilled.match(result)) {
         const authUrl = result.payload?.data?.authUrl;
         if (authUrl) {
@@ -601,9 +607,13 @@ export function DashboardContent() {
           className="flex items-center justify-between rounded-lg border border-[#F5D7A4] bg-[#FFF7E6] p-[var(--space-md)] text-left disabled:opacity-60"
         >
           <div>
-            <p className="font-bold text-[#9A6700]">QuickBooks Not Connected</p>
+            <p className="font-bold text-[#9A6700]">{needsReconnect ? "QuickBooks Needs Reconnecting" : "QuickBooks Not Connected"}</p>
             <p className="mt-[var(--space-xs)] text-caption text-text-secondary">
-              {connectingQB ? "Connecting…" : "Connect QuickBooks to sync vendors and post invoices."}
+              {connectingQB
+                ? "Connecting…"
+                : needsReconnect
+                  ? "QuickBooks revoked access to this connection. Reconnect to resume syncing and posting."
+                  : "Connect QuickBooks to sync vendors and post invoices."}
             </p>
           </div>
           <ArrowRight size={20} strokeWidth={2} className="shrink-0 text-primary" />
