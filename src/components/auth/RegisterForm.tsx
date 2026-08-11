@@ -13,8 +13,6 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { COUNTRY_CODES } from "@/lib/countryCodes";
 
 import { GoogleSignInButton } from "./GoogleSignInButton";
-import { AppleSignInButton } from "./AppleSignInButton";
-import { MicrosoftSignInButton } from "./MicrosoftSignInButton";
 
 type FieldName = "firstName" | "lastName" | "email" | "phone" | "password";
 
@@ -288,8 +286,6 @@ export function RegisterForm() {
             </div>
 
             <GoogleSignInButton onSuccess={() => router.push("/dashboard")} onError={setFormError} />
-            <MicrosoftSignInButton onSuccess={() => router.push("/dashboard")} onError={setFormError} />
-            <AppleSignInButton onSuccess={() => router.push("/dashboard")} onError={setFormError} />
           </form>
         </Card>
       </div>

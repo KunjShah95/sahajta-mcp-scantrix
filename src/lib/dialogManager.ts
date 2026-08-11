@@ -18,16 +18,25 @@ export interface ConfirmRequest {
   resolve: (value: boolean) => void;
 }
 
-export interface ToastRequest {
+export interface NotificationItem {
   id: number;
   message: string;
   tone: ToastTone;
+  timestamp: number;
+  read: boolean;
 }
 
 export const dialogEmitter = new EventEmitter();
 
 export const CONFIRM_REQUEST = "CONFIRM_REQUEST";
-export const TOAST_REQUEST = "TOAST_REQUEST";
+export const NOTIFICATIONS_CHANGED = "NOTIFICATIONS_CHANGED";
+
+// showToast() only ever renders as a notification-bar entry (NotificationBell's
+// preview bubble + dropdown history) — there is no separate bottom-corner
+// toast anymore, so every call shows up exactly once. Capped, in-memory only
+// — no persistence across a page reload.
+const MAX_NOTIFICATIONS = 30;
+let notifications: NotificationItem[] = [];
 
 let nextId = 0;
 
@@ -57,11 +66,29 @@ export function confirmDialog(options: {
 }
 
 // Replaces window.alert for non-confirmation notices (success/error/info).
-// Auto-dismisses — per DESIGN_LOOP.md's research requirement this loop
-// looked up toast conventions before building: transient feedback should
-// auto-dismiss (3-5s), unlike a confirmation which must stay until the user
-// decides. See DESIGN_ASSUMPTIONS.md D1.3.
+// Surfaces solely through NotificationBell's preview bubble + dropdown
+// history (auto-dismisses there same as a toast would), unlike a
+// confirmation which must stay until the user decides. See
+// DESIGN_ASSUMPTIONS.md D1.3.
 export function showToast(message: string, tone: ToastTone = "info"): void {
-  const request: ToastRequest = { id: ++nextId, message, tone };
-  dialogEmitter.emit(TOAST_REQUEST, request);
+  const id = ++nextId;
+  notifications = [{ id, message, tone, timestamp: Date.now(), read: false }, ...notifications].slice(
+    0,
+    MAX_NOTIFICATIONS
+  );
+  dialogEmitter.emit(NOTIFICATIONS_CHANGED, notifications);
+}
+
+export function getNotifications(): NotificationItem[] {
+  return notifications;
+}
+
+export function markNotificationRead(id: number): void {
+  notifications = notifications.map((n) => (n.id === id ? { ...n, read: true } : n));
+  dialogEmitter.emit(NOTIFICATIONS_CHANGED, notifications);
+}
+
+export function markAllNotificationsRead(): void {
+  notifications = notifications.map((n) => ({ ...n, read: true }));
+  dialogEmitter.emit(NOTIFICATIONS_CHANGED, notifications);
 }

@@ -22,6 +22,20 @@
 //     is a single write. It also makes the per-user caps below trivially
 //     enforceable. The tradeoff is whole-document rewrites; at 50 conversations
 //     that is well within Blob's comfort zone.
+//
+// CONCURRENCY: because a save rewrites the whole document, two writers for the
+// same user (two tabs, or a save racing a delete) can destroy each other's
+// work — not just reorder messages, but drop an entire conversation the other
+// writer had just created. Two independent defences below, in this order:
+//   1. Every write carries a real precondition (see writeAttempt). A conflict
+//      is detected and retried against a freshly read document, and when the
+//      retries run out the caller gets an error instead of a silent clobber.
+//   2. Every write is rebuilt from a FRESHLY READ document with only the
+//      caller's delta applied (see mutateDocument / upsertConversation's
+//      mergeConversations). So even on the one path where the store gives us no
+//      usable precondition (weak etags — see WEAK VALIDATORS below), a
+//      concurrent writer's conversations survive our write instead of being
+//      overwritten by a stale snapshot.
 import { createHash } from "node:crypto";
 
 import { BlobNotFoundError, BlobPreconditionFailedError, del, get, put } from "@vercel/blob";
@@ -37,26 +51,38 @@ import {
 } from "./types";
 
 const PATH_PREFIX = "chat-history/v1/";
+/** Where an unreadable document is preserved before it is replaced. */
+const QUARANTINE_PREFIX = "chat-history/v1/quarantine/";
 const DOCUMENT_VERSION = 1 as const;
 
-/**
- * Two writers for the same user (two tabs, or a save racing a delete) would
- * otherwise silently clobber each other, since a save rewrites the whole
- * document. Blob's `ifMatch` turns that into a detectable conflict we retry.
- *
- * The last attempt deliberately drops the precondition — see mutateDocument.
- */
+/** Conditional (precondition-carrying) write attempts before we give up. */
 const WRITE_ATTEMPTS = 3;
+/** Fresh-read + delta-merge passes on the no-usable-precondition path. */
+const MERGE_ATTEMPTS = 3;
 const WRITE_RETRY_DELAY_MS = 150;
 
 /**
- * Blob serves a WEAK validator (`W/"…"`) for some responses, and a weak etag
- * can never satisfy an `If-Match` — the precondition fails every time, however
- * fresh the read was (verified against the live store: a document crosses into
- * weak-etag territory as it grows, after which every conditional write 412s).
- * So a weak etag means "no usable precondition", not "conflict".
+ * WEAK VALIDATORS. Blob serves a weak validator (`W/"…"`) for some responses,
+ * and per RFC 7232 `If-Match` uses *strong* comparison, so a weak validator can
+ * never satisfy it — the precondition fails however fresh the read was. That is
+ * not a theory here: it is the regression covered by "keeps saving after the
+ * document grows big enough to get a weak etag" in src/test/chatHistoryRoutes
+ * .test.ts, observed against the live store as a document grew.
+ *
+ * The SDK does not help us decide: `put()` copies `options.ifMatch` verbatim
+ * into the `x-if-match` header with no strong/weak inspection at all
+ * (node_modules/@vercel/blob/dist/index.js:291-292 and
+ * dist/chunk-CIIQSN42.js:859-885), and there is no other conditional-write
+ * primitive — only `ifMatch` (overwrite-if-unchanged) and `allowOverwrite`
+ * (create-only). So a weak etag means "no usable precondition".
+ *
+ * What we must NOT do — and what the previous version of this file did — is
+ * silently drop the precondition and write the snapshot anyway: that is an
+ * unconditional whole-document overwrite, i.e. guaranteed data loss for exactly
+ * the heaviest users. Instead we fall back to writeWithMergeRepair, which keeps
+ * the fresh-read + delta discipline and verifies the write landed.
  */
-const isStrongEtag = (etag: string | null): boolean => Boolean(etag) && !etag!.startsWith("W/");
+const isWeakEtag = (etag: string): boolean => etag.startsWith("W/");
 
 interface HistoryDocument {
   version: typeof DOCUMENT_VERSION;
@@ -76,6 +102,52 @@ export class ChatHistoryStoreError extends Error {
   }
 }
 
+/**
+ * Raised by ChatHistoryBlobIo.write when its precondition was NOT met — i.e.
+ * another writer changed the document first. Kept separate from the @vercel/blob
+ * error classes so mutateDocument's concurrency logic is testable against an
+ * in-memory store (see __setChatHistoryBlobIoForTests).
+ */
+export class ChatHistoryWriteConflictError extends Error {
+  constructor(readonly cause?: unknown) {
+    super("chat-history-write-conflict");
+    this.name = "ChatHistoryWriteConflictError";
+  }
+}
+
+// ==============================
+// THE STORAGE SEAM
+// ==============================
+
+/**
+ * What a write is allowed to assume about the document already in the store.
+ *   - `match`  — overwrite only if the document is still the one we read.
+ *   - `create` — write only if no document exists yet (the first-ever save;
+ *                without this, two tabs both creating a user's first
+ *                conversation would silently keep only one of them).
+ *   - `none`   — unconditional. Only used where an overwrite is the intent:
+ *                quarantine copies, and the weak-etag merge path.
+ */
+export type ChatHistoryWritePrecondition =
+  | { kind: "match"; etag: string }
+  | { kind: "create" }
+  | { kind: "none" };
+
+/**
+ * The whole of this module's dependency on blob storage. Narrow on purpose: it
+ * keeps Vercel-specific details (private access, cache bypass, which SDK error
+ * means "precondition failed") in one adapter, and lets the concurrency tests
+ * run against an in-memory implementation so they don't need store credentials.
+ */
+export interface ChatHistoryBlobIo {
+  /** Resolves null when the pathname holds nothing. */
+  read(pathname: string): Promise<{ text: string; etag: string } | null>;
+  /** Throws ChatHistoryWriteConflictError when `precondition` is not met. */
+  write(pathname: string, text: string, precondition: ChatHistoryWritePrecondition): Promise<void>;
+  /** Idempotent — deleting something absent is not an error. */
+  remove(pathname: string): Promise<void>;
+}
+
 function assertConfigured(): void {
   // Mirrors the SDK's own credential resolution: OIDC needs BOTH a token and a
   // store id (VERCEL_OIDC_TOKEN alone is not enough), otherwise it falls back
@@ -89,87 +161,308 @@ function assertConfigured(): void {
   }
 }
 
+const vercelBlobIo: ChatHistoryBlobIo = {
+  async read(pathname) {
+    assertConfigured();
+    try {
+      // useCache: false is REQUIRED, not an optimisation. We overwrite the same
+      // pathname on every save, and cached private reads can serve the previous
+      // version for up to 60s — which would show a user a conversation list
+      // that is missing the message they just sent, and (worse) would hand
+      // mutateDocument a stale etag and a stale document to write back.
+      const result = await get(pathname, { access: "private", useCache: false });
+      if (!result || result.statusCode !== 200) return null;
+      return { text: await new Response(result.stream).text(), etag: result.blob.etag };
+    } catch (error) {
+      if (error instanceof BlobNotFoundError) return null;
+      if (error instanceof ChatHistoryStoreError) throw error;
+      throw new ChatHistoryStoreError("blob-read-failed", error);
+    }
+  },
+
+  async write(pathname, text, precondition) {
+    assertConfigured();
+    try {
+      await put(pathname, text, {
+        access: "private",
+        contentType: "application/json",
+        // Fixed pathname per user — a random suffix would orphan the previous
+        // document on every save.
+        addRandomSuffix: false,
+        // `allowOverwrite: false` IS the create-only precondition; the SDK
+        // rejects combining it with ifMatch (dist/chunk-CIIQSN42.js:874-877).
+        allowOverwrite: precondition.kind !== "create",
+        ...(precondition.kind === "match" ? { ifMatch: precondition.etag } : {}),
+      });
+    } catch (error) {
+      if (error instanceof BlobPreconditionFailedError) throw new ChatHistoryWriteConflictError(error);
+      // A rejected `allowOverwrite: false` does NOT come back as
+      // BlobPreconditionFailedError — the API reports "blob already exists" as a
+      // generic error code the SDK maps to BlobError/BlobUnknownError, and
+      // matching on its message would be brittle. So decide by observation
+      // instead: if a document is there now, we lost a create race.
+      if (precondition.kind === "create" && (await pathnameExists(pathname))) {
+        throw new ChatHistoryWriteConflictError(error);
+      }
+      throw new ChatHistoryStoreError("blob-write-failed", error);
+    }
+  },
+
+  async remove(pathname) {
+    assertConfigured();
+    try {
+      await del(pathname);
+    } catch (error) {
+      if (error instanceof BlobNotFoundError) return;
+      if (error instanceof ChatHistoryStoreError) throw error;
+      throw new ChatHistoryStoreError("blob-delete-failed", error);
+    }
+  },
+};
+
+/** Best-effort existence probe used only to classify a failed create. */
+async function pathnameExists(pathname: string): Promise<boolean> {
+  try {
+    return (await vercelBlobIo.read(pathname)) !== null;
+  } catch {
+    return false;
+  }
+}
+
+let blobIoOverride: ChatHistoryBlobIo | null = null;
+const blobIo = (): ChatHistoryBlobIo => blobIoOverride ?? vercelBlobIo;
+
+/** Test seam. Pass null to restore the real Vercel Blob adapter. */
+export function __setChatHistoryBlobIoForTests(io: ChatHistoryBlobIo | null): void {
+  blobIoOverride = io;
+}
+
 // ==============================
 // READ / WRITE THE USER DOCUMENT
 // ==============================
 
-async function readDocument(userId: string): Promise<{ document: HistoryDocument; etag: string | null }> {
-  assertConfigured();
-  try {
-    // useCache: false is REQUIRED, not an optimisation. We overwrite the same
-    // pathname on every save, and cached private reads can serve the previous
-    // version for up to 60s — which would show a user a conversation list that
-    // is missing the message they just sent.
-    const result = await get(documentPath(userId), { access: "private", useCache: false });
-    if (!result || result.statusCode !== 200) return { document: emptyDocument(), etag: null };
-
-    const raw: unknown = JSON.parse(await new Response(result.stream).text());
-    if (!raw || typeof raw !== "object" || !Array.isArray((raw as HistoryDocument).conversations)) {
-      // Corrupt/foreign document: start clean rather than 500 forever. The
-      // next save overwrites it.
-      return { document: emptyDocument(), etag: result.blob.etag };
-    }
-    return {
-      document: { version: DOCUMENT_VERSION, conversations: (raw as HistoryDocument).conversations },
-      etag: result.blob.etag,
-    };
-  } catch (error) {
-    if (error instanceof BlobNotFoundError) return { document: emptyDocument(), etag: null };
-    if (error instanceof ChatHistoryStoreError) throw error;
-    throw new ChatHistoryStoreError("blob-read-failed", error);
-  }
+interface ReadResult {
+  document: HistoryDocument;
+  etag: string | null;
+  /**
+   * The raw bytes we could not fully make sense of, when reading them cost us
+   * data. Non-null means "do not overwrite this until it has been preserved" —
+   * see mutateDocument.
+   */
+  unsalvaged: string | null;
 }
 
-async function writeDocument(userId: string, document: HistoryDocument, etag: string | null): Promise<void> {
+const readDocument = async (userId: string): Promise<ReadResult> =>
+  parseDocument(await blobIo().read(documentPath(userId)));
+
+function parseDocument(stored: { text: string; etag: string } | null): ReadResult {
+  if (!stored) return { document: emptyDocument(), etag: null, unsalvaged: null };
+
+  let parsed: unknown;
   try {
-    await put(documentPath(userId), JSON.stringify(document), {
-      access: "private",
-      contentType: "application/json",
-      // Fixed pathname per user — a random suffix would orphan the previous
-      // document on every save.
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      ...(isStrongEtag(etag) ? { ifMatch: etag! } : {}),
-    });
-  } catch (error) {
-    if (error instanceof BlobPreconditionFailedError) throw error;
-    throw new ChatHistoryStoreError("blob-write-failed", error);
+    parsed = JSON.parse(stored.text);
+  } catch {
+    return { document: emptyDocument(), etag: stored.etag, unsalvaged: stored.text };
   }
+
+  const salvage = salvageConversations(parsed);
+  return {
+    document: { version: DOCUMENT_VERSION, conversations: salvage.conversations },
+    etag: stored.etag,
+    unsalvaged: salvage.lostData ? stored.text : null,
+  };
 }
 
 /**
- * Read → mutate → write, re-reading and retrying when another writer got there
- * first.
+ * Pull every conversation we can still recognise out of whatever is stored.
  *
- * The final attempt intentionally writes WITHOUT the precondition. Optimistic
- * concurrency is a nicety here — the realistic conflict is one person's two
- * tabs, where either transcript is a reasonable outcome — whereas refusing the
- * write means the message the user just sent is missing from their history. So
- * we prefer last-write-wins over data loss, and only after re-reading the
- * newest document we can see.
+ * Previously an unreadable document was answered with an EMPTY document plus the
+ * live etag, which meant the next save conditionally succeeded and erased the
+ * user's entire history — a corrupt byte cost them everything. Now the parts we
+ * can read are kept, and `lostData` tells the caller that replacing this
+ * document would destroy something, so it gets copied aside first.
+ */
+function salvageConversations(parsed: unknown): { conversations: Conversation[]; lostData: boolean } {
+  if (!parsed || typeof parsed !== "object") return { conversations: [], lostData: true };
+
+  const candidates = (parsed as { conversations?: unknown }).conversations;
+  if (!Array.isArray(candidates)) return { conversations: [], lostData: true };
+
+  const conversations: Conversation[] = [];
+  const seen = new Set<string>();
+  let lostData = false;
+
+  for (const candidate of candidates) {
+    const salvaged = salvageConversation(candidate);
+    if (!salvaged || seen.has(salvaged.conversation.id)) {
+      lostData = true;
+      continue;
+    }
+    if (salvaged.repaired) lostData = true;
+    seen.add(salvaged.conversation.id);
+    conversations.push(salvaged.conversation);
+  }
+
+  return { conversations, lostData };
+}
+
+function salvageConversation(candidate: unknown): { conversation: Conversation; repaired: boolean } | null {
+  if (!candidate || typeof candidate !== "object") return null;
+  const record = candidate as Record<string, unknown>;
+  // Without an id a conversation can't be addressed, listed, or replaced.
+  if (typeof record.id !== "string" || !record.id) return null;
+
+  const messages = normaliseMessages(record.messages);
+  const declared = Array.isArray(record.messages) ? record.messages.length : 0;
+  const createdAt = finiteNumber(record.createdAt) ?? 0;
+
+  return {
+    conversation: storedConversation({
+      id: record.id.slice(0, 128),
+      title: typeof record.title === "string" && record.title ? record.title.slice(0, TITLE_MAX_CHARS) : buildTitle(messages),
+      qbConnectionId: typeof record.qbConnectionId === "string" ? record.qbConnectionId : "",
+      createdAt,
+      updatedAt: finiteNumber(record.updatedAt) ?? createdAt,
+      messages,
+    }),
+    // Only structural loss counts, so a harmless field difference (a future
+    // version's extra key, say) can't put a user into a quarantine loop.
+    repaired: !Array.isArray(record.messages) || messages.length !== declared,
+  };
+}
+
+const finiteNumber = (value: unknown): number | null =>
+  typeof value === "number" && Number.isFinite(value) ? value : null;
+
+/**
+ * The one place a Conversation is assembled, so every document this module
+ * writes serialises its keys in the same order. writeWithMergeRepair compares
+ * serialised documents, and that comparison is only meaningful if the shape is
+ * canonical.
+ */
+function storedConversation(input: Omit<Conversation, "messageCount">): Conversation {
+  return {
+    id: input.id,
+    title: input.title,
+    qbConnectionId: input.qbConnectionId,
+    createdAt: input.createdAt,
+    updatedAt: input.updatedAt,
+    messageCount: input.messages.length,
+    messages: input.messages,
+  };
+}
+
+/**
+ * Copy bytes we are about to replace but could not fully read to a sidecar
+ * pathname, so a corrupt document is recoverable by hand instead of being
+ * destroyed by the next save. The pathname is derived from the content, so
+ * re-reading the same corrupt document re-writes the same blob rather than
+ * accumulating copies.
+ */
+async function quarantineDocument(userId: string, raw: string): Promise<void> {
+  const fingerprint = createHash("sha256").update(raw).digest("hex").slice(0, 16);
+  const owner = createHash("sha256").update(userId).digest("hex");
+  await blobIo().write(`${QUARANTINE_PREFIX}${owner}-${fingerprint}.json`, raw, { kind: "none" });
+}
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Read → apply the caller's delta → write, re-reading and retrying when another
+ * writer got there first.
+ *
+ * `apply` is handed the FRESHLY READ document on every attempt and must express
+ * the change as a delta on top of it (add/replace/remove one conversation), not
+ * as a whole-document snapshot it captured earlier. That is what stops a save
+ * from deleting a conversation another tab created a moment ago.
+ *
+ * Unlike the previous version, the final attempt does NOT drop its precondition:
+ * a write that cannot be made safely fails loudly (`blob-write-conflict`, which
+ * the routes turn into a retryable 503) rather than clobbering the other writer
+ * and reporting success.
  */
 async function mutateDocument<T>(
   userId: string,
-  mutate: (document: HistoryDocument) => { document: HistoryDocument; result: T },
+  apply: (document: HistoryDocument) => { document: HistoryDocument; result: T },
 ): Promise<T> {
-  for (let attempt = 1; ; attempt += 1) {
-    const { document, etag } = await readDocument(userId);
-    const { document: next, result } = mutate(document);
-    const lastAttempt = attempt >= WRITE_ATTEMPTS;
+  const pathname = documentPath(userId);
+  let lastConflict: unknown;
+
+  for (let attempt = 1; attempt <= WRITE_ATTEMPTS; attempt += 1) {
+    const { document, etag, unsalvaged } = await readDocument(userId);
+    // Never replace bytes we couldn't read until they're preserved. If this
+    // throws, the save fails — which is the safe direction.
+    if (unsalvaged !== null) await quarantineDocument(userId, unsalvaged);
+
+    const { document: next, result } = apply(document);
+
+    // No usable precondition (see WEAK VALIDATORS). Don't pretend otherwise.
+    if (etag !== null && isWeakEtag(etag)) {
+      return writeWithMergeRepair(userId, apply, { document: next, result });
+    }
+
     try {
-      await writeDocument(userId, next, lastAttempt ? null : etag);
+      await blobIo().write(
+        pathname,
+        JSON.stringify(next),
+        etag === null ? { kind: "create" } : { kind: "match", etag },
+      );
       return result;
     } catch (error) {
-      if (error instanceof BlobPreconditionFailedError && !lastAttempt) {
-        await new Promise((resolve) => setTimeout(resolve, WRITE_RETRY_DELAY_MS * attempt));
-        continue;
-      }
-      if (error instanceof BlobPreconditionFailedError) {
-        throw new ChatHistoryStoreError("blob-write-conflict", error);
-      }
-      throw error;
+      if (!(error instanceof ChatHistoryWriteConflictError)) throw error;
+      lastConflict = error;
+      if (attempt < WRITE_ATTEMPTS) await delay(WRITE_RETRY_DELAY_MS * attempt);
     }
   }
+
+  throw new ChatHistoryStoreError("blob-write-conflict", lastConflict);
+}
+
+/**
+ * The fallback for documents whose etag can't be used as a precondition.
+ *
+ * Each pass writes a document built from the freshest read we have with only the
+ * caller's delta applied, so a concurrent writer's conversations are carried
+ * forward instead of being overwritten by a stale snapshot. Then it reads back:
+ * if what's stored is no longer what we wrote, another writer landed after us
+ * and may have dropped our change, so we fold our delta into THEIR version and
+ * write again.
+ *
+ * HONEST LIMIT: without a precondition there is still a window — another writer
+ * landing between our read and our write is invisible to us, and that writer's
+ * delta is lost unless its own read-back catches it. What this buys is that the
+ * loss is always *detectable by the writer that was clobbered*, and that both
+ * writers converge on the union of their changes rather than one erasing the
+ * other wholesale. Closing the window properly needs real mutual exclusion (the
+ * only strong precondition Blob offers is create-only, so that would mean a lock
+ * blob) — deliberately not attempted here.
+ *
+ * If it never settles we raise a conflict rather than claim success. Passes are
+ * bounded, and each one is a full round trip, so this cannot spin hot.
+ */
+async function writeWithMergeRepair<T>(
+  userId: string,
+  apply: (document: HistoryDocument) => { document: HistoryDocument; result: T },
+  first: { document: HistoryDocument; result: T },
+): Promise<T> {
+  const pathname = documentPath(userId);
+  let pending = first;
+
+  for (let pass = 1; pass <= MERGE_ATTEMPTS; pass += 1) {
+    const written = JSON.stringify(pending.document);
+    await blobIo().write(pathname, written, { kind: "none" });
+
+    const readBack = await blobIo().read(pathname);
+    if (!readBack || readBack.text === written) return pending.result;
+
+    // Somebody wrote after us. Re-apply our delta on top of what they left —
+    // reusing the bytes we just read back, so this costs no extra round trip.
+    const { document, unsalvaged } = parseDocument(readBack);
+    if (unsalvaged !== null) await quarantineDocument(userId, unsalvaged);
+    pending = apply(document);
+  }
+
+  throw new ChatHistoryStoreError("blob-write-conflict");
 }
 
 // ==============================
@@ -237,6 +530,45 @@ function applyCaps(conversations: Conversation[]): Conversation[] {
   return capped;
 }
 
+/**
+ * Fold two versions of the SAME conversation together. Called when the document
+ * we just read already holds the conversation being saved — i.e. another writer
+ * touched it since this client last synced.
+ *
+ * Whole-transcript replacement would silently discard whatever the other writer
+ * added, so instead: the greater `updatedAt` wins the conversation's own fields,
+ * and the messages are the union by id, in order, oldest transcript first. The
+ * newer version wins on the body of a message both of them have (an assistant
+ * turn that finished streaming, typically).
+ */
+function mergeConversations(a: Conversation, b: Conversation): Conversation {
+  const [older, newer] = a.updatedAt <= b.updatedAt ? [a, b] : [b, a];
+
+  const messages: StoredChatMessage[] = [];
+  const positions = new Map<string, number>();
+  for (const source of [older, newer]) {
+    for (const message of source.messages) {
+      const at = positions.get(message.id);
+      if (at === undefined) {
+        positions.set(message.id, messages.length);
+        messages.push(message);
+      } else if (source === newer) {
+        messages[at] = message;
+      }
+    }
+  }
+
+  const capped = messages.slice(-MAX_MESSAGES_PER_CONVERSATION);
+  return storedConversation({
+    id: newer.id,
+    title: buildTitle(capped),
+    qbConnectionId: newer.qbConnectionId,
+    createdAt: Math.min(older.createdAt, newer.createdAt),
+    updatedAt: newer.updatedAt,
+    messages: capped,
+  });
+}
+
 // ==============================
 // PUBLIC API — every entry point takes a VERIFIED userId
 // ==============================
@@ -267,11 +599,13 @@ export async function upsertConversation(
   if (messages.length === 0) throw new ChatHistoryStoreError("empty-conversation");
 
   return mutateDocument(userId, (document) => {
+    // `document` is always the newest one we can see; everything below is a
+    // delta on top of it, never a snapshot captured before the call.
     const existing = input.conversationId
       ? document.conversations.find((conversation) => conversation.id === input.conversationId)
       : undefined;
 
-    const conversation: Conversation = {
+    const incoming: Conversation = storedConversation({
       // A client-supplied id is only ever used to address a conversation
       // ALREADY in this user's document; otherwise the server mints one. That
       // keeps ids unguessable-by-construction and stops a client from writing
@@ -282,9 +616,12 @@ export async function upsertConversation(
       qbConnectionId: input.qbConnectionId,
       createdAt: existing?.createdAt ?? input.now,
       updatedAt: input.now,
-      messageCount: messages.length,
       messages,
-    };
+    });
+
+    // Union with what's already stored rather than replacing it, so a turn the
+    // other tab saved into this same conversation isn't dropped.
+    const conversation = existing ? mergeConversations(existing, incoming) : incoming;
 
     const others = document.conversations.filter((candidate) => candidate.id !== conversation.id);
     return {
@@ -296,6 +633,9 @@ export async function upsertConversation(
 
 export async function deleteConversation(userId: string, conversationId: string): Promise<boolean> {
   return mutateDocument(userId, (document) => {
+    // Removal is expressed against the freshly read document, so this can
+    // neither resurrect a conversation someone else deleted nor drop one they
+    // just created.
     const remaining = document.conversations.filter((conversation) => conversation.id !== conversationId);
     return {
       document: { version: DOCUMENT_VERSION, conversations: remaining },
@@ -306,13 +646,7 @@ export async function deleteConversation(userId: string, conversationId: string)
 
 /** Used by tests/tooling only — the app never wipes a user's whole history. */
 export async function deleteAllConversations(userId: string): Promise<void> {
-  assertConfigured();
-  try {
-    await del(documentPath(userId));
-  } catch (error) {
-    if (error instanceof BlobNotFoundError) return;
-    throw new ChatHistoryStoreError("blob-delete-failed", error);
-  }
+  await blobIo().remove(documentPath(userId));
 }
 
 function randomConversationId(): string {

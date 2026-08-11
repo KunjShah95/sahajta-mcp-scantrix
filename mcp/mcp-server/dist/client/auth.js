@@ -11,6 +11,7 @@ export const updateProfile = async (client, args) => {
         args = { ...args, userId: id };
     }
     const { userId, ...fields } = args;
-    const res = await client.api.patch(`/users/${userId}`, fields);
+    // Non-null: the guard above either found it on args or filled it from the session.
+    const res = await client.api.patch(`/users/${encodeURIComponent(userId)}`, fields);
     return res.data;
 };

@@ -1,4 +1,5 @@
 import { createClientForLogin } from "../client/savetrixClient.js";
+import { InvalidTokenError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { encryptToken, decryptToken } from "./tokens.js";
 const CLIENT_TTL = 60 * 60 * 24 * 365; // 1 year
 const CODE_TTL = 60 * 5; // 5 minutes
@@ -115,7 +116,22 @@ export class SavetrixOAuthProvider {
         return this.mintTokens(session);
     }
     async verifyAccessToken(token) {
-        const { session, exp } = await decryptToken(this.secret, "access", token);
+        // jose throws its own error types (JWTExpired, JWEDecryptionFailed, ...).
+        // The SDK's requireBearerAuth only maps InvalidTokenError to a 401 with a
+        // WWW-Authenticate challenge; anything else becomes a bare 500. Since the
+        // access TTL is 8 hours, letting those escape meant every connected client
+        // got an opaque server error twice a day instead of the 401 that tells it
+        // to refresh — the connector simply stopped working until re-added by hand.
+        let decoded;
+        try {
+            decoded = await decryptToken(this.secret, "access", token);
+        }
+        catch (error) {
+            throw new InvalidTokenError(error instanceof Error && /exp/i.test(error.message)
+                ? "Access token has expired"
+                : "Access token is invalid");
+        }
+        const { session, exp } = decoded;
         return {
             token,
             clientId: session.client_id,

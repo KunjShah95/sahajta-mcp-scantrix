@@ -8,6 +8,11 @@ import { confirmDialog, showToast } from "@/lib/dialogManager";
 import { capitalizeWords } from "@/lib/textFormat";
 import { useAppDispatch } from "@/store/hooks";
 import { connectGoogleDrive, getGoogleDriveStatus, disconnectGoogleDrive } from "@/store/googleDrive/googleDriveApi";
+import {
+  getDriveConnectedAt as getStoredDriveConnectedAt,
+  setDriveConnectedAt as setStoredDriveConnectedAt,
+  clearDriveConnectedAt as clearStoredDriveConnectedAt,
+} from "@/lib/storage";
 import { useQuickBooksConnections, QBConnection } from "@/store/quickBooks/useQuickBooksConnections";
 
 // The right-hand detail panel is a single slot shared by every "open a
@@ -182,17 +187,14 @@ export function AccountingSoftwaresContent() {
   const [driveStatusLoading, setDriveStatusLoading] = useState(true);
   const [driveConnecting, setDriveConnecting] = useState(false);
   const [driveDisconnecting, setDriveDisconnecting] = useState(false);
-  const [driveEmail, setDriveEmail] = useState<string | null>(null);
+  // Client-side only — see the storage.ts comment on setDriveConnectedAt.
   const [driveConnectedAt, setDriveConnectedAt] = useState<string | null>(null);
-  const [driveFolderUrl, setDriveFolderUrl] = useState<string | null>(null);
 
   const [detail, setDetail] = useState<DetailView>(null);
   const [disconnectedExpanded, setDisconnectedExpanded] = useState(false);
 
-  // Not wired to a real backend yet — see .env.local.example. Until it's
-  // set, the setup guide below shows "Not available yet" placeholders
-  // instead of pretending a live server URL exists.
-  const mcpServerUrl = process.env.NEXT_PUBLIC_MCP_SERVER_URL || "";
+  // Falls back to the live production server — see .env.local.example.
+  const mcpServerUrl = process.env.NEXT_PUBLIC_MCP_SERVER_URL || "https://mcp.scantrix.ai/mcp";
 
   const {
     connections,
@@ -212,6 +214,7 @@ export function AccountingSoftwaresContent() {
   const selectedConnection: QBConnection | null =
     detail?.type === "connection" ? connections.find((c) => c._id === detail.id) || null : null;
   const isSelectedDisconnected = selectedConnection?.status === "disconnected";
+  const isSelectedReconnectRequired = selectedConnection?.status === "reconnect_required";
 
   const closeDetail = () => setDetail(null);
 
@@ -219,11 +222,21 @@ export function AccountingSoftwaresContent() {
     setDriveStatusLoading(true);
     const result = await dispatch(getGoogleDriveStatus());
     if (getGoogleDriveStatus.fulfilled.match(result)) {
+      // The backend only ever returns {connected} here (see AccountingSoftwaresScreen.tsx's
+      // matching comment on the mobile side) — no email/connectedAt/folderUrl exist server-side,
+      // so "Connected on" is stamped client-side the first time a connection is observed.
       const data = result.payload?.data;
-      setDriveConnected(Boolean(data?.connected));
-      setDriveEmail(data?.email ?? null);
-      setDriveConnectedAt(data?.connectedAt ?? null);
-      setDriveFolderUrl(data?.folderUrl ?? null);
+      const nowConnected = Boolean(data?.connected);
+      setDriveConnected(nowConnected);
+      if (nowConnected) {
+        const stored = getStoredDriveConnectedAt();
+        const stampedAt = stored ?? new Date().toISOString();
+        if (!stored) setStoredDriveConnectedAt(stampedAt);
+        setDriveConnectedAt(stampedAt);
+      } else {
+        clearStoredDriveConnectedAt();
+        setDriveConnectedAt(null);
+      }
     }
     setDriveStatusLoading(false);
   }, [dispatch]);
@@ -251,9 +264,8 @@ export function AccountingSoftwaresContent() {
       const result = await dispatch(disconnectGoogleDrive());
       if (disconnectGoogleDrive.fulfilled.match(result)) {
         setDriveConnected(false);
-        setDriveEmail(null);
+        clearStoredDriveConnectedAt();
         setDriveConnectedAt(null);
-        setDriveFolderUrl(null);
         closeDetail();
       } else {
         const payload = result.payload as { message?: string } | undefined;
@@ -294,13 +306,6 @@ export function AccountingSoftwaresContent() {
     }
   };
 
-  // Placeholder — no MCP backend exists yet (see .env.local.example note on
-  // NEXT_PUBLIC_MCP_SERVER_URL). Follows the same disabled/"Coming Soon"
-  // toast precedent as ProfileContent's delete-account stub.
-  const handleGenerateMcpToken = () => {
-    showToast("Coming Soon: MCP access tokens will be available once the Scantrix MCP server is live.", "info");
-  };
-
   const handleCopyMcpUrl = async () => {
     if (!mcpServerUrl || typeof navigator === "undefined" || !navigator.clipboard) return;
     await navigator.clipboard.writeText(mcpServerUrl);
@@ -334,7 +339,7 @@ export function AccountingSoftwaresContent() {
       </p>
 
       <div className="mt-[var(--space-lg)] flex flex-col gap-[var(--space-lg)] lg:flex-row lg:items-start">
-        <div className={`w-full space-y-[var(--space-xl)] transition-[width] duration-300 ease-in-out ${detail ? "lg:w-3/4" : "lg:w-full"}`}>
+        <div className={`w-full space-y-[var(--space-xl)] transition-[width] duration-300 ease-in-out ${detail ? "lg:w-3/5" : "lg:w-full"}`}>
           {showConnectedSection && (
             <div>
               <div className="mb-[var(--space-sm)] flex items-center gap-[var(--space-sm)]">
@@ -353,6 +358,7 @@ export function AccountingSoftwaresContent() {
                 ) : (
                   activeConnections.map((connection) => {
                     const isActive = connection._id === activeConnectionId;
+                    const needsReconnect = connection.status === "reconnect_required";
                     const isSelected = detail?.type === "connection" && detail.id === connection._id;
                     return (
                       <ConnectedRow
@@ -360,8 +366,14 @@ export function AccountingSoftwaresContent() {
                         icon={<BrandIcon name="quickbooks" size={28} />}
                         name={connection.name}
                         description="QuickBooks Online"
-                        badgeLabel={isActive ? "Active" : "Connected"}
-                        badgeClassName={isActive ? "bg-success/10 text-success" : "bg-background-alt text-text-secondary"}
+                        badgeLabel={needsReconnect ? "Reconnect required" : isActive ? "Active" : "Connected"}
+                        badgeClassName={
+                          needsReconnect
+                            ? "bg-warning/10 text-text-primary"
+                            : isActive
+                              ? "bg-success/10 text-success"
+                              : "bg-background-alt text-text-secondary"
+                        }
                         selected={isSelected}
                         onClick={() => setDetail({ type: "connection", id: connection._id })}
                       />
@@ -493,7 +505,7 @@ export function AccountingSoftwaresContent() {
         <div
           className={`w-full overflow-hidden transition-all duration-300 ease-in-out lg:shrink-0 ${
             detail
-              ? "max-h-[1200px] opacity-100 lg:w-1/4 lg:translate-x-0"
+              ? "max-h-[1200px] opacity-100 lg:w-2/5 lg:translate-x-0"
               : "pointer-events-none max-h-0 opacity-0 lg:w-0 lg:-translate-x-4"
           }`}
         >
@@ -503,9 +515,11 @@ export function AccountingSoftwaresContent() {
               subtitle={
                 isSelectedDisconnected
                   ? "Disconnected"
-                  : selectedConnection._id === activeConnectionId
-                    ? "Active connection"
-                    : "Inactive"
+                  : isSelectedReconnectRequired
+                    ? "Needs reconnect"
+                    : selectedConnection._id === activeConnectionId
+                      ? "Active connection"
+                      : "Inactive"
               }
               onClose={closeDetail}
             >
@@ -555,19 +569,10 @@ export function AccountingSoftwaresContent() {
           {detail?.type === "drive" && driveConnected && (
             <DetailPanelShell title="Google Drive" subtitle="Connected account details" onClose={closeDetail}>
               <div className="mt-[var(--space-md)] flex flex-col divide-y divide-border">
-                <DetailRow label="Gmail account" value={driveEmail || "—"} />
                 <DetailRow label="Connected on" value={formatConnectedDate(driveConnectedAt)} />
                 <DetailRow
-                  label="Drive folder"
-                  value={
-                    driveFolderUrl ? (
-                      <a href={driveFolderUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary-700 hover:underline">
-                        Open folder
-                      </a>
-                    ) : (
-                      "Created after first invoice"
-                    )
-                  }
+                  label="Linked QuickBooks company"
+                  value={activeConnections.find((c) => c._id === activeConnectionId)?.name || "—"}
                 />
               </div>
 
@@ -594,59 +599,50 @@ export function AccountingSoftwaresContent() {
 
           {detail?.type === "mcp" && (
             <DetailPanelShell title="Claude MCP" subtitle="Connect Scantrix to Claude via MCP" onClose={closeDetail}>
-              <div className="mt-[var(--space-md)] rounded-md border-l-4 border-warning bg-warning/10 px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-medium text-warning">
-                This connector isn't live yet — the steps below show what setup will look like once the Scantrix MCP server is available.
-              </div>
-
               <div className="mt-[var(--space-lg)] flex flex-col gap-[var(--space-lg)]">
-                <McpStep number={1} title="Generate an access token">
-                  <p className="text-caption text-text-secondary">
-                    Scoped to this workspace — Claude uses it to authenticate requests.
-                  </p>
-                  <div className="mt-[var(--space-sm)] flex items-center gap-[var(--space-sm)]">
-                    <span className="flex-1 truncate rounded-md bg-background-soft px-[var(--space-sm)] py-[var(--space-xs)] font-mono text-caption text-text-secondary">
-                      •••• •••• •••• ••••
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleGenerateMcpToken}
-                      className="shrink-0 rounded-md border border-border px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold text-text-secondary hover:bg-background-alt"
-                    >
-                      Generate
-                    </button>
-                  </div>
-                </McpStep>
-
-                <McpStep number={2} title="Copy your server URL">
+                <McpStep number={1} title="Copy your server URL">
                   <div className="flex items-center gap-[var(--space-sm)]">
                     <span className="flex-1 truncate rounded-md bg-background-soft px-[var(--space-sm)] py-[var(--space-xs)] font-mono text-caption text-text-secondary">
-                      {mcpServerUrl || "Not available yet"}
+                      {mcpServerUrl}
                     </span>
                     <button
                       type="button"
                       onClick={handleCopyMcpUrl}
-                      disabled={!mcpServerUrl}
-                      className="shrink-0 rounded-md border border-border px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold text-text-secondary hover:bg-background-alt disabled:cursor-not-allowed disabled:opacity-60"
+                      className="shrink-0 rounded-md border border-border px-[var(--space-sm)] py-[var(--space-xs)] text-caption font-bold text-text-secondary hover:bg-background-alt"
                     >
                       Copy
                     </button>
                   </div>
                 </McpStep>
 
-                <McpStep number={3} title="Add Scantrix as a connector">
+                <McpStep number={2} title="Add Scantrix as a connector">
                   <p className="text-caption text-text-secondary">
-                    <span className="font-semibold text-text-primary">Claude.ai / Claude Desktop:</span> Settings →
-                    Connectors → Add custom connector → paste the URL from Step 2 → Connect.
+                    <span className="font-semibold text-text-primary">Claude.ai / Claude Desktop:</span>
                   </p>
+                  <ol className="mt-[var(--space-xs)] flex list-decimal flex-col gap-[var(--space-xs)] pl-[var(--space-md)] text-caption text-text-secondary">
+                    <li>
+                      Open <span className="font-semibold text-text-primary">Settings → Customize → Connectors</span>.
+                    </li>
+                    <li>
+                      Click <span className="font-semibold text-text-primary">Add custom connector</span>.
+                    </li>
+                    <li>
+                      For the name, enter <span className="font-semibold text-text-primary">Scantrix</span>.
+                    </li>
+                    <li>Paste the URL you copied in Step 1.</li>
+                    <li>
+                      Click <span className="font-semibold text-text-primary">Add</span> / <span className="font-semibold text-text-primary">Connect</span>.
+                    </li>
+                  </ol>
                   <p className="mt-[var(--space-sm)] text-caption text-text-secondary">
                     <span className="font-semibold text-text-primary">Claude Code:</span>
                   </p>
                   <pre className="mt-[var(--space-xs)] overflow-x-auto rounded-md bg-background-soft px-[var(--space-sm)] py-[var(--space-xs)] font-mono text-caption text-text-primary">
-                    claude mcp add --transport http scantrix {mcpServerUrl || "<your-workspace-mcp-url>"}
+                    claude mcp add --transport http scantrix {mcpServerUrl}
                   </pre>
                 </McpStep>
 
-                <McpStep number={4} title="Authorize and start asking">
+                <McpStep number={3} title="Authorize and start asking">
                   <p className="text-caption text-text-secondary">
                     Sign in with your Scantrix account when prompted, then try:
                   </p>

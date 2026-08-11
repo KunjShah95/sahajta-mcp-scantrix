@@ -7,8 +7,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SavetrixClient } from "../client/savetrixClient.js";
 import { SessionStore } from "../session.js";
-import { unwrapList, unwrapOne, getPagination, } from "../client/unwrap.js";
-import { uploadInvoice, resolveUploadSource } from "../client/invoices.js";
+import { unwrapList, unwrapOne, getPagination, UpstreamPayloadError, } from "../client/unwrap.js";
+import { uploadInvoice, resolveUploadSource, getInvoice, listInvoices } from "../client/invoices.js";
+import { listVendors } from "../client/vendors.js";
+import { deactivateVendor } from "../client/vendors.js";
 import { getStatus, listConnections } from "../client/quickbooks.js";
 import { toJsonSchemaCompat } from "@modelcontextprotocol/sdk/server/zod-json-schema-compat.js";
 import { invoiceUploadSchema } from "../tools/schemas.js";
@@ -16,15 +18,134 @@ const makeSession = async () => {
     const dir = await mkdtemp(join(tmpdir(), "savetrix-client-"));
     return new SessionStore(join(dir, "session.json"));
 };
+/**
+ * Resolve a captured request config the way axios's http adapter does —
+ * combineURLs, then hand the result to WHATWG URL. That last step is the one
+ * that used to collapse "../.." out of the path, so a traversal assertion is
+ * only meaningful if the test reproduces it.
+ */
+const resolvedPath = (config) => {
+    const url = String(config.url ?? "");
+    if (/^https?:\/\//i.test(url))
+        return new URL(url).pathname;
+    const base = String(config.baseURL ?? "").replace(/\/+$/, "");
+    return new URL(`${base}/${url.replace(/^\/+/, "")}`).pathname;
+};
 test("unwrapList normalizes data.data.invoices / data.items / plain arrays", () => {
     assert.equal(unwrapList({ data: { data: { invoices: [{ _id: "1" }] } } }, ["invoices"]).length, 1);
     assert.equal(unwrapList({ data: { data: { items: [1] } } }, ["invoices", "items"]).length, 1);
     assert.equal(unwrapList({ data: [1, 2] }, ["invoices"]).length, 2);
-    assert.equal(unwrapList({ data: { data: {} } }, ["invoices"]).length, 0);
+});
+// A response that CARRIES the list is the only success case, and an empty
+// array in it is a real answer — the tools that legitimately have nothing to
+// show must keep working.
+test("unwrapList returns an empty list when the backend really sent an empty list", () => {
+    assert.deepEqual(unwrapList({ data: { data: { invoices: [] } } }, ["invoices"]), []);
+    assert.deepEqual(unwrapList({ data: { data: { vendors: [] } } }, ["vendors"]), []);
+    assert.deepEqual(unwrapList({ data: [] }, ["invoices"]), []);
+});
+// The bug this whole module exists to prevent: the backend answers HTTP 200
+// with {success:false, message:"QuickBooks token revoked — reconnect
+// required"}, and the old unwrapList turned that into [] — so the model told
+// the user "you have no invoices". A revoked connection, an authorization
+// failure and an empty list were indistinguishable.
+test("unwrapList fails loudly on a 200 that says success:false, carrying the upstream message", () => {
+    const revoked = {
+        status: 200,
+        data: { success: false, message: "QuickBooks token revoked — reconnect required" },
+    };
+    assert.throws(() => unwrapList(revoked, ["invoices"]), (error) => {
+        assert.ok(error instanceof UpstreamPayloadError, "must be an UpstreamPayloadError");
+        assert.equal(error.kind, "upstream_failure");
+        assert.equal(error.upstreamMessage, "QuickBooks token revoked — reconnect required");
+        assert.match(error.message, /QuickBooks token revoked/);
+        return true;
+    });
+    // Same for the other failure spellings, and for a message-only body.
+    for (const data of [
+        { ok: false, message: "nope" },
+        { status: "error", message: "nope" },
+        { error: "Not authorized for this company" },
+        { message: "Something went wrong upstream" },
+        { data: { success: false, message: "nope" } },
+    ]) {
+        assert.throws(() => unwrapList({ status: 200, data }, ["invoices"]), UpstreamPayloadError);
+    }
+});
+test("unwrapList fails loudly when the response shape cannot be interpreted", () => {
+    // NOTE: `{data:{}}` and a wholly absent payload are deliberately NOT here —
+    // an empty envelope with no failure signal is treated as a genuinely empty
+    // list, because a brand-new account is its most likely producer and erroring
+    // would break first-run onboarding. See unwrapList and the companion
+    // "ambiguous empty case" tests below.
+    for (const data of [
+        { data: { totally: "unexpected" } },
+        { totally: "unexpected" },
+        "<html>502 Bad Gateway</html>",
+        42,
+    ]) {
+        assert.throws(() => unwrapList({ status: 200, data }, ["invoices"]), (error) => {
+            assert.ok(error instanceof UpstreamPayloadError);
+            assert.equal(error.kind, "unrecognized_response");
+            assert.match(error.message, /Could not interpret|Refusing/);
+            return true;
+        }, JSON.stringify(data ?? null));
+    }
+});
+test("unwrapList treats an empty envelope as a genuinely empty list", () => {
+    // The bug this file guards against — a 200 carrying success:false being
+    // reported as "you have no invoices" — is caught by the failure-signal
+    // check, not by being strict about `{}`. Being strict here would instead
+    // regress first-run onboarding.
+    // `{data:null}` is deliberately excluded: the `?? res.data` fallback makes
+    // the whole body the payload, which is a non-empty object and so correctly
+    // reads as uninterpretable rather than empty.
+    for (const data of [{ data: {} }, {}]) {
+        assert.deepEqual(unwrapList({ status: 200, data }, ["invoices"], "invoices"), []);
+    }
 });
 test("unwrapOne returns data.data.invoice then falls back to data", () => {
     assert.deepEqual(unwrapOne({ data: { data: { invoice: { a: 1 } } } }, ["invoice"]), { a: 1 });
     assert.deepEqual(unwrapOne({ data: { x: 2 } }, ["invoice"]), { x: 2 });
+});
+// unwrapOne had the same defect in a different costume: it handed the failure
+// envelope itself back as if it were the requested record.
+test("unwrapOne fails loudly on an upstream failure or an uninterpretable body", () => {
+    assert.throws(() => unwrapOne({ status: 200, data: { success: false, message: "Invoice not found" } }, [
+        "invoice",
+    ]), (error) => {
+        assert.ok(error instanceof UpstreamPayloadError);
+        assert.equal(error.kind, "upstream_failure");
+        assert.equal(error.upstreamMessage, "Invoice not found");
+        return true;
+    });
+    for (const data of [{ data: {} }, "<html>502</html>", null]) {
+        assert.throws(() => unwrapOne({ status: 200, data }, ["invoice"]), UpstreamPayloadError);
+    }
+    // An endpoint that returns the record unwrapped is still a shape we know.
+    assert.deepEqual(unwrapOne({ status: 200, data: { data: { _id: "i1" } } }, ["invoice"]), {
+        _id: "i1",
+    });
+});
+// End-to-end through the real client: the list tools must not translate a
+// revoked connection into "no data".
+test("listInvoices/listVendors reject a 200 failure body instead of reporting nothing", async () => {
+    const instance = axios.create();
+    const mock = new MockAdapter(instance);
+    const client = new SavetrixClient({
+        baseURL: "https://api.test",
+        session: await makeSession(),
+        axiosInstance: instance,
+    });
+    client.setTokens("at", "rt");
+    client.setActiveQbId("qb-1");
+    mock
+        .onGet("/invoices")
+        .reply(200, { success: false, message: "QuickBooks token revoked — reconnect required" });
+    mock.onGet("/quickbooks/vendors").reply(200, { success: false, message: "Company disconnected" });
+    await assert.rejects(listInvoices(client, {}), /QuickBooks token revoked/);
+    await assert.rejects(listVendors(client, "active"), /Company disconnected/);
+    mock.restore();
 });
 test("getPagination returns pagination object or undefined", () => {
     assert.deepEqual(getPagination({ data: { data: { pagination: { page: 1 } } } }), { page: 1 });
@@ -107,6 +228,40 @@ test("listConnections strips token/expiry fields from each connection", async ()
     assert.deepEqual(connections, [
         { id: "conn-1", name: "Ontario Inc.", realmId: "9341457544400313", role: "admin", status: "active" },
     ]);
+    mock.restore();
+});
+// Regression test for a proven path traversal: model-supplied ids were
+// interpolated raw into the request path, and because the final URL goes
+// through WHATWG URL normalization, an invoiceId of "../../users/me" escaped
+// both /invoices/ and the /api base — arbitrary GET/PATCH/DELETE against the
+// whole backend under the signed-in user's credentials. encodeURIComponent at
+// every interpolation site is what keeps the segment a segment.
+test("a traversal-shaped id stays inside its own path segment", async () => {
+    const instance = axios.create({ baseURL: "https://api.test/api" });
+    const mock = new MockAdapter(instance);
+    const client = new SavetrixClient({
+        baseURL: "https://api.test/api",
+        session: await makeSession(),
+        axiosInstance: instance,
+    });
+    client.setTokens("at", "rt");
+    client.setActiveQbId("qb-1");
+    const paths = [];
+    mock.onAny().reply((config) => {
+        paths.push(resolvedPath(config));
+        // Has to be a body getInvoice can actually interpret — unwrapOne now
+        // refuses an empty envelope rather than passing it off as the record.
+        return [200, { data: { invoice: {} } }];
+    });
+    await getInvoice(client, "../../users/me");
+    await deactivateVendor(client, "../../../admin/users");
+    assert.deepEqual(paths, [
+        "/api/invoices/..%2F..%2Fusers%2Fme",
+        "/api/quickbooks/vendors/..%2F..%2F..%2Fadmin%2Fusers",
+    ]);
+    for (const path of paths) {
+        assert.ok(!/\/users\/me$|\/admin\//.test(path), `escaped its base: ${path}`);
+    }
     mock.restore();
 });
 test("client refreshes access token once on 401 and retries", async () => {
@@ -224,9 +379,40 @@ test("resolveUploadSource refuses fileUrl aimed at internal hosts", async () => 
         "http://169.254.169.254/latest/meta-data/",
         "http://10.0.0.5/x.pdf",
         "file:///etc/passwd",
+        // IPv4-mapped IPv6. Same address to the network stack, but it matches
+        // none of the dotted-quad patterns until it is folded back to IPv4 —
+        // and the URL parser rewrites the readable form into the hex one, so
+        // both spellings have to be covered.
+        "http://[::ffff:169.254.169.254]/latest/meta-data/",
+        "http://[::ffff:a9fe:a9fe]/latest/meta-data/",
+        "http://[0:0:0:0:0:ffff:127.0.0.1]/x.pdf",
     ]) {
         await assert.rejects(resolveUploadSource({ fileUrl: url }), /public host|http\(s\) URL/, url);
     }
+});
+// assertFetchableUrl only ever sees the FIRST url, so following redirects
+// meant a public host answering 302 -> http://169.254.169.254/ walked past
+// the entire deny-list above. Proven end-to-end before the fix.
+test("resolveUploadSource does not follow a redirect toward an internal address", async () => {
+    const scope = new MockAdapter(axios);
+    let sawMaxRedirects;
+    scope.onGet("https://files.test/share-link.pdf").reply((config) => {
+        sawMaxRedirects = config.maxRedirects;
+        return [302, "", { location: "http://169.254.169.254/latest/meta-data/iam/" }];
+    });
+    await assert.rejects(resolveUploadSource({ fileUrl: "https://files.test/share-link.pdf" }), /redirected \(HTTP 302\)/);
+    assert.equal(sawMaxRedirects, 0, "axios must be told not to follow redirects at all");
+    scope.restore();
+});
+// On the remote connector the only filesystem in reach is the connector's own
+// container, so a filePath read is an arbitrary read of the deployment —
+// /proc/self/environ carries SAVETRIX_TOKEN_SECRET, the key that encrypts
+// every OAuth artifact this server issues.
+test("resolveUploadSource refuses filePath when the caller disallows it", async () => {
+    await assert.rejects(resolveUploadSource({ filePath: "/proc/self/environ" }, { allowFilePath: false }), /not accepted by this connector/);
+    // Local/stdio installs still read real files, and a missing one still fails
+    // as a plain filesystem error rather than a policy error.
+    await assert.rejects(resolveUploadSource({ filePath: "/definitely/not/here.pdf" }), /ENOENT|no such file/i);
 });
 test("resolveUploadSource downloads fileUrl and infers name and type", async () => {
     const scope = new MockAdapter(axios);

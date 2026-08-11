@@ -1,6 +1,6 @@
 "use client";
 
-import { Rows3, SlidersHorizontal, Zap } from "lucide-react";
+import { Paperclip, Rows3, SlidersHorizontal, Zap } from "lucide-react";
 import { useState } from "react";
 
 import { Card } from "@/components/ui/Card";
@@ -50,9 +50,11 @@ export function PreferencesContent() {
   const accessToken = useAppSelector((state) => state.auth.user?.data?.accessToken);
   const autoPostEnabled = useAppSelector((state) => state.quickBooks.autoPostEnabled);
   const lineItemWiseEnabled = useAppSelector((state) => state.quickBooks.lineItemWiseEnabled);
+  const attachInvoiceCopyEnabled = useAppSelector((state) => state.quickBooks.attachInvoiceCopyEnabled);
 
   const [savingAutoPost, setSavingAutoPost] = useState(false);
   const [savingLineItem, setSavingLineItem] = useState(false);
+  const [savingAttachInvoiceCopy, setSavingAttachInvoiceCopy] = useState(false);
 
   const { activeConnections, activeConnectionId, checkingStatus, connecting, handleConnect } =
     useQuickBooksConnections("/preferences");
@@ -68,7 +70,7 @@ export function PreferencesContent() {
   const canManage = currentRole === "owner" || currentRole === "admin";
 
   const handleToggle = async (
-    field: "autoPostEnabled" | "lineItemWiseEnabled",
+    field: "autoPostEnabled" | "lineItemWiseEnabled" | "attachInvoiceCopyEnabled",
     value: boolean,
     setSaving: (v: boolean) => void,
     successLabel: string,
@@ -145,6 +147,17 @@ export function PreferencesContent() {
           saving={savingAutoPost}
           disabled={!canManage}
           onToggle={(value) => handleToggle("autoPostEnabled", value, setSavingAutoPost, "Auto-Post")}
+        />
+        <PreferenceRow
+          icon={<Paperclip size={18} strokeWidth={2} />}
+          title="Attach Invoice Copy"
+          description="Attach a copy of the scanned invoice file to the QuickBooks bill. Turn this off to post the bill without the original file attached."
+          checked={attachInvoiceCopyEnabled}
+          saving={savingAttachInvoiceCopy}
+          disabled={!canManage}
+          onToggle={(value) =>
+            handleToggle("attachInvoiceCopyEnabled", value, setSavingAttachInvoiceCopy, "Attach invoice copy")
+          }
         />
       </div>
     </div>

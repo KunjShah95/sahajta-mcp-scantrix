@@ -1,3 +1,4 @@
+import { unwrapList } from "./unwrap.js";
 // Deliberately an allowlist, not a passthrough. The backend's raw responses
 // here also carry Intuit OAuth token lifecycle fields (access/refresh token
 // expiry timestamps) alongside the connection info. A stale ACCESS token is
@@ -20,7 +21,9 @@ const toConnectionSummary = (raw) => ({
 });
 export const listConnections = async (client) => {
     const res = await client.api.get("/qb-connections");
-    const connections = res.data?.data?.connections ?? [];
+    // `?? []` here had the same failure mode as unwrapList's old default: a 200
+    // carrying {success:false,...} became "you have no QuickBooks companies".
+    const connections = unwrapList(res, ["connections"], "QuickBooks connections");
     return connections.map(toConnectionSummary);
 };
 export const getStatus = async (client, qbConnectionId) => {

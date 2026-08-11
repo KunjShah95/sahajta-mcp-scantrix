@@ -9,7 +9,7 @@ const qbIdOf = async (client: SavetrixClient): Promise<string> => {
 
 export const listTeamMembers = async (client: SavetrixClient): Promise<unknown> => {
   const qbId = await qbIdOf(client);
-  const res = await client.api.get(`/qb-connections/${qbId}/members`);
+  const res = await client.api.get(`/qb-connections/${encodeURIComponent(qbId)}/members`);
   return res.data;
 };
 
@@ -19,7 +19,7 @@ export const inviteTeamMember = async (
 ): Promise<unknown> => {
   const qbId = await qbIdOf(client);
   const res = await client.api.post(
-    `/qb-connections/${qbId}/members`,
+    `/qb-connections/${encodeURIComponent(qbId)}/members`,
     { email: args.email, role: args.role },
   );
   return res.data;
@@ -30,7 +30,7 @@ export const removeTeamMember = async (
   memberId: string,
 ): Promise<unknown> => {
   const qbId = await qbIdOf(client);
-  const res = await client.api.delete(`/qb-connections/${qbId}/members/${memberId}`);
+  const res = await client.api.delete(`/qb-connections/${encodeURIComponent(qbId)}/members/${encodeURIComponent(memberId)}`);
   return res.data;
 };
 

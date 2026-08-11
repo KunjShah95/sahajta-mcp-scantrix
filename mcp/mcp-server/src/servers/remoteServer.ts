@@ -75,7 +75,16 @@ export const createRemoteApp = (config: Config): express.Express => {
       return issuerUrl;
     }
     const url = new URL(issuerUrl.toString());
-    url.host = req.get("host") ?? host;
+    // Deliberately built from the ALLOWLISTED hostname, not from req.get("host").
+    // Those are different values behind a proxy: req.hostname derives from
+    // X-Forwarded-Host while req.get("host") is the raw Host header, so reading
+    // one and trusting the other let a request pass the allowlist on the
+    // forwarded name and still publish an attacker's Host in the discovery
+    // documents — pointing the victim's OAuth flow, and their Savetrix
+    // password, at another origin. Using only the checked value also drops any
+    // smuggled port.
+    url.hostname = host;
+    url.port = "";
     return url;
   };
 
@@ -282,8 +291,21 @@ export const createRemoteApp = (config: Config): express.Express => {
   };
 
   app.post("/mcp", bearer, express.json(), handleMcp);
-  app.get("/mcp", bearer, handleMcp);
-  app.delete("/mcp", bearer, handleMcp);
+  // GET/DELETE are answered directly rather than handed to the transport. In
+  // stateless mode a GET opens a keep-alive SSE stream that this server can
+  // never write to (each request builds its own McpServer, so there are no
+  // out-of-band notifications to deliver) — on a serverless host that just
+  // pins a function invocation until it times out, billed the whole way. 405
+  // is also what the current spec tells a session-less server to return.
+  const methodNotAllowed = (_req: Request, res: Response) => {
+    res.status(405).set("Allow", "POST").json({
+      jsonrpc: "2.0",
+      error: { code: -32000, message: "This MCP endpoint is stateless; use POST." },
+      id: null,
+    });
+  };
+  app.get("/mcp", bearer, methodNotAllowed);
+  app.delete("/mcp", bearer, methodNotAllowed);
 
   // ── Browser invoice upload (ticketed; no OAuth round-trip) ──
   const readTicket = (raw: unknown): Promise<UploadTicket> =>

@@ -1,5 +1,22 @@
 import { z } from "zod";
 
+// Every id below is interpolated into a REST path by src/client/*. Even with
+// encodeURIComponent at each of those call sites, `.` survives encoding, so a
+// value like "..%2f.." still collapses under WHATWG URL normalization and can
+// walk out of /invoices/ (and out of the /api base) into any other backend
+// route under the user's own credentials. This is the layer that makes that
+// impossible in the first place.
+//
+// Deliberately permissive: these ids come from several sources with different
+// shapes — Mongo ObjectIds (24 hex) for invoices/vendors/members, numeric
+// QuickBooks entity ids, and the qb-connection _id that the tests and the
+// SAVETRIX_QB_CONNECTION_ID env var use in hyphenated forms ("qb-1",
+// "conn-1"). Rather than guess a single format and break a real id, allow the
+// whole alphanumeric/underscore/hyphen space and nothing else: no `/`, `\`,
+// `.`, `?`, `#`, `%`, or whitespace can appear.
+const idString = () =>
+  z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/, "must be a plain id (letters, digits, _ or -)");
+
 // This remote connector is stateless per request (a fresh SavetrixClient is
 // built for every /mcp call — see handleMcp in remoteServer.ts), so
 // savetrix_qb_set_active setting an in-memory activeQbId has zero effect on
@@ -11,9 +28,7 @@ import { z } from "zod";
 // the MODEL — which does have memory across tool calls in one conversation —
 // can carry the user's selection forward explicitly instead of relying on
 // server-side state that doesn't exist.
-const qbConnectionIdOverride = z
-  .string()
-  .min(1)
+const qbConnectionIdOverride = idString()
   .optional()
   .describe(
     "Explicitly target this QuickBooks connection (from savetrix_qb_connections). " +
@@ -46,7 +61,7 @@ export const invoiceListSchema = z.object({
   qbConnectionId: qbConnectionIdOverride,
 });
 
-export const invoiceIdSchema = z.object({ invoiceId: z.string().min(1), qbConnectionId: qbConnectionIdOverride });
+export const invoiceIdSchema = z.object({ invoiceId: idString(), qbConnectionId: qbConnectionIdOverride });
 
 // MUST stay a flat z.object with every field optional. A z.union here
 // serializes to a top-level `anyOf`, which is illegal for an MCP/Anthropic
@@ -77,6 +92,15 @@ export const invoiceUploadSchema = z.object({
   qbConnectionId: qbConnectionIdOverride,
 });
 
+// The remote connector runs in a shared serverless container, and the only
+// filesystem it can reach is its OWN — not the user's. So filePath there is
+// not merely useless, it is an arbitrary read of the deployment (including
+// /proc/self/environ, which carries SAVETRIX_TOKEN_SECRET, the key that
+// encrypts every OAuth artifact this server issues). Don't advertise a
+// property that has no legitimate remote use; resolveUploadSource enforces
+// the same rule at runtime for callers that ignore the schema.
+export const invoiceUploadRemoteSchema = invoiceUploadSchema.omit({ filePath: true });
+
 export const lineItemSchema = z.object({
   description: z.string(),
   quantity: z.number(),
@@ -103,21 +127,21 @@ export const extractedDataSchema = z.object({
 });
 
 export const invoiceUpdateSchema = z.object({
-  invoiceId: z.string().min(1),
+  invoiceId: idString(),
   extractedData: extractedDataSchema,
   qbConnectionId: qbConnectionIdOverride,
 });
 
 export const postToQbSchema = z.object({
-  invoiceId: z.string().min(1),
-  vendorId: z.string().min(1),
+  invoiceId: idString(),
+  vendorId: idString(),
   extractedData: extractedDataSchema,
   confirm: z.boolean(),
   qbConnectionId: qbConnectionIdOverride,
 });
 
 export const rejectInvoiceSchema = z.object({
-  invoiceId: z.string().min(1),
+  invoiceId: idString(),
   reason: z.string().optional(),
   confirm: z.boolean(),
   qbConnectionId: qbConnectionIdOverride,
@@ -140,7 +164,7 @@ export const vendorCreateSchema = z.object({
 });
 
 export const vendorUpdateSchema = z.object({
-  vendorId: z.string().min(1),
+  vendorId: idString(),
   displayName: z.string().optional(),
   currency: z.string().optional(),
   email: z.string().email().optional(),
@@ -151,9 +175,9 @@ export const vendorUpdateSchema = z.object({
   qbConnectionId: qbConnectionIdOverride,
 });
 
-export const vendorIdSchema = z.object({ vendorId: z.string().min(1), qbConnectionId: qbConnectionIdOverride });
+export const vendorIdSchema = z.object({ vendorId: idString(), qbConnectionId: qbConnectionIdOverride });
 export const deactivateVendorSchema = z.object({
-  vendorId: z.string().min(1),
+  vendorId: idString(),
   confirm: z.boolean(),
   qbConnectionId: qbConnectionIdOverride,
 });
@@ -165,8 +189,8 @@ export const accountCreateSchema = z.object({
   qbConnectionId: qbConnectionIdOverride,
 });
 
-export const setActiveSchema = z.object({ qbConnectionId: z.string().min(1) });
-export const disconnectSchema = z.object({ qbConnectionId: z.string().min(1), confirm: z.boolean() });
+export const setActiveSchema = z.object({ qbConnectionId: idString() });
+export const disconnectSchema = z.object({ qbConnectionId: idString(), confirm: z.boolean() });
 export const connectSchema = z.object({ redirectAfter: z.string().optional() });
 
 export const inviteMemberSchema = z.object({
@@ -175,7 +199,7 @@ export const inviteMemberSchema = z.object({
   qbConnectionId: qbConnectionIdOverride,
 });
 export const removeMemberSchema = z.object({
-  memberId: z.string().min(1),
+  memberId: idString(),
   confirm: z.boolean(),
   qbConnectionId: qbConnectionIdOverride,
 });

@@ -67,8 +67,13 @@ interface QuickBooksState {
   hasExplicitSelection: boolean;
   statusLoading: boolean;
   statusError: string | null;
+  // From /quickbooks/status's `reason` when connected is false — e.g.
+  // "session_expired" or "reconnect_required" — lets the UI show a specific
+  // message/action instead of a generic "not connected" banner.
+  disconnectReason: string | null;
   autoPostEnabled: boolean;
   lineItemWiseEnabled: boolean;
+  attachInvoiceCopyEnabled: boolean;
   vendors: Vendor[];
   vendorsLoading: boolean;
   vendorsError: string | null;
@@ -87,10 +92,14 @@ const initialState: QuickBooksState = {
   hasExplicitSelection: false,
   statusLoading: false,
   statusError: null,
+  disconnectReason: null,
   // Default true matches the backend's default for connections that predate
   // these settings — see qb_connection.model.js.
   autoPostEnabled: true,
   lineItemWiseEnabled: true,
+  // Defaults on — attaching the scanned invoice copy to the QuickBooks bill
+  // is the existing behavior; this is an opt-out, not an opt-in.
+  attachInvoiceCopyEnabled: true,
   vendors: [],
   vendorsLoading: false,
   vendorsError: null,
@@ -188,12 +197,13 @@ const quickBooksSlice = createSlice({
       .addCase(getQuickBooksStatus.fulfilled, (state, action) => {
         state.statusLoading = false;
         state.statusError = null;
-        console.log("QB STATUS PAYLOAD:", JSON.stringify(action.payload, null, 2));
         const qbData = action.payload?.data ?? action.payload;
         state.connected = qbData?.connected ?? false;
+        state.disconnectReason = qbData?.connected ? null : qbData?.reason ?? null;
         state.realmId = qbData?.realmId ?? "";
         state.autoPostEnabled = qbData?.autoPostEnabled ?? true;
         state.lineItemWiseEnabled = qbData?.lineItemWiseEnabled ?? true;
+        state.attachInvoiceCopyEnabled = qbData?.attachInvoiceCopyEnabled ?? true;
         // The backend's status response never echoes back qbConnectionId,
         // so use the one this request was made WITH (action.meta.arg) — that's
         // the connection being switched to. Falling back to the response
@@ -217,6 +227,7 @@ const quickBooksSlice = createSlice({
       const data = action.payload?.data;
       if (data?.autoPostEnabled !== undefined) state.autoPostEnabled = data.autoPostEnabled;
       if (data?.lineItemWiseEnabled !== undefined) state.lineItemWiseEnabled = data.lineItemWiseEnabled;
+      if (data?.attachInvoiceCopyEnabled !== undefined) state.attachInvoiceCopyEnabled = data.attachInvoiceCopyEnabled;
     });
 
     // ── Vendors ────────────────────────────────────────────────────────

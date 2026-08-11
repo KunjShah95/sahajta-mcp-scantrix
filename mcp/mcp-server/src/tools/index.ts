@@ -1,6 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import type { SavetrixClient } from "../client/savetrixClient.js";
 import { createClient } from "../client/savetrixClient.js";
+import { UpstreamPayloadError } from "../client/unwrap.js";
 import type { Config } from "../config.js";
 import { requireConfirm } from "./gates.js";
 import * as S from "./schemas.js";
@@ -21,6 +23,67 @@ const text = (value: unknown) => ({
 const md = (markdown: string) => ({
   content: [{ type: "text" as const, text: markdown }],
 });
+
+// A FAILED tool call. MCP's tools/call result carries isError precisely so a
+// client and the model can tell a failure from data; without it a body that
+// merely says {"success": false} arrives through the same channel as a real
+// result and reads to the model like an answer. Every path below that reports
+// a failure goes through one of these two, never through text()/md().
+const failText = (value: unknown) => ({ ...text(value), isError: true as const });
+const failMd = (markdown: string) => ({ ...md(markdown), isError: true as const });
+
+/**
+ * Tool annotations. These are what a client (Claude web / Desktop) actually
+ * uses to decide what it can auto-approve and what a human has to confirm:
+ * readOnlyHint:true is what lets a safe read run without a prompt, and
+ * destructiveHint:true is what forces a human to look at a write. This
+ * server's own requireConfirm gate only inspects an argument the MODEL
+ * supplies, so it is not a human-consent control — these hints drive the one
+ * that is.
+ *
+ * Every classification below comes from what the corresponding function in
+ * src/client/*.ts really does (which HTTP verb, against which endpoint, with
+ * what effect), not from the tool's name.
+ */
+interface Hints {
+  /** Performs no modification anywhere. */
+  readOnly: boolean;
+  /** Overwrites or removes something the user already had. */
+  destructive: boolean;
+  /** Calling twice with the same arguments leaves the same end state. */
+  idempotent: boolean;
+  /** Reaches a system beyond our own backend (QuickBooks/Intuit, mail, the public web). */
+  openWorld: boolean;
+}
+
+/** Builds the title + annotations half of a registerTool config. */
+const meta = (title: string, hints: Hints): { title: string; annotations: ToolAnnotations } => ({
+  title,
+  // Also mirrored into annotations.title: that is where the MCP spec put the
+  // display name first, and clients predating the top-level Tool.title still
+  // read it from there.
+  annotations: {
+    title,
+    readOnlyHint: hints.readOnly,
+    destructiveHint: hints.destructive,
+    idempotentHint: hints.idempotent,
+    openWorldHint: hints.openWorld,
+  },
+});
+
+/** Pure read of our own backend. */
+const READ: Hints = { readOnly: true, destructive: false, idempotent: true, openWorld: false };
+/** Pure read whose data comes from QuickBooks via our backend. */
+const READ_QB: Hints = { ...READ, openWorld: true };
+/** Creates a new record — calling it twice creates two of them. */
+const CREATE: Hints = { readOnly: false, destructive: false, idempotent: false, openWorld: false };
+const CREATE_QB: Hints = { ...CREATE, openWorld: true };
+/** Additive or repeatable write: no pre-existing value is overwritten. */
+const WRITE: Hints = { readOnly: false, destructive: false, idempotent: true, openWorld: false };
+const WRITE_QB: Hints = { ...WRITE, openWorld: true };
+/** Overwrites, removes, deactivates, rejects, posts, or changes billing. */
+const DESTRUCTIVE: Hints = { readOnly: false, destructive: true, idempotent: true, openWorld: false };
+const DESTRUCTIVE_QB: Hints = { ...DESTRUCTIVE, openWorld: true };
 
 // When a tool fails because the user is not signed in, or is signed in but has
 // no active QuickBooks connection, return an actionable link (the pattern the
@@ -81,9 +144,14 @@ const withClient =
     try {
       return text(await fn(client, args));
     } catch (error) {
+      // An upstream payload failure already carries the backend's own words
+      // and is NOT an auth problem, so it must not be rewritten into "sign in
+      // required" guidance just because that text happens to mention a token
+      // ("QuickBooks token revoked" matches authGuidance's regex).
+      if (error instanceof UpstreamPayloadError) return failText(error.toResult());
       const guide = await authGuidance(client, error);
-      if (guide) return md(guide);
-      return text({
+      if (guide) return failMd(guide);
+      return failText({
         success: false,
         message: error instanceof Error ? error.message : String(error),
       });
@@ -126,10 +194,18 @@ export const registerSavetrixTools = (
   host: ToolHostCapabilities = {},
 ): void => {
   const run = withClient(client);
+  // createUploadLink is supplied only by remoteServer.ts, so its presence is
+  // what tells this registration apart from a local/stdio install. On the
+  // remote connector filePath can only reach the connector's own container,
+  // so it is dropped from the advertised schema AND refused at runtime.
+  const isRemote = Boolean(host.createUploadLink);
+  const uploadSchema = (
+    isRemote ? S.invoiceUploadRemoteSchema : S.invoiceUploadSchema
+  ) as typeof S.invoiceUploadSchema;
 
   // ── Onboarding ────────────────────────────────────────────────────────
   server.registerTool("savetrix_get_started", {
-    title: "Get started / sign in",
+    ...meta("Get started / sign in", READ_QB),
     description:
       "Show a step-by-step onboarding guide with clickable links to sign in to Savetrix (scantrix.ai) and connect QuickBooks. Call this first if you are not sure whether you are logged in or connected.",
     inputSchema: S.confirmSchema.omit({ confirm: true }),
@@ -198,7 +274,7 @@ export const registerSavetrixTools = (
 
   // ── Auth / account ────────────────────────────────────────────────────
   server.registerTool("savetrix_login", {
-    title: "Login to Savetrix",
+    ...meta("Login to Savetrix", WRITE),
     description:
       "Log in to the Savetrix invoice app with email and password. Sign up or reset a password at scantrix.ai. Required before any data operation if SAVETRIX_EMAIL/SAVETRIX_PASSWORD are not configured.",
     inputSchema: S.loginSchema,
@@ -235,7 +311,7 @@ export const registerSavetrixTools = (
         ].join("\n"),
       );
     } catch (error) {
-      return md(
+      return failMd(
         [
           "## Sign-in failed ❌",
           error instanceof Error ? error.message : String(error),
@@ -247,7 +323,7 @@ export const registerSavetrixTools = (
   });
 
   server.registerTool("savetrix_logout", {
-    title: "Logout",
+    ...meta("Logout", WRITE),
     description:
       "Sign out of the current Savetrix session and clear stored tokens. Safe to call any time; run savetrix_login to sign back in.",
     inputSchema: S.confirmSchema.omit({ confirm: true }),
@@ -264,7 +340,7 @@ export const registerSavetrixTools = (
         ].join("\n"),
       );
     } catch (error) {
-      return text({
+      return failText({
         success: false,
         message: error instanceof Error ? error.message : String(error),
       });
@@ -272,7 +348,7 @@ export const registerSavetrixTools = (
   });
 
   server.registerTool("savetrix_account_info", {
-    title: "Account info",
+    ...meta("Account info", READ),
     description: "Show which user the server is currently acting as.",
     inputSchema: S.confirmSchema.omit({ confirm: true }),
   }, run((c) => {
@@ -285,26 +361,26 @@ export const registerSavetrixTools = (
   }));
 
   server.registerTool("savetrix_account_update_profile", {
-    title: "Update profile",
+    ...meta("Update profile", DESTRUCTIVE),
     description: "Update the logged-in user's firstName, lastName, or phone.",
     inputSchema: S.updateProfileSchema,
   }, run((c, a) => authClient.updateProfile(c, a)));
 
   // ── Invoices ──────────────────────────────────────────────────────────
   server.registerTool("savetrix_invoice_list", {
-    title: "List invoices",
+    ...meta("List invoices", READ),
     description: "List invoices for the active QuickBooks connection, with pagination.",
     inputSchema: S.invoiceListSchema,
   }, run((c, a) => invoicesClient.listInvoices(c, a)));
 
   server.registerTool("savetrix_invoice_get", {
-    title: "Get invoice",
+    ...meta("Get invoice", READ),
     description: "Fetch the full details of a single invoice by its id.",
     inputSchema: S.invoiceIdSchema,
   }, run((c, a) => invoicesClient.getInvoice(c, a.invoiceId)));
 
   server.registerTool("savetrix_invoice_upload", {
-    title: "Upload invoice",
+    ...meta("Upload invoice", { ...CREATE, openWorld: true }),
     description:
       "Upload an invoice photo or PDF and have it scanned. Pass exactly one source. " +
       "Prefer fileUrl (a public https link the server downloads itself). " +
@@ -312,29 +388,32 @@ export const registerSavetrixTools = (
       "so never pass a path from a chat sandbox (e.g. /mnt/user-data/...). " +
       "fileBase64 is for tiny files only. " +
       "If you have none of those, call this with no arguments (or use savetrix_invoice_upload_link) to get a browser upload link for the user.",
-    inputSchema: S.invoiceUploadSchema,
+    inputSchema: uploadSchema,
   }, async (a) => {
     applyQbOverride(client, a);
     const hasSource = Boolean(a.fileUrl || a.filePath || a.fileBase64);
     if (!hasSource) return md(await uploadHelp(host));
     try {
-      return text(await invoicesClient.uploadInvoice(client, a));
+      return text(await invoicesClient.uploadInvoice(client, a, { allowFilePath: !isRemote }));
     } catch (error) {
       const guide = await authGuidance(client, error);
-      if (guide) return md(guide);
+      if (guide) return failMd(guide);
       // A path that only exists on the chat client's machine is the single most
       // common failure here (ENOENT on /mnt/user-data/uploads/...). Hand back
-      // the upload link rather than a bare filesystem error.
+      // the upload link rather than a bare filesystem error — but as a failure,
+      // because no invoice was uploaded. (Calling the tool with NO source at
+      // all is a documented way to ask for that link, so that path above stays
+      // a success.)
       const msg = error instanceof Error ? error.message : String(error);
       if (/ENOENT|no such file|not a file/i.test(msg)) {
-        return md(await uploadHelp(host));
+        return failMd(await uploadHelp(host));
       }
-      return text({ success: false, message: msg });
+      return failText({ success: false, message: msg });
     }
   });
 
   server.registerTool("savetrix_invoice_upload_link", {
-    title: "Get an invoice upload link",
+    ...meta("Get an invoice upload link", CREATE),
     description:
       "Get a short-lived link the user can open in their browser to upload an invoice photo or PDF. " +
       "Use this whenever the user has a file on their own device and this server is remote.",
@@ -345,14 +424,14 @@ export const registerSavetrixTools = (
   });
 
   server.registerTool("savetrix_invoice_update", {
-    title: "Update invoice details",
+    ...meta("Update invoice details", DESTRUCTIVE),
     description:
       "Patch extracted details on an invoice before posting (e.g. correct vendor, amount, GL account/category, tax code).",
     inputSchema: S.invoiceUpdateSchema,
   }, run((c, a) => invoicesClient.updateInvoiceExtractedData(c, a)));
 
   server.registerTool("savetrix_invoice_post_to_qb", {
-    title: "Post invoice to QuickBooks",
+    ...meta("Post invoice to QuickBooks", { ...DESTRUCTIVE_QB, idempotent: false }),
     description:
       "Send an approved invoice into QuickBooks and mark it posted. Destructive: requires confirm=true.",
     inputSchema: S.postToQbSchema,
@@ -363,7 +442,7 @@ export const registerSavetrixTools = (
   }));
 
   server.registerTool("savetrix_invoice_reject", {
-    title: "Reject invoice",
+    ...meta("Reject invoice", DESTRUCTIVE),
     description:
       "Mark an invoice as rejected/failed (e.g. duplicate or bad scan), with an optional reason. Destructive: requires confirm=true.",
     inputSchema: S.rejectInvoiceSchema,
@@ -375,25 +454,25 @@ export const registerSavetrixTools = (
 
   // ── Vendors ───────────────────────────────────────────────────────────
   server.registerTool("savetrix_vendor_list", {
-    title: "List vendors",
+    ...meta("List vendors", READ_QB),
     description: "List active (default) or deactivated vendors for the active QuickBooks connection.",
     inputSchema: S.vendorListSchema,
   }, run((c, a) => vendorsClient.listVendors(c, a.status)));
 
   server.registerTool("savetrix_vendor_create", {
-    title: "Create vendor",
+    ...meta("Create vendor", CREATE_QB),
     description: "Create a new vendor in QuickBooks (e.g. 'Acme Ltd').",
     inputSchema: S.vendorCreateSchema,
   }, run((c, a) => vendorsClient.createVendor(c, a)));
 
   server.registerTool("savetrix_vendor_update", {
-    title: "Update vendor",
+    ...meta("Update vendor", DESTRUCTIVE_QB),
     description: "Update a vendor's email, phone, address, currency, default category, or tax code.",
     inputSchema: S.vendorUpdateSchema,
   }, run((c, a) => vendorsClient.updateVendor(c, a)));
 
   server.registerTool("savetrix_vendor_deactivate", {
-    title: "Deactivate vendor",
+    ...meta("Deactivate vendor", DESTRUCTIVE_QB),
     description:
       "Deactivate a vendor you no longer use. The vendor is hidden but not permanently destroyed. Destructive: requires confirm=true.",
     inputSchema: S.deactivateVendorSchema,
@@ -404,46 +483,46 @@ export const registerSavetrixTools = (
   }));
 
   server.registerTool("savetrix_vendor_reactivate", {
-    title: "Reactivate vendor",
+    ...meta("Reactivate vendor", WRITE_QB),
     description: "Bring a previously deactivated vendor back.",
     inputSchema: S.vendorIdSchema,
   }, run((c, a) => vendorsClient.reactivateVendor(c, a.vendorId)));
 
   // ── GL accounts ───────────────────────────────────────────────────────
   server.registerTool("savetrix_account_list", {
-    title: "List GL accounts",
+    ...meta("List GL accounts", READ_QB),
     description: "List accounting categories (GL accounts) for the active QuickBooks connection.",
     inputSchema: S.qbScopedSchema,
   }, run((c) => accountsClient.listAccounts(c)));
 
   server.registerTool("savetrix_account_create", {
-    title: "Create GL account",
+    ...meta("Create GL account", CREATE_QB),
     description: "Create a new GL account in QuickBooks. You pick the account type (e.g. Expense).",
     inputSchema: S.accountCreateSchema,
   }, run((c, a) => accountsClient.createAccount(c, a)));
 
   server.registerTool("savetrix_account_sync", {
-    title: "Sync GL accounts",
+    ...meta("Sync GL accounts", WRITE_QB),
     description: "Pull the latest GL accounts from QuickBooks into the app.",
     inputSchema: S.qbScopedSchema,
   }, run((c) => accountsClient.syncAccounts(c)));
 
   // ── Tax codes ─────────────────────────────────────────────────────────
   server.registerTool("savetrix_taxcode_list", {
-    title: "List tax codes",
+    ...meta("List tax codes", READ_QB),
     description: "List tax codes for the active QuickBooks connection.",
     inputSchema: S.qbScopedSchema,
   }, run((c) => taxcodesClient.listTaxCodes(c)));
 
   server.registerTool("savetrix_taxcode_sync", {
-    title: "Sync tax codes",
+    ...meta("Sync tax codes", WRITE_QB),
     description: "Pull the latest tax codes from QuickBooks into the app.",
     inputSchema: S.qbScopedSchema,
   }, run((c) => taxcodesClient.syncTaxCodes(c)));
 
   // ── QuickBooks connection ─────────────────────────────────────────────
   server.registerTool("savetrix_qb_status", {
-    title: "QuickBooks status",
+    ...meta("QuickBooks status", READ_QB),
     description: "Show the connection status for the active QuickBooks company.",
     inputSchema: S.qbScopedSchema,
   }, run(async (c) => {
@@ -453,13 +532,13 @@ export const registerSavetrixTools = (
   }));
 
   server.registerTool("savetrix_qb_connections", {
-    title: "List QuickBooks connections",
+    ...meta("List QuickBooks connections", READ_QB),
     description: "List the QuickBooks companies connected to this account.",
     inputSchema: S.confirmSchema.omit({ confirm: true }),
   }, run((c) => quickbooksClient.listConnections(c)));
 
   server.registerTool("savetrix_qb_set_active", {
-    title: "Set active QuickBooks connection",
+    ...meta("Set active QuickBooks connection", READ),
     description:
       "Switch which connected QuickBooks company subsequent tool calls operate on. " +
       "IMPORTANT: this server is stateless between tool calls, so this only affects THIS " +
@@ -481,7 +560,7 @@ export const registerSavetrixTools = (
   }));
 
   server.registerTool("savetrix_qb_connect", {
-    title: "Connect QuickBooks",
+    ...meta("Connect QuickBooks", { ...READ_QB, idempotent: false }),
     description:
       "Returns a clickable Intuit authorization link. The user opens it in a browser to authorize, then re-run savetrix_qb_connections to see the new company.",
     inputSchema: S.connectSchema,
@@ -500,7 +579,7 @@ export const registerSavetrixTools = (
         ].join("\n"),
       );
     } catch (error) {
-      return text({
+      return failText({
         success: false,
         message: error instanceof Error ? error.message : String(error),
       });
@@ -508,7 +587,7 @@ export const registerSavetrixTools = (
   });
 
   server.registerTool("savetrix_qb_disconnect", {
-    title: "Disconnect QuickBooks",
+    ...meta("Disconnect QuickBooks", DESTRUCTIVE_QB),
     description: "Remove a QuickBooks connection. Destructive: requires confirm=true.",
     inputSchema: S.disconnectSchema,
   }, run((c, a) => {
@@ -519,19 +598,19 @@ export const registerSavetrixTools = (
 
   // ── Team ──────────────────────────────────────────────────────────────
   server.registerTool("savetrix_team_list", {
-    title: "List team members",
+    ...meta("List team members", READ),
     description: "List members of the active QuickBooks team.",
     inputSchema: S.qbScopedSchema,
   }, run((c) => teamClient.listTeamMembers(c)));
 
   server.registerTool("savetrix_team_invite", {
-    title: "Invite team member",
+    ...meta("Invite team member", { ...DESTRUCTIVE, idempotent: false, openWorld: true }),
     description: "Invite someone to the team with a role: admin, accountant, or contributor.",
     inputSchema: S.inviteMemberSchema,
   }, run((c, a) => teamClient.inviteTeamMember(c, a)));
 
   server.registerTool("savetrix_team_remove", {
-    title: "Remove team member",
+    ...meta("Remove team member", DESTRUCTIVE),
     description: "Remove a member from the team by member id. Destructive: requires confirm=true.",
     inputSchema: S.removeMemberSchema,
   }, run((c, a) => {
@@ -542,19 +621,19 @@ export const registerSavetrixTools = (
 
   // ── Subscription ──────────────────────────────────────────────────────
   server.registerTool("savetrix_subscription_plans", {
-    title: "List subscription plans",
+    ...meta("List subscription plans", READ),
     description: "Show available subscription plans and prices.",
     inputSchema: S.confirmSchema.omit({ confirm: true }),
   }, run((c) => subscriptionClient.listPlans(c)));
 
   server.registerTool("savetrix_subscription_my", {
-    title: "My subscription",
+    ...meta("My subscription", READ),
     description: "Show the current subscription plan and billing cycle.",
     inputSchema: S.confirmSchema.omit({ confirm: true }),
   }, run((c) => subscriptionClient.getMySubscription(c)));
 
   server.registerTool("savetrix_subscription_choose", {
-    title: "Change subscription plan",
+    ...meta("Change subscription plan", { ...DESTRUCTIVE, openWorld: true }),
     description:
       "Change the subscription plan (standard/enterprise) and billing cycle (monthly/yearly). Destructive: requires confirm=true.",
     inputSchema: S.choosePlanSchema,
