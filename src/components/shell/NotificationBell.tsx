@@ -35,7 +35,6 @@ function formatRelativeTime(timestamp: number, now: number): string {
   return `${days}d ago`;
 }
 
-const PREVIEW_DURATION_MS = 4000;
 
 // Reads/writes the same in-memory history dialogManager.ts builds from every
 // showToast() call — QuickBooks sync, vendor/GL/tax-code sync, invoices,
@@ -46,14 +45,11 @@ export function NotificationBell() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [open, setOpen] = useState(false);
   const [now, setNow] = useState<number | null>(null);
-  const [preview, setPreview] = useState<NotificationItem | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const lastTopIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     const seeded = getNotifications();
     setNotifications(seeded);
-    lastTopIdRef.current = seeded[0]?.id ?? null;
 
     const onChange = (next: NotificationItem[]) => setNotifications(next);
     dialogEmitter.on(NOTIFICATIONS_CHANGED, onChange);
@@ -62,27 +58,12 @@ export function NotificationBell() {
     };
   }, []);
 
-  // Every fresh notification (new top-of-list id — mark-read/mark-all-read
-  // updates rewrite the same entries in place, so they don't count) gets a
-  // short-lived preview bubble anchored right under the bell, so the text
-  // shows up "linked" to the icon the moment it arrives instead of only
-  // being logged silently into the dropdown until someone clicks in.
-  useEffect(() => {
-    const top = notifications[0] ?? null;
-    if (top && top.id !== lastTopIdRef.current) {
-      lastTopIdRef.current = top.id;
-      setPreview(top);
-    }
-  }, [notifications]);
-
-  // Kept separate from the detection effect above: that effect re-runs on
-  // every notifications change (including mark-read updates), which would
-  // cancel this timer before it ever fires if the two were combined.
-  useEffect(() => {
-    if (!preview) return;
-    const timeout = setTimeout(() => setPreview(null), PREVIEW_DURATION_MS);
-    return () => clearTimeout(timeout);
-  }, [preview]);
+  // No preview bubble here any more. DialogHost renders every showToast() as
+  // a bottom-corner toast above the dialog layer, from a host that is mounted
+  // on every route — this bubble sat at the same z-index as the confirm
+  // dialog's backdrop and was invisible on exactly the flows that needed it,
+  // and it never rendered at all on the shell-less auth routes. The bell keeps
+  // the scrollback and the unread count.
 
   // Relative timestamps ("2m ago") depend on the current time, which must
   // not be read during the initial server/client render (hydration
@@ -114,20 +95,14 @@ export function NotificationBell() {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   // Opening the dropdown is the "I've seen these" signal — no separate
-  // mark-all-read click needed. Also dismisses any preview bubble still
-  // showing, since its message is now visible in the list below it.
+  // mark-all-read click needed.
   const handleToggle = () => {
     setOpen((prevOpen) => {
       const nextOpen = !prevOpen;
-      if (nextOpen) {
-        markAllNotificationsRead();
-        setPreview(null);
-      }
+      if (nextOpen) markAllNotificationsRead();
       return nextOpen;
     });
   };
-
-  const PreviewIcon = preview ? NOTIFICATION_ICON[preview.tone] : null;
 
   return (
     <div ref={containerRef} className="relative">
@@ -145,20 +120,6 @@ export function NotificationBell() {
         )}
       </button>
 
-      {/* Transient preview, distinct from the dropdown — appears the moment
-          a notification arrives, directly under the bell, with a caret
-          pointing back up at it so the connection reads as intentional
-          rather than a stray toast. Hidden while the dropdown itself is
-          open to avoid showing the same message twice. */}
-      {preview && !open && PreviewIcon && (
-        <div className="absolute right-0 top-12 z-[100] w-72 rounded-lg border border-border bg-white shadow-xl">
-          <span className="absolute -top-1.5 right-3 h-3 w-3 rotate-45 border-l border-t border-border bg-white" />
-          <div className="relative flex items-start gap-[var(--space-sm)] rounded-lg bg-white p-[var(--space-md)]">
-            <PreviewIcon size={16} strokeWidth={2} className={`mt-0.5 shrink-0 ${NOTIFICATION_ICON_CLASS[preview.tone]}`} />
-            <p className="min-w-0 flex-1 text-body-sm font-medium text-text-primary">{preview.message}</p>
-          </div>
-        </div>
-      )}
 
       {open && (
         <div className="absolute right-0 top-12 z-[100] flex max-h-96 w-80 flex-col overflow-hidden rounded-lg border border-border bg-white shadow-xl">

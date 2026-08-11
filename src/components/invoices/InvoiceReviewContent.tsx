@@ -824,8 +824,12 @@ export function InvoiceReviewContent({ invoiceId }: { invoiceId: string }) {
               <EditableRow label="Vendor" labelColor={theme.primaryText} dividerColor={theme.divider} error={fieldErrors.vendor}>
                 {isPendingReview ? (
                   <select value={selectedVendor?._id || ""} onChange={handleVendorChange} className={INPUT_CLASS}>
+                    {/* A neutral placeholder, not an echo of the current
+                        value: the select already renders its own selection, so
+                        printing invoice.vendor here made the chosen vendor
+                        appear twice — once disabled, once as a live option. */}
                     <option value="" disabled>
-                      {invoice.vendor || "Select Vendor"}
+                      Select Vendor
                     </option>
                     {vendors.map((vendor) => (
                       <option key={vendor._id} value={vendor._id}>
