@@ -1,6 +1,8 @@
 import { createAsyncThunk } from "@reduxjs/toolkit";
 
 import api from "../../lib/api";
+import { RootState } from "..";
+import type { InvoiceRecord } from "./invoiceSlice";
 
 // ======================================
 // TYPES
@@ -105,7 +107,7 @@ export const getInvoices = createAsyncThunk(
       const firstResponse = await api.get("/invoices?page=1&limit=100");
       const firstData = firstResponse.data?.data;
       const totalPages = firstData?.pagination?.totalPages || 1;
-      let allInvoices = firstData?.invoices || [];
+      const allInvoices: InvoiceRecord[] = [...(firstData?.invoices || [])];
 
       if (totalPages > 1) {
         const pageRequests = [];
@@ -117,17 +119,28 @@ export const getInvoices = createAsyncThunk(
         const remainingResponses = await Promise.all(pageRequests);
 
         remainingResponses.forEach((res) => {
-          allInvoices = [
-            ...allInvoices,
-            ...(res.data?.data?.invoices || []),
-          ];
+          allInvoices.push(...(res.data?.data?.invoices || []));
         });
       }
 
-      console.log("========== GET INVOICES SUCCESS ==========");
-      console.log(`Total invoices fetched: ${allInvoices.length}`);
+      // Dedupe by _id. Invoices are fetched page-by-page with no server-side
+      // ordering guarantee, so a record created/updated mid-fetch can appear
+      // on two pages (or the backend can simply return a duplicate). Keeping
+      // them all would render the same invoice twice in every list screen and
+      // make a single scan look like two identical bills in QuickBooks.
+      // First occurrence wins; later ones are dropped.
+      const seen = new Set<string>();
+      const uniqueInvoices = allInvoices.filter((inv) => {
+        if (!inv?._id) return true;
+        if (seen.has(inv._id)) return false;
+        seen.add(inv._id);
+        return true;
+      });
 
-      return allInvoices;
+      console.log("========== GET INVOICES SUCCESS ==========");
+      console.log(`Total invoices fetched: ${allInvoices.length}, unique: ${uniqueInvoices.length}`);
+
+      return uniqueInvoices;
     } catch (error: any) {
       console.log("========== GET INVOICES ERROR ==========");
       console.log(error);
@@ -179,6 +192,34 @@ export const postInvoiceToQuickBooks = createAsyncThunk(
 
   async (data: PostInvoicePayload, thunkAPI) => {
     try {
+      // Idempotency guard. The scan pipeline is not transactional: an
+      // upload/auto-post can fail (or error on a 401 that retries) AFTER the
+      // backend has already created the bill in QuickBooks. Re-running this
+      // post in that state creates a second, identical bill. So before
+      // touching the API, look the invoice up in Redux and refuse to post if
+      // it already carries a billId or a terminal posted status.
+      const state = thunkAPI.getState() as RootState;
+      const knownInvoices: InvoiceRecord[] = [
+        ...state.invoice.invoices,
+        state.invoice.selectedInvoice,
+        state.invoice.invoiceDetails,
+      ].filter((inv): inv is InvoiceRecord => Boolean(inv));
+
+      const existing = knownInvoices.find((inv) => inv._id === data.invoiceId);
+
+      if (existing) {
+        const alreadyPosted =
+          existing.postedStatus === "auto" ||
+          existing.postedStatus === "manual" ||
+          Boolean(existing.quickbooks?.billId);
+
+        if (alreadyPosted) {
+          return thunkAPI.rejectWithValue(
+            `Invoice is already posted to QuickBooks${existing.quickbooks?.billId ? ` (bill #${existing.quickbooks.billId})` : ""}. It was not re-posted to avoid creating a duplicate bill.`,
+          );
+        }
+      }
+
       console.log("========== POST TO QB ==========");
 
       const response = await api.patch(`/invoices/${data.invoiceId}`, {

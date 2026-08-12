@@ -458,6 +458,41 @@ export async function postInvoiceToQuickBooks(
   const missing = missingFields(args, ["invoiceId", "vendorId"]);
   if (missing.length) return { success: false, message: `Missing required field(s): ${missing.join(", ")}.` };
 
+  // Idempotency guard — same reasoning as the invoiceApi.ts thunk. The scan
+  // pipeline is not transactional, so an invoice can carry a billId / terminal
+  // posted status while the model still sees it as "pending" from an earlier
+  // fetch. Re-posting creates a duplicate bill in QuickBooks (the exact bug
+  // the tools.ts:847 comment calls out), so fetch current state first and
+  // refuse when the bill already exists.
+  try {
+    const preflight = await savetrixGet<{ data?: { invoice?: InvoiceRecord } | InvoiceRecord }>(
+      `/invoices/${pathSegment(args.invoiceId, "invoiceId")}`,
+      accessToken,
+      qbConnectionId,
+    );
+    const payload = preflight.data?.data;
+    const invoice =
+      payload && typeof payload === "object" && "invoice" in payload
+        ? (payload as { invoice?: InvoiceRecord }).invoice
+        : (payload as InvoiceRecord | undefined);
+
+    if (invoice) {
+      const alreadyPosted =
+        invoice.postedStatus === "auto" ||
+        invoice.postedStatus === "manual" ||
+        Boolean(invoice.quickbooks?.billId);
+      if (alreadyPosted) {
+        return {
+          success: false,
+          message: `Invoice ${args.invoiceId} is already posted to QuickBooks${invoice.quickbooks?.billId ? ` (bill #${invoice.quickbooks.billId})` : ""}. Refusing to post again so no duplicate bill is created.`,
+        };
+      }
+    }
+  } catch {
+    // Preflight fetch failed — fall through and let the PATCH itself surface
+    // the real error rather than blocking a legitimate first post.
+  }
+
   const res = await savetrixPatch(
     `/invoices/${pathSegment(args.invoiceId, "invoiceId")}`,
     { vendorId: args.vendorId, postedStatus: "manual", extractedData: args.extractedData },

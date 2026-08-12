@@ -74,6 +74,29 @@ function stubAxios(method: "get" | "post" | "patch" | "delete", response: unknow
   return { mock: { calls } };
 }
 
+/**
+ * Stub axios.get AND axios.patch together — post_invoice_to_qb does a
+ * preflight GET (idempotency guard) before its destructive PATCH, so tests
+ * that assert on the PATCH must control both calls or the preflight would
+ * hit the real network.
+ */
+function stubPostToQb(
+  preflightInvoice: unknown,
+  patchResponse: unknown,
+) {
+  const getCalls: unknown[][] = [];
+  const patchCalls: unknown[][] = [];
+  (axios as unknown as Record<string, unknown>).get = (...args: unknown[]) => {
+    getCalls.push(args);
+    return Promise.resolve({ data: { data: { invoice: preflightInvoice } } });
+  };
+  (axios as unknown as Record<string, unknown>).patch = (...args: unknown[]) => {
+    patchCalls.push(args);
+    return Promise.resolve(patchResponse);
+  };
+  return { mock: { getCalls, patchCalls } };
+}
+
 describe("requireConfirm", () => {
   it("returns ok:false when confirm is false", () => {
     const result = requireConfirm({ confirm: false }, "post invoice to QuickBooks");
@@ -184,7 +207,11 @@ describe("post_invoice_to_qb (PATCH /invoices/:id — destructive)", () => {
   });
 
   it("sends PATCH with postedStatus:manual when confirm=true", async () => {
-    const stub = stubAxios("patch", { data: { data: { invoice: { _id: "inv-1", postedStatus: "manual" } } } });
+    // Preflight GET must return a still-pending invoice, else the guard blocks.
+    const stub = stubPostToQb(
+      { _id: "inv-1", postedStatus: "pending" },
+      { data: { data: { invoice: { _id: "inv-1", postedStatus: "manual" } } } },
+    );
 
     const result = await postInvoiceToQuickBooks(ACCESS_TOKEN, QB_CONNECTION_ID, {
       invoiceId: "inv-1",
@@ -193,7 +220,7 @@ describe("post_invoice_to_qb (PATCH /invoices/:id — destructive)", () => {
       confirm: true,
     });
 
-    const [path, body, config] = stub.mock.calls[0] as [string, Record<string, unknown>, { headers: Record<string, string> }];
+    const [path, body, config] = stub.mock.patchCalls[0] as [string, Record<string, unknown>, { headers: Record<string, string> }];
     assert.equal(path, "/invoices/inv-1");
     assert.deepEqual(body, {
       vendorId: "v-1",
@@ -204,6 +231,65 @@ describe("post_invoice_to_qb (PATCH /invoices/:id — destructive)", () => {
     assert.equal(config.headers["X-QB-Id"], QB_CONNECTION_ID);
     assert.equal((result as ToolResult).id, "inv-1");
     assert.equal((result as ToolResult).status, "manual");
+  });
+
+  it("refuses to re-post an invoice already in QuickBooks (preflight guard)", async () => {
+    // A "pending" invoice that actually already has a billId — the exact
+    // non-transactional-scan failure mode. The preflight GET must stop the
+    // PATCH so no duplicate bill is created.
+    const stub = stubPostToQb(
+      { _id: "inv-1", postedStatus: "pending", quickbooks: { billId: "QB-777" } },
+      { data: { data: { invoice: { _id: "inv-1" } } } },
+    );
+
+    const result = (await postInvoiceToQuickBooks(ACCESS_TOKEN, QB_CONNECTION_ID, {
+      invoiceId: "inv-1",
+      vendorId: "v-1",
+      extractedData: {},
+      confirm: true,
+    })) as ToolResult;
+
+    assert.equal(result.success, false);
+    assert.match(result.message ?? "", /already posted/i);
+    assert.match(result.message ?? "", /QB-777/);
+    assert.equal(stub.mock.patchCalls.length, 0, "PATCH must not fire when the bill already exists");
+  });
+
+  it("refuses to re-post an invoice whose postedStatus is already manual", async () => {
+    const stub = stubPostToQb(
+      { _id: "inv-1", postedStatus: "manual" },
+      { data: { data: { invoice: { _id: "inv-1" } } } },
+    );
+
+    const result = (await postInvoiceToQuickBooks(ACCESS_TOKEN, QB_CONNECTION_ID, {
+      invoiceId: "inv-1",
+      vendorId: "v-1",
+      extractedData: {},
+      confirm: true,
+    })) as ToolResult;
+
+    assert.equal(result.success, false);
+    assert.match(result.message ?? "", /already posted/i);
+    assert.equal(stub.mock.patchCalls.length, 0);
+  });
+
+  it("proceeds with the PATCH when the preflight invoice is missing", async () => {
+    // Preflight fetch failure must not block a legitimate first post — the
+    // PATCH itself is the source of truth in that fallback.
+    const stub = stubPostToQb(
+      null,
+      { data: { data: { invoice: { _id: "inv-1", postedStatus: "manual" } } } },
+    );
+
+    const result = (await postInvoiceToQuickBooks(ACCESS_TOKEN, QB_CONNECTION_ID, {
+      invoiceId: "inv-1",
+      vendorId: "v-1",
+      extractedData: {},
+      confirm: true,
+    })) as ToolResult;
+
+    assert.equal(stub.mock.patchCalls.length, 1);
+    assert.equal((result as ToolResult).id, "inv-1");
   });
 
   it("rejects a missing vendorId even when confirmed", async () => {
