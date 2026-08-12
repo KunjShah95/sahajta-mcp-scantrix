@@ -548,13 +548,11 @@ export function DashboardContent() {
       }
 
       setUploading(true);
-      let failures = 0;
       try {
         for (let i = 0; i < selected.length; i++) {
           setUploadProgress({ current: i + 1, total: selected.length });
           const result = await dispatch(scanInvoice({ file: selected[i], qbId: qbConnectionId }));
           if (!scanInvoice.fulfilled.match(result)) {
-            failures += 1;
             const payload = result.payload;
             showToast(
               `${selected[i].name}: ${typeof payload === "string" ? payload : "Invoice scan failed"}`,
@@ -562,9 +560,14 @@ export function DashboardContent() {
             );
           }
         }
-        if (failures < selected.length) {
-          setTimeout(syncInvoices, 1500);
-        }
+        // Sync unconditionally, not just when at least one upload "succeeded".
+        // The scan pipeline is not transactional — a request can error on the
+        // client (timeout, 401 with no retry for writes) after the backend has
+        // already created the invoice. If we only refreshed on success, that
+        // hidden invoice would sit invisible and the user would re-scan the
+        // same file, producing a duplicate bill in QuickBooks. Refreshing
+        // lets it surface (typically as pending) to be reviewed/posted once.
+        setTimeout(syncInvoices, 1500);
       } finally {
         setUploading(false);
         setUploadProgress(null);

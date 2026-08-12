@@ -80,6 +80,17 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
+      // Only auto-retry idempotent requests (GET/HEAD). A token can expire
+      // between the server enforcing auth and us seeing the response, so a
+      // POST/PATCH/DELETE that "failed" with 401 may actually have been
+      // processed — blindly re-sending it risks creating duplicate records
+      // (two bills in QuickBooks from one scan). Let those surface as errors
+      // for the caller to reconcile instead of silently repeating the write.
+      const method = (originalRequest.method || "get").toLowerCase();
+      if (method !== "get" && method !== "head") {
+        return Promise.reject(error);
+      }
+
       try {
         const refreshToken = readLocalStorage("refreshToken");
 
