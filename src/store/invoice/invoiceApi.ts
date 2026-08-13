@@ -220,6 +220,38 @@ export const postInvoiceToQuickBooks = createAsyncThunk(
         }
       }
 
+      // The Redux check above only catches what this tab already knows. The
+      // dangerous case is the opposite one: the backend committed the bill and
+      // the client never found out (timeout, or a 401 on a write that is no
+      // longer re-sent), so Redux still says "pending". Ask the server for the
+      // invoice's current state before posting. This mirrors the guard the
+      // chatbot path performs in src/lib/chatbot/tools.ts.
+      //
+      // A failed preflight deliberately does NOT block the post — refusing on
+      // a transient read error would make posting impossible while the real
+      // first post is still legitimate.
+      try {
+        const fresh = await api.get(`/invoices/${data.invoiceId}`);
+        const body = fresh.data?.data ?? fresh.data;
+        const serverInvoice: InvoiceRecord | undefined =
+          body && typeof body === "object" && "invoice" in body ? body.invoice : body;
+
+        if (serverInvoice) {
+          const serverSaysPosted =
+            serverInvoice.postedStatus === "auto" ||
+            serverInvoice.postedStatus === "manual" ||
+            Boolean(serverInvoice.quickbooks?.billId);
+
+          if (serverSaysPosted) {
+            return thunkAPI.rejectWithValue(
+              `Invoice is already posted to QuickBooks${serverInvoice.quickbooks?.billId ? ` (bill #${serverInvoice.quickbooks.billId})` : ""}. It was not re-posted to avoid creating a duplicate bill.`,
+            );
+          }
+        }
+      } catch {
+        // Preflight unavailable — fall through to the post itself.
+      }
+
       console.log("========== POST TO QB ==========");
 
       const response = await api.patch(`/invoices/${data.invoiceId}`, {

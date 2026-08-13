@@ -214,3 +214,81 @@ describe("postInvoiceToQuickBooks idempotency guard", () => {
     assert.equal((patchBody[0] as { postedStatus: string }).postedStatus, "manual");
   });
 });
+
+describe("postInvoiceToQuickBooks — server-side freshness check", () => {
+  // The Redux guard above only catches what THIS tab already knows. The
+  // failure that actually produced duplicate bills is the opposite: the
+  // backend committed the bill and the client never found out (timeout, or a
+  // 401 on a write that is deliberately no longer re-sent), so Redux still
+  // says "pending" and the user clicks Post again. These cover that.
+  const posted = makeInvoice({ _id: "inv-9", postedStatus: "manual", quickbooks: { billId: "QB-77" } });
+
+  const postPayload = {
+    invoiceId: "inv-9",
+    vendorId: "v-1",
+    extractedData: {
+      vendorName: "Acme Corp",
+      currency: "USD",
+      invoiceNumber: "INV-100",
+      amountBeforeTax: 500,
+      taxAmount: 0,
+      totalAmount: 500,
+      lineItems: [],
+    },
+  };
+
+  it("refuses to post when the SERVER says it is already posted, even though local state says pending", async () => {
+    const store = makeStore();
+    // Local state deliberately stale: still pending.
+    store.dispatch({ type: "invoice/setInvoices", payload: [makeInvoice({ _id: "inv-9" })] } as UnknownAction);
+
+    const patchCalls: unknown[][] = [];
+    api.get = (async () => ({ data: { data: { invoice: posted } } })) as unknown as typeof api.get;
+    api.patch = (async (...args: unknown[]) => {
+      patchCalls.push(args);
+      return { data: { data: { invoice: posted } } };
+    }) as unknown as typeof api.patch;
+
+    const result = await store.dispatch(
+      postInvoiceToQuickBooks(postPayload) as unknown as UnknownAction,
+    );
+
+    assert.equal(patchCalls.length, 0, "must not PATCH — the bill already exists in QuickBooks");
+    assert.match(String((result as { payload?: unknown }).payload ?? ""), /already posted/i);
+    assert.match(String((result as { payload?: unknown }).payload ?? ""), /QB-77/);
+  });
+
+  it("proceeds when the server also says it is unposted", async () => {
+    const store = makeStore();
+    const patchCalls: unknown[][] = [];
+    api.get = (async () => ({ data: { data: { invoice: makeInvoice({ _id: "inv-9" }) } } })) as unknown as typeof api.get;
+    api.patch = (async (...args: unknown[]) => {
+      patchCalls.push(args);
+      return { data: { data: { invoice: makeInvoice({ _id: "inv-9", postedStatus: "manual" }) } } };
+    }) as unknown as typeof api.patch;
+
+    await store.dispatch(
+      postInvoiceToQuickBooks(postPayload) as unknown as UnknownAction,
+    );
+
+    assert.equal(patchCalls.length, 1, "a legitimate first post must still go through");
+  });
+
+  it("still posts when the freshness check itself fails — a read error must not block a real first post", async () => {
+    const store = makeStore();
+    const patchCalls: unknown[][] = [];
+    api.get = (async () => {
+      throw new Error("network down");
+    }) as unknown as typeof api.get;
+    api.patch = (async (...args: unknown[]) => {
+      patchCalls.push(args);
+      return { data: { data: { invoice: makeInvoice({ _id: "inv-9", postedStatus: "manual" }) } } };
+    }) as unknown as typeof api.patch;
+
+    await store.dispatch(
+      postInvoiceToQuickBooks(postPayload) as unknown as UnknownAction,
+    );
+
+    assert.equal(patchCalls.length, 1, "preflight failure must fail open, not lock posting out");
+  });
+});

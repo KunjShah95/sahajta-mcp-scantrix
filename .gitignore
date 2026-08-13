@@ -40,3 +40,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local MCP/browser-tooling scratch dirs. These have twice arrived in a fork
+# carrying live credentials — .savetrix-mcp/config.json holds an access AND
+# refresh token plus the signed-in user's record, and .playwright-mcp/ captures
+# console logs and screenshots of authenticated sessions. Never commit either.
+.savetrix-mcp/
+.playwright-mcp/

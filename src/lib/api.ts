@@ -80,16 +80,16 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
-      // Only auto-retry idempotent requests (GET/HEAD). A token can expire
-      // between the server enforcing auth and us seeing the response, so a
-      // POST/PATCH/DELETE that "failed" with 401 may actually have been
-      // processed — blindly re-sending it risks creating duplicate records
-      // (two bills in QuickBooks from one scan). Let those surface as errors
-      // for the caller to reconcile instead of silently repeating the write.
+      // A token can expire between the server enforcing auth and us seeing
+      // the response, so a POST/PATCH/DELETE that "failed" with 401 may
+      // actually have been processed — re-sending it risks a duplicate record
+      // (two bills in QuickBooks from one scan). So writes are never
+      // re-sent. They still go through the refresh below, though: bailing out
+      // before it left the access token expired and never emitted
+      // SESSION_EXPIRED, so every subsequent write failed with a generic
+      // error and the user was never told to sign in again.
       const method = (originalRequest.method || "get").toLowerCase();
-      if (method !== "get" && method !== "head") {
-        return Promise.reject(error);
-      }
+      const isIdempotent = method === "get" || method === "head";
 
       try {
         const refreshToken = readLocalStorage("refreshToken");
@@ -105,6 +105,13 @@ api.interceptors.response.use(
         const newAccessToken = response.data.accessToken;
 
         writeLocalStorage("accessToken", newAccessToken);
+
+        // Session is healthy again — but for a write, surface the original
+        // error and let the caller decide whether to retry, rather than
+        // repeating an operation the backend may already have committed.
+        if (!isIdempotent) {
+          return Promise.reject(error);
+        }
 
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
 
